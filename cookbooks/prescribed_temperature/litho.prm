@@ -9,6 +9,7 @@ set Adiabatic surface temperature = 1613
 set Maximum time step = 1e7
 set Nonlinear solver scheme = single Advection, no Stokes
 set Use conduction timestep = true
+set LAB temperature = 1600
 
 # As we use the advection only solver scheme, we have to prescribe 
 # the Stokes solution. Here we set all velocities to zero. 

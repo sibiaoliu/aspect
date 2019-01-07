@@ -16,7 +16,7 @@ namespace aspect
 
   // The temperature of the lithospere-asthenosphere boundary
   // (above which we want to fix the temperature)
-  double LAB_temperature;
+  double fixed_LAB_temperature;
 
   /**
    * Declare additional parameters.
@@ -49,6 +49,7 @@ namespace aspect
                         ParameterHandler &prm)
   {
     prescribe_internal_temperatures = prm.get_bool ("Prescribe internal temperatures");
+    fixed_LAB_temperature = prm.get_double ("LAB temperature");
   }
 
   /**
@@ -93,7 +94,7 @@ namespace aspect
                         // we get time passed as seconds (always) but may want
                         // to reinterpret it in years
                         const Point<dim> p = fe_values.quadrature_point(q);
-                        if (simulator_access.get_initial_temperature_manager().initial_temperature(p) > 1613.0)
+                        if (simulator_access.get_initial_temperature_manager().initial_temperature(p) > fixed_LAB_temperature)
                           {
                             // Add a constraint of the form dof[q] = T
                             // to the list of constraints.
