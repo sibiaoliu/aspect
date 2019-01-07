@@ -121,13 +121,13 @@ namespace aspect
          * be used as a reference profile for calculating the thermal
          * diffusivity. The function depends only on depth.
          */
-        std::auto_ptr<Functions::ParsedFunction<1> > function;
+        std::unique_ptr<Functions::ParsedFunction<1> > function;
 
         /**
          * Pointer to an object that reads and processes data we get from
          * text files.
          */
-        std_cxx11::shared_ptr<aspect::Utilities::AsciiDataLookup<dim-1> > lithosphere_thickness;
+        std::shared_ptr<aspect::Utilities::AsciiDataLookup<dim-1> > lithosphere_thickness;
 
         /**
          * Directory in which the data file is present.
