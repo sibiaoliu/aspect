@@ -1,0 +1,148 @@
+## Global parameters
+set Dimension                                        = 3
+set Start time                                       = 0
+set End time                                         = 1e8
+set Output directory                                 = output_chunk3d
+set Use years in output instead of seconds           = true
+set CFL number                                       = 0.5
+set Maximum time step                                = 1e6
+set Adiabatic surface temperature                    = 1573
+set Pressure normalization                           = surface
+set Surface pressure                                 = 0
+
+#Assimilation function plugin
+set Additional shared libraries            = ../libassimilation.so
+set Prescribe internal composition         = false
+set OLAB depth = 100e3
+set CLAB depth = 200e3
+set Weak zone size = 5
+set Age_continent = 200
+
+## Solver opitions
+set Nonlinear solver scheme                          = single Advection, no Stokes #iterated Stokes
+set Nonlinear solver tolerance                       = 1e-4
+set Max nonlinear iterations                         = 100
+set Max nonlinear iterations in pre-refinement       = 0
+
+subsection Solver parameters
+  subsection Stokes solver parameters
+    set Linear solver tolerance                      = 1e-7
+    set Number of cheap Stokes solver steps          = 0
+    set Use direct solver for Stokes system          = false
+  end
+end
+
+# Gravity model
+subsection Gravity model
+  set Model name                                     = radial constant  #radial earth-like
+  subsection Radial constant
+    set Magnitude                                    = 9.81
+  end
+end
+
+subsection Geometry model
+  set Model name                                     = chunk
+  subsection Chunk
+    set Chunk minimum longitude                      = 260 	# degrees; 100W
+    set Chunk maximum longitude                      = 340        # 10W
+    set Longitude repetitions                        = 1 	
+    set Chunk minimum latitude                       = -60
+    set Chunk maximum latitude                       = 20
+    set Latitude repetitions                         = 1
+    set Chunk inner radius                           = 5711e3
+    set Chunk outer radius                           = 6371e3
+    set Radius repetitions                           = 1		
+   end
+end
+
+# Mesh refinement specifications 
+subsection Mesh refinement
+  set Initial global refinement                      = 3
+  set Initial adaptive refinement                    = 2
+  set Time steps between mesh refinement             = 20
+  set Strategy                                       = minimum refinement function
+  set Run postprocessors on initial refinement       = true
+  subsection Minimum refinement function
+    set Coordinate system                            = spherical
+    set Variable names                               = r,longi,lati
+    set Function constants                           = h1=6271e3
+    set Function expression                          = if(r>=h1,5,4)
+  end
+end
+
+# As we use the advection only solver scheme, we have to prescribe 
+# # the Stokes solution. Here we set all velocities to zero, and the pressure
+# # to the hydrotstaic pressure. 
+ subsection Prescribed Stokes solution
+   set Model name = function
+     subsection Velocity function
+         set Function expression = 0;0;0
+           end 
+           end
+
+# Temperature condition
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators          = outer,inner
+  set List of model names                            = spherical constant
+  subsection Spherical constant
+    set Inner temperature                            = 1613 
+    set Outer temperature                            = 273
+  end
+end
+
+subsection Initial temperature model
+  set Model name = function
+  subsection Function
+   set Variable names = rad, lati, long
+   set Coordinate system                            = spherical
+   set Function constants = Ts=273, Tbo=1613, hb=6371e3, ho=100e3
+   set Function expression = if(rad>(hb-ho), Ts+(Tbo-Ts)*(hb-rad)/ho, Tbo)
+  end
+end
+
+subsection Compositional fields
+  set Number of fields                               = 8 
+  set Names of fields                                = OC, OLM, CC, CLM, AS, TZ, LM, WZ
+end
+
+subsection Initial composition model
+  set List of model names = age_assimilation_C
+  subsection Age assimilation model
+    set Data directory = /work/06430/sibiao/frontera/InputModels/assimilation_age/assim_age_100-20W_60S-20N/
+    set Data file name = assim_age_iniT.%d.dat
+    set Data file time step = 1e6
+    set First data file number = 101
+    set Decreasing file order = true
+    set Oceanic crustal thickness = 40e3
+    set Oceanic lithospheric mantle thickness = 60e3
+    set Continental crustal thickness = 60e3
+    set Continental lithospheric mantle thickness = 140e3
+    set Transition zone top = 410e3
+    set Transition zone bottom = 510e3
+    set Weak zone size = 5
+  end
+end
+
+subsection Material model
+  set Model name = simple
+
+  subsection Simple model
+    set Viscosity                     = 1e21
+    set Thermal viscosity exponent    = 5.0
+    set Reference temperature         = 1537
+  end
+end
+
+# Post processing
+subsection Postprocess
+  set List of postprocessors                        = visualization, velocity statistics, \
+                                                      temperature statistics, heat flux statistics
+  subsection Visualization
+    set List of output variables                = density,viscosity,strain rate,adiabat
+    set Interpolate output                      = true
+    set Output format                           = vtu
+    set Time between graphical output           = 1e6
+    set Number of grouped files                 = 1
+  end
+end
+
