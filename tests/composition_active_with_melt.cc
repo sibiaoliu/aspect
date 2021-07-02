@@ -49,7 +49,7 @@ namespace aspect
       virtual void evaluate(const typename MaterialModel::Interface<dim>::MaterialModelInputs &in,
                             typename MaterialModel::Interface<dim>::MaterialModelOutputs &out) const
       {
-        for (unsigned int i=0; i<in.position.size(); ++i)
+        for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
           {
             out.viscosities[i] = 1.0;
             out.thermal_expansion_coefficients[i] = 0.01;
@@ -73,7 +73,7 @@ namespace aspect
         if (melt_out != nullptr)
           {
 
-            for (unsigned int i=0; i<in.position.size(); ++i)
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
               {
                 melt_out->compaction_viscosities[i] = 1.0;
                 melt_out->fluid_viscosities[i] = 1.0;
@@ -106,8 +106,8 @@ namespace aspect
                            "one with its linear dependence on the temperature. If there are compositional "
                            "fields, then the density only depends on the first one in such a way that "
                            "the density has an additional term of the kind $+\\Delta \\rho \\; c_1(\\mathbf x)$. "
-                           "This parameter describes the value of $\\Delta \\rho$. Units: $kg/m^3/\\textrm{unit "
-                           "change in composition}$.");
+                           "This parameter describes the value of $\\Delta \\rho$. "
+                           "Units: \\si{\\kilogram\\per\\meter\\cubed}/unit change in composition.");
       }
       prm.leave_subsection();
     }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -45,14 +45,6 @@ namespace aspect
     boundary_temperature (const types::boundary_id            boundary_indicator,
                           const Point<dim>                    &/*location*/) const
     {
-      // verify that the geometry is in fact a spherical shell since only
-      // for this geometry do we know for sure what boundary indicators it
-      // uses and what they mean
-      Assert (dynamic_cast<const GeometryModel::SphericalShell<dim>*>(&this->get_geometry_model())
-              != nullptr,
-              ExcMessage ("This boundary model is only implemented if the geometry is "
-                          "in fact a spherical shell."));
-
       switch (boundary_indicator)
         {
           case 0:
@@ -94,79 +86,90 @@ namespace aspect
       {
         prm.enter_subsection("Dynamic core");
         {
-          prm.declare_entry ("Outer temperature", "0",
+          prm.declare_entry ("Outer temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the outer boundary (lithosphere water/air). Units: $\\si{K}$.");
-          prm.declare_entry ("Inner temperature", "6000",
+                             "Temperature at the outer boundary (lithosphere water/air). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Inner temperature", "6000.",
                              Patterns::Double (),
                              "Temperature at the inner boundary (core mantle boundary) at the "
-                             "beginning. Units: $\\si{K}$.");
-          prm.declare_entry ("dT over dt", "0",
+                             "beginning. Units: \\si{\\kelvin}.");
+          prm.declare_entry ("dT over dt", "0.",
                              Patterns::Double (),
-                             "Initial CMB temperature changing rate. Units: $K/year$.");
-          prm.declare_entry ("dR over dt", "0",
+                             "Initial CMB temperature changing rate. "
+                             "Units: \\si{\\kelvin}/year.");
+          prm.declare_entry ("dR over dt", "0.",
                              Patterns::Double (),
-                             "Initial inner core radius changing rate. Units: $km/year$.");
-          prm.declare_entry ("dX over dt", "0",
+                             "Initial inner core radius changing rate. "
+                             "Units: \\si{\\kilo\\meter}/year.");
+          prm.declare_entry ("dX over dt", "0.",
                              Patterns::Double (),
-                             "Initial light composition changing rate. Units: $1/year$.");
+                             "Initial light composition changing rate. "
+                             "Units: 1/year.");
           prm.declare_entry ("Core density", "12.5e3",
                              Patterns::Double (),
-                             "Density of the core. Units: $kg/m^3$.");
+                             "Density of the core. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Gravity acceleration", "9.8",
                              Patterns::Double (),
-                             "Gravitation acceleration at CMB. Units: $m/s^2$.");
+                             "Gravitation acceleration at CMB. "
+                             "Units: \\si{\\meter\\per\\second\\squared}.");
           prm.declare_entry ("CMB pressure", "0.14e12",
                              Patterns::Double (),
-                             "Pressure at CMB. Units: $Pa$.");
+                             "Pressure at CMB. Units: \\si{\\pascal}.");
           prm.declare_entry ("Initial light composition", "0.01",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Initial light composition (eg. S,O) concentration "
                              "in weight fraction.");
           prm.declare_entry ("Max iteration", "30000",
                              Patterns::Integer (0),
-                             "The max iterations for nonliner core energy solver.");
-          prm.declare_entry ("Core heat capacity", "840",
-                             Patterns::Double (0),
-                             "Heat capacity of the core. Units: $J/kg/K$.");
+                             "The max iterations for nonlinear core energy solver.");
+          prm.declare_entry ("Core heat capacity", "840.",
+                             Patterns::Double (0.),
+                             "Heat capacity of the core. "
+                             "Units: \\si{\\joule\\per\\kelvin\\per\\kilogram}.");
           prm.declare_entry ("K0", "4.111e11",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Core compressibility at zero pressure. "
                              "See \\cite{NPB+04} for more details.");
           prm.declare_entry ("Rho0", "7.019e3",
-                             Patterns::Double (0),
-                             "Core density at zero pressure. Units: $kg/m^3$. "
+                             Patterns::Double (0.),
+                             "Core density at zero pressure. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}. "
                              "See \\cite{NPB+04} for more details.");
           prm.declare_entry ("Alpha", "1.35e-5",
-                             Patterns::Double (0),
-                             "Core thermal expansivity. Units: $1/K$.");
+                             Patterns::Double (0.),
+                             "Core thermal expansivity. Units: \\si{\\per\\kelvin}.");
           prm.declare_entry ("Lh", "750e3",
-                             Patterns::Double (0),
-                             "The latent heat of core freeze. Units: $J/kg$.");
+                             Patterns::Double (0.),
+                             "The latent heat of core freeze. "
+                             "Units: \\si{\\joule\\per\\kilogram}.");
           prm.declare_entry ("Rh","-27.7e6",
                              Patterns::Double (),
-                             "The heat of reaction. Units: $J/kg$.");
+                             "The heat of reaction. "
+                             "Units: \\si{\\joule\\per\\kilogram}.");
           prm.declare_entry ("Beta composition", "1.1",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Compositional expansion coefficient $Beta_c$. "
                              "See \\cite{NPB+04} for more details.");
           prm.declare_entry ("Delta","0.5",
-                             Patterns::Double (0,1),
+                             Patterns::Double (0., 1.),
                              "Partition coefficient of the light element.");
-          prm.declare_entry ("Core conductivity", "60",
-                             Patterns::Double (0),
-                             "Core heat conductivity $k_c$. Units: $W/m/K$.");
+          prm.declare_entry ("Core conductivity", "60.",
+                             Patterns::Double (0.),
+                             "Core heat conductivity $k_c$. Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
           prm.enter_subsection("Geotherm parameters");
           {
-            prm.declare_entry ("Tm0","1695",
-                               Patterns::Double (0),
-                               "Melting curve (\\cite{NPB+04} eq. (40)) parameter Tm0. Units: $\\si{K}$.");
+            prm.declare_entry ("Tm0","1695.",
+                               Patterns::Double (0.),
+                               "Melting curve (\\cite{NPB+04} eq. (40)) parameter Tm0. Units: \\si{\\kelvin}.");
             prm.declare_entry ("Tm1","10.9",
                                Patterns::Double (),
-                               "Melting curve (\\cite{NPB+04} eq. (40)) parameter Tm1. Units: $1/Tpa$.");
+                               "Melting curve (\\cite{NPB+04} eq. (40)) parameter Tm1. "
+                               "Units: \\si{\\per\\tera\\pascal}.");
             prm.declare_entry ("Tm2","-8.0",
                                Patterns::Double (),
-                               "Melting curve (\\cite{NPB+04} eq. (40)) parameter Tm2. Units: $1/TPa^2$.");
+                               "Melting curve (\\cite{NPB+04} eq. (40)) parameter Tm2. "
+                               "Units: \\si{\\per\\tera\\pascal\\squared}.");
             prm.declare_entry ("Theta","0.11",
                                Patterns::Double (),
                                "Melting curve (\\cite{NPB+04} eq. (40)) parameter Theta.");
@@ -223,6 +226,13 @@ namespace aspect
       {
         prm.enter_subsection("Dynamic core");
         {
+          // verify that the geometry is in fact a spherical shell since only
+          // for this geometry do we know for sure what boundary indicators it
+          // uses and what they mean
+          AssertThrow (Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>>(this->get_geometry_model()),
+                       ExcMessage ("This boundary model is only implemented if the geometry is "
+                                   "a spherical shell."));
+
           inner_temperature = prm.get_double ("Inner temperature");
           outer_temperature = prm.get_double ("Outer temperature");
           init_dT_dt        = prm.get_double ("dT over dt") / year_in_seconds;
@@ -395,7 +405,7 @@ namespace aspect
     {
       // Well solving the change in core-mantle boundary temperature T, inner core radius R, and
       //    light component (e.g. S, O, Si) composition X, the following relations has to be respected:
-      // 1. At the inner core boundary the adiabatic temperature should be equal to solidu temperature
+      // 1. At the inner core boundary the adiabatic temperature should be equal to solidus temperature
       // 2. The following energy production rate should be balanced in core:
       //    Heat flux at core-mantle boundary         Q
       //    Specific heat                             Qs*dT/dt
@@ -405,7 +415,7 @@ namespace aspect
       //    So that         Q+Qs*dT/dt+Qr+Qg*dR/dt*Ql*dR/dt=0
       // 3. The light component composition X depends on inner core radius (See function get_X() ),
       //    and core solidus may dependent on X as well
-      // This becomes a small nonliner problem. Directly iterate through the above three system doesn't
+      // This becomes a small nonlinear problem. Directly iterate through the above three system doesn't
       // converge well. Alternatively we solve the inner core radius by bisection method.
 
       int steps=1;
@@ -492,7 +502,7 @@ namespace aspect
     DynamicCore<dim>::get_Tc(double r) const
     {
       // Using all Q values from last step.
-      // Qs & Qr is constant, while Qg & Ql depends on inner core raidus Ri
+      // Qs & Qr is constant, while Qg & Ql depends on inner core radius Ri
       // TODO: Use mid-point value for Q values.
       return core_data.Ti - ( (core_data.Q + core_data.Qr + core_data.Q_OES) * core_data.dt
                               + (core_data.Qg + core_data.Ql)*(r-core_data.Ri)
@@ -596,12 +606,10 @@ namespace aspect
           // Read data of other energy source
           read_data_OES();
 
-          const GeometryModel::SphericalShell<dim> *spherical_shell_geometry =
-            dynamic_cast<const GeometryModel::SphericalShell<dim>*> (&(this->get_geometry_model()));
-          AssertThrow (spherical_shell_geometry != nullptr,
-                       ExcMessage ("This boundary model is only implemented if the geometry is "
-                                   "in fact a spherical shell."));
-          Rc=spherical_shell_geometry->inner_radius();
+          const GeometryModel::SphericalShell<dim> &spherical_shell_geometry =
+            Plugins::get_plugin_as_type<const GeometryModel::SphericalShell<dim>> (this->get_geometry_model());
+
+          Rc=spherical_shell_geometry.inner_radius();
           Mc=get_Mass(Rc);
           P_Core=get_Pressure(0);
 
@@ -609,7 +617,7 @@ namespace aspect
           if (this->get_adiabatic_conditions().is_initialized() && !this->get_material_model().is_compressible())
             {
               Point<dim> p1;
-              p1(0) = spherical_shell_geometry->inner_radius();
+              p1(0) = spherical_shell_geometry.inner_radius();
               dTa   = this->get_adiabatic_conditions().temperature(p1)
                       - this->get_adiabatic_surface_temperature();
             }
@@ -747,7 +755,7 @@ namespace aspect
         global_CMB_area = Utilities::MPI::sum (local_CMB_area, this->get_mpi_communicator());
 
         // Using area averaged heat-flux density times core mantle boundary area to calculate total heat-flux on the 3D sphere.
-        // By doing this, using dyanmic core evolution with geometray other than 3D spherical shell becomes possible.
+        // By doing this, using dynamic core evolution with geometry other than 3D spherical shell becomes possible.
         double average_CMB_heatflux_density = global_CMB_flux / global_CMB_area;
         core_data.Q = average_CMB_heatflux_density * 4. * M_PI * Rc * Rc;
       }

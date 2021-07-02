@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -86,6 +86,7 @@ namespace aspect
       }
 
 
+
       template <int dim>
       Interface<dim> *
       create_particle_interpolator (ParameterHandler &prm)
@@ -104,6 +105,8 @@ namespace aspect
         return std::get<dim>(registered_plugins).create_plugin (name,
                                                                 "Particle::Interpolator name");
       }
+
+
 
       template <int dim>
       void
@@ -186,8 +189,8 @@ namespace aspect
   create_particle_interpolator<dim> (ParameterHandler &prm);
 
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
   }
 }
-
-

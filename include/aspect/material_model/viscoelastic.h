@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -45,9 +45,9 @@ namespace aspect
      * representing these components must be named and listed in a very specific
      * format, which is designed to minimize mislabeling stress tensor components
      * as distinct 'compositional rock types' (or vice versa). For 2D models,
-     * the first three compositional fields must be labeled stress_xx, stress_yy
-     * and stress_xy. In 3D, the first six compositional fields must be labeled
-     * stress_xx, stress_yy, stress_zz, stress_xy, stress_xz, stress_yz.
+     * the first three compositional fields must be labeled ve_stress_xx, ve_stress_yy
+     * and ve_stress_xy. In 3D, the first six compositional fields must be labeled
+     * ve_stress_xx, ve_stress_yy, ve_stress_zz, ve_stress_xy, ve_stress_xz, ve_stress_yz.
      *
      * Expanding the model to include non-linear viscous flow (e.g.,
      * diffusion/dislocation creep) and plasticity would produce a constitutive
@@ -64,9 +64,9 @@ namespace aspect
      * The overview below directly follows Moresi et al. (2003) eqns. 23-32.
      * However, an important distinction between this material model and
      * the studies above is the use of compositional fields, rather than
-     * tracers, to track individual components of the viscoelastic stress
-     * tensor. The material model will be udpated when an option to track
-     * and calculate viscoelastic stresses with tracers is implemented.
+     * particles, to track individual components of the viscoelastic stress
+     * tensor. The material model will be updated when an option to track
+     * and calculate viscoelastic stresses with particles is implemented.
      *
      * Moresi et al. (2003) begins (eqn. 23) by writing the deviatoric
      * rate of deformation ($\hat{D}$) as the sum of elastic
@@ -90,7 +90,7 @@ namespace aspect
      * $\smash[t]{\overset{\nabla}{\tau}}^{t + \Delta t^{e}} \approx
      * \frac{\tau^{t + \Delta t^{e} - \tau^{t}}}{\Delta t^{e}} -
      * W^{t}\tau^{t} + \tau^{t}W^{t}$.
-     * In this material model, the size of the time step above ($\\Delta t^{e}$)
+     * In this material model, the size of the time step above ($\Delta t^{e}$)
      * can be specified as the numerical time step size or an independent fixed time
      * step. If the latter case is a selected, the user has an option to apply a
      * stress averaging scheme to account for the differences between the numerical
@@ -100,8 +100,8 @@ namespace aspect
      *
      * The formulation above allows rewriting the total rate of deformation (eqn. 29) as
      * $\tau^{t + \Delta t^{e}} = \eta_{eff} \left (
-     * 2\\hat{D}^{t + \\triangle t^{e}} + \\frac{\\tau^{t}}{\\mu \\Delta t^{e}} +
-     * \\frac{W^{t}\\tau^{t} - \\tau^{t}W^{t}}{\\mu}  \\right )$.
+     * 2\hat{D}^{t + \triangle t^{e}} + \frac{\tau^{t}}{\mu \Delta t^{e}} +
+     * \frac{W^{t}\tau^{t} - \tau^{t}W^{t}}{\mu}  \right )$.
      *
      * The effective viscosity (eqn. 28) is a function of the viscosity ($\eta$),
      * elastic time step size ($\Delta t^{e}$) and shear relaxation time

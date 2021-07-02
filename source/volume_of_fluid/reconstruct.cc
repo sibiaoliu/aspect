@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -36,7 +36,7 @@ namespace aspect
 
     LinearAlgebra::BlockVector initial_solution;
 
-    sim.computing_timer.enter_section("Reconstruct VolumeOfFluid interfaces");
+    TimerOutput::Scope timer (sim.computing_timer, "Reconstruct VolumeOfFluid interfaces");
 
     initial_solution.reinit(sim.system_rhs, false);
 
@@ -152,7 +152,7 @@ namespace aspect
                         const typename DoFHandler<dim>::cell_iterator neighbor =
                           cell->neighbor_or_periodic_neighbor(neighbor_no);
                         if (neighbor->level() == cell->level() &&
-                            neighbor->active())
+                            neighbor->is_active())
                           cen = neighbor;
                         else
                           cen = endc;
@@ -189,7 +189,7 @@ namespace aspect
                                 const typename DoFHandler<dim>::cell_iterator neighbor =
                                   cen->neighbor_or_periodic_neighbor(neighbor_no);
                                 if (neighbor->level() == cell->level() &&
-                                    neighbor->active())
+                                    neighbor->is_active())
                                   curr = neighbor;
                                 else
                                   curr = endc;
@@ -415,8 +415,6 @@ namespace aspect
 
     solution.block(volume_of_fluidN_blockidx) = initial_solution.block(volume_of_fluidN_blockidx);
     solution.block(volume_of_fluidLS_blockidx) = initial_solution.block(volume_of_fluidLS_blockidx);
-
-    sim.computing_timer.exit_section();
   }
 
 
@@ -436,7 +434,7 @@ namespace aspect
 
     LinearAlgebra::BlockVector initial_solution;
 
-    sim.computing_timer.enter_section("Compute VolumeOfFluid compositions");
+    TimerOutput::Scope timer (sim.computing_timer, "Compute VolumeOfFluid compositions");
 
     initial_solution.reinit(sim.system_rhs, false);
 
@@ -507,11 +505,12 @@ namespace aspect
 
     const unsigned int blockidx = composition_field.block_index(this->introspection());
     solution.block(blockidx) = initial_solution.block(blockidx);
-    sim.computing_timer.exit_section();
   }
 
+
+
   template <>
-  void VolumeOfFluidHandler<3>::update_volume_of_fluid_composition (const typename Simulator<3>::AdvectionField &/*composition_field*/,
+  void VolumeOfFluidHandler<3>::update_volume_of_fluid_composition (const Simulator<3>::AdvectionField &/*composition_field*/,
                                                                     const VolumeOfFluidField<3> &/*volume_of_fluid_field*/,
                                                                     LinearAlgebra::BlockVector &/*solution*/)
   {

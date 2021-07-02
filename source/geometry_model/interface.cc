@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -24,6 +24,7 @@
 #include <aspect/simulator_access.h>
 #include <deal.II/base/exceptions.h>
 #include <tuple>
+#include <deal.II/dofs/dof_tools.h>
 
 namespace aspect
 {
@@ -187,8 +188,9 @@ namespace aspect
                                      const std::map<std::string,types::boundary_id> &boundary_names_mapping)
       {
         std::vector<types::boundary_id> results;
-        for (unsigned int i=0; i<names.size(); ++i)
-          results.push_back (translate_boundary_indicator(names[i], boundary_names_mapping));
+        results.reserve(names.size());
+        for (const auto &name : names)
+          results.push_back (translate_boundary_indicator(name, boundary_names_mapping));
 
         return results;
       }
@@ -226,15 +228,14 @@ namespace aspect
       // set, then this means that we had previously already found it -- i.e.,
       // that it is in the map at least twice. produce an error in that case.
       std::string name;
-      for (std::map<std::string,types::boundary_id>::const_iterator p = mapping.begin();
-           p != mapping.end(); ++p)
-        if (p->second == boundary_id)
+      for (const auto &p : mapping)
+        if (p.second == boundary_id)
           {
             Assert (name == "",
                     ExcMessage ("This geometry model appears to provide multiple "
                                 "names for the boundary with indicator <" +
                                 Utilities::int_to_string (boundary_id) + ">."));
-            name = p->first;
+            name = p.first;
           }
 
       return name;
@@ -326,6 +327,27 @@ namespace aspect
       std::get<dim>(registered_plugins).write_plugin_graph ("Geometry model interface",
                                                             out);
     }
+
+
+
+    template <int dim>
+    void
+    Interface<dim>::make_periodicity_constraints(const DoFHandler<dim> &dof_handler,
+                                                 AffineConstraints<double> &constraints) const
+    {
+      using periodic_boundary_set
+        = std::set< std::pair< std::pair< types::boundary_id, types::boundary_id>, unsigned int> >;
+      periodic_boundary_set pbs = get_periodic_boundary_pairs();
+
+      for (const auto &pb : pbs)
+        {
+          DoFTools::make_periodicity_constraints(dof_handler,
+                                                 pb.first.first,  // first boundary id
+                                                 pb.first.second, // second boundary id
+                                                 pb.second,       // cartesian direction for translational symmetry
+                                                 constraints);
+        }
+    }
   }
 }
 
@@ -371,5 +393,7 @@ namespace aspect
   create_geometry_model<dim> (ParameterHandler &prm);
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

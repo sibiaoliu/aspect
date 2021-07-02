@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -21,9 +21,6 @@
 
 #include <aspect/gravity_model/radial.h>
 #include <aspect/geometry_model/interface.h>
-#include <aspect/geometry_model/box.h>
-#include <aspect/geometry_model/two_merged_boxes.h>
-#include <aspect/geometry_model/sphere.h>
 #include <aspect/utilities.h>
 
 #include <deal.II/base/tensor.h>
@@ -79,12 +76,10 @@ namespace aspect
       }
       prm.leave_subsection ();
 
-      Assert (Plugins::plugin_type_matches<const GeometryModel::Box<dim> >(this->get_geometry_model()) == false,
-              ExcMessage ("Gravity model 'radial constant' should not be used with geometry model 'box'."));
-
-      Assert (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim> >(this->get_geometry_model()) == false,
-              ExcMessage ("Gravity model 'radial constant' should not be used with geometry model 'box with "
-                          "lithosphere boundary indicators'."));
+      AssertThrow (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::spherical ||
+                   this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::ellipsoidal,
+                   ExcMessage ("Gravity model 'radial constant' should not be used with geometry models that "
+                               "do not have either a spherical or ellipsoidal natural coordinate system."));
     }
 
 // ------------------------------ RadialEarthLike -------------------
@@ -144,7 +139,8 @@ namespace aspect
           prm.declare_entry ("Magnitude at surface", "9.8",
                              Patterns::Double (),
                              "Magnitude of the radial gravity vector "
-                             "at the surface of the domain. Units: $m/s^2$");
+                             "at the surface of the domain. "
+                             "Units: \\si{\\meter\\per\\second\\squared}.");
           prm.declare_entry ("Magnitude at bottom", "10.7",
                              Patterns::Double (),
                              "Magnitude of the radial gravity vector "
@@ -153,7 +149,7 @@ namespace aspect
                              "example represents the core-mantle boundary in "
                              "the case of the `spherical shell' geometry model, "
                              "and the center in the case of the `sphere' "
-                             "geometry model. Units: $m/s^2$");
+                             "geometry model. Units: \\si{\\meter\\per\\second\\squared}.");
         }
         prm.leave_subsection ();
       }
@@ -175,11 +171,11 @@ namespace aspect
         prm.leave_subsection ();
       }
       prm.leave_subsection ();
-      Assert (dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model()) == nullptr,
-              ExcMessage ("Gravity model 'radial linear' should not be used with geometry model 'box'."));
-      Assert (dynamic_cast<const GeometryModel::TwoMergedBoxes<dim>*> (&this->get_geometry_model()) == nullptr,
-              ExcMessage ("Gravity model 'radial linear' should not be used with geometry model 'box with "
-                          "lithosphere boundary indicators'."));
+
+      AssertThrow (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::spherical ||
+                   this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::ellipsoidal,
+                   ExcMessage ("Gravity model 'radial linear' should not be used with geometry models that "
+                               "do not have either a spherical or ellipsoidal natural coordinate system."));
 
     }
   }

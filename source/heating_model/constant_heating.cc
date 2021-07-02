@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -52,8 +52,8 @@ namespace aspect
       {
         prm.enter_subsection("Constant heating");
         {
-          prm.declare_entry ("Radiogenic heating rate", "0e0",
-                             Patterns::Double (0),
+          prm.declare_entry ("Radiogenic heating rate", "0.",
+                             Patterns::Double (0.),
                              "The specific rate of heating due to radioactive decay (or other bulk sources "
                              "you may want to describe). This parameter corresponds to the variable "
                              "$H$ in the temperature equation stated in the manual, and the heating "

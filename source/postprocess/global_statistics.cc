@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -112,7 +112,7 @@ namespace aspect
           column_position = i;
 
       if (column_position == numbers::invalid_unsigned_int)
-        advection_iterations.push_back(std::make_pair(column_name,std::vector<unsigned int>(1,solver_control.last_step())));
+        advection_iterations.emplace_back(column_name,std::vector<unsigned int>(1,solver_control.last_step()));
       else
         advection_iterations[column_position].second.push_back(solver_control.last_step());
     }
@@ -247,7 +247,7 @@ namespace aspect
       statistics.add_value("Number of mesh cells",
                            this->get_triangulation().n_global_active_cells());
 
-      unsigned int n_stokes_dofs = this->introspection().system_dofs_per_block[0];
+      types::global_dof_index n_stokes_dofs = this->introspection().system_dofs_per_block[0];
       if (this->introspection().block_indices.velocities != this->introspection().block_indices.pressure)
         n_stokes_dofs += this->introspection().system_dofs_per_block[this->introspection().block_indices.pressure];
 
@@ -256,7 +256,7 @@ namespace aspect
                            this->introspection().system_dofs_per_block[this->introspection().block_indices.temperature]);
       if (this->n_compositional_fields() > 0)
         statistics.add_value("Number of degrees of freedom for all compositions",
-                             this->n_compositional_fields()
+                             static_cast<types::global_dof_index>(this->n_compositional_fields())
                              * this->introspection().system_dofs_per_block[this->introspection().block_indices.compositional_fields[0]]);
     }
 

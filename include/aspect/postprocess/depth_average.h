@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -98,10 +98,10 @@ namespace aspect
         double last_output_time;
 
         /**
-         * The format in which to produce graphical output. This also
-         * determines the extension of the file name to which to write.
+         * The formats in which to produce graphical output. This also
+         * determines the extension of the file names to which to write.
          */
-        DataOutBase::OutputFormat output_format;
+        std::vector<std::string> output_formats;
 
         /**
          * Number of zones in depth direction over which we are supposed to
@@ -110,14 +110,17 @@ namespace aspect
         unsigned int n_depth_zones;
 
         /**
+         * The boundaries of the depth zones.
+         * This vector contains exactly n_depth_zones + 1 entries,
+         * and entries i and i+1 represent the lower and upper depth bound
+         * of zone i.
+         */
+        std::vector<double> depth_bounds;
+
+        /**
          * List of the quantities to calculate for each depth zone.
          */
         std::vector<std::string> variables;
-
-        /**
-         * Whether to use plain ascii text output
-         */
-        bool ascii_output;
 
         /**
          * A structure for a single time step record.

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -106,12 +106,11 @@ namespace aspect
             push_forward(const Point<3> &chart_point) const override;
 
             /**
-             * Return a copy of this manifold.
+             * This function does the actual pull back from the ellipsoid.
+             * For the equation details, please see deal.ii step 53.
              */
-            std::unique_ptr<Manifold<dim,3> >
-            clone() const override;
+            Point<3> pull_back_ellipsoid (const Point<3> &x, const double semi_major_axis_a, const double eccentricity) const;
 
-          private:
             /**
              * This function does the actual push forward to the ellipsoid.
              * For the equation details, please see deal.ii step 53.
@@ -119,11 +118,12 @@ namespace aspect
             Point<3> push_forward_ellipsoid (const Point<3> &phi_theta_d, const double semi_major_axis_a, const double eccentricity) const;
 
             /**
-             * This function does the actual pull back from the ellipsoid.
-             * For the equation details, please see deal.ii step 53.
+             * Return a copy of this manifold.
              */
-            Point<3> pull_back_ellipsoid (const Point<3> &x, const double semi_major_axis_a, const double eccentricity) const;
+            std::unique_ptr<Manifold<dim,3> >
+            clone() const override;
 
+          private:
             /**
              * This function adds topography to the cartesian coordinates.
              * For the equation details, please see deal.ii step 53.
@@ -229,14 +229,14 @@ namespace aspect
 
         /**
          * Returns what the natural coordinate system for this geometry model is,
-         * which for a Ellipsoidal chunk is Ellisoidal.
+         * which for a Ellipsoidal chunk is Ellipsoidal.
          */
         aspect::Utilities::Coordinates::CoordinateSystem natural_coordinate_system() const override;
 
         /**
          * Takes the Cartesian points (x,z or x,y,z) and returns standardized
          * coordinates which are most 'natural' to the geometry model. For a
-         * ellispoidal chunk this is (radius, longitude) in 2d and (radius,
+         * ellipsoidal chunk this is (radius, longitude) in 2d and (radius,
          * longitude, latitude) in 3d. Note that internally the coordinates are
          * stored in longitude, latitude, depth.
          */

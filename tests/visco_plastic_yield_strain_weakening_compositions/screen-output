@@ -2,7 +2,7 @@
 Number of active cells: 100 (on 1 levels)
 Number of degrees of freedom: 2,326 (882+121+441+441+441)
 
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
    Solving temperature system... 0 iterations.
    Solving total_strain system ... 0 iterations.
    Solving weak_layer system ... 0 iterations.
@@ -18,17 +18,14 @@ Number of degrees of freedom: 2,326 (882+121+441+441+441)
 
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 
-*** Timestep 1:  t=1 years
+*** Timestep 1:  t=1 years, dt=1 years
    Solving temperature system... 0 iterations.
-   Solving total_strain system ... 5 iterations.
+   Solving total_strain system ... 10 iterations.
    Solving weak_layer system ... 4 iterations.
    Rebuilding Stokes preconditioner...
    Solving Stokes system... 14+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 0.0436232
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 0.0664792
 
 
    Postprocessing:
@@ -37,14 +34,8 @@ Number of degrees of freedom: 2,326 (882+121+441+441+441)
 
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

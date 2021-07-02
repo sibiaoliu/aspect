@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -35,9 +35,13 @@ namespace aspect
       Interface<dim>::Interface()
       {}
 
+
+
       template <int dim>
       Interface<dim>::~Interface ()
       {}
+
+
 
       template <int dim>
       void
@@ -47,6 +51,8 @@ namespace aspect
         random_number_generator.seed(5432+my_rank);
       }
 
+
+
       template <int dim>
       std::pair<Particles::internal::LevelInd,Particle<dim> >
       Interface<dim>::generate_particle(const Point<dim> &position,
@@ -55,6 +61,20 @@ namespace aspect
         // Try to find the cell of the given position. If the position is not
         // in the domain on the local process, throw a ExcParticlePointNotInDomain
         // exception.
+#if DEAL_II_VERSION_GTE(9,3,0)
+        std::pair<const typename parallel::distributed::Triangulation<dim>::active_cell_iterator,
+            Point<dim> > it =
+              GridTools::find_active_cell_around_point<> (this->get_mapping(), this->get_triangulation(), position);
+
+        // Only try to add the point if the cell it is in, is on this processor
+        AssertThrow(it.first.state() == IteratorState::valid && it.first->is_locally_owned(),
+                    ExcParticlePointNotInDomain());
+
+        const Particle<dim> particle(position, it.second, id);
+        const Particles::internal::LevelInd cell(it.first->level(), it.first->index());
+        return std::make_pair(cell,particle);
+
+# else
         try
           {
             std::pair<const typename parallel::distributed::Triangulation<dim>::active_cell_iterator,
@@ -74,10 +94,12 @@ namespace aspect
             AssertThrow(false,
                         ExcParticlePointNotInDomain());
           }
-
+# endif
         // Avoid warnings about missing return
         return std::pair<Particles::internal::LevelInd,Particle<dim> >();
       }
+
+
 
       template <int dim>
       std::pair<Particles::internal::LevelInd,Particle<dim> >
@@ -143,10 +165,14 @@ namespace aspect
         return std::make_pair(Particles::internal::LevelInd(),Particle<dim>());
       }
 
+
+
       template <int dim>
       void
       Interface<dim>::declare_parameters (ParameterHandler &)
       {}
+
+
 
       template <int dim>
       void
@@ -180,6 +206,7 @@ namespace aspect
                                                            declare_parameters_function,
                                                            factory_function);
       }
+
 
 
       template <int dim>
@@ -284,7 +311,8 @@ namespace aspect
   create_particle_generator<dim> (ParameterHandler &prm);
 
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
   }
 }
-

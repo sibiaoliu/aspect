@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,10 +33,13 @@ namespace aspect
     namespace VisualizationPostprocessors
     {
       /**
-       * A class derived from DataPostprocessorScalar that computes a variable
-       * that represents the dynamic topography. This quantity, strictly
-       * speaking, only makes sense at the surface of the domain.
-       * Thus, the value is set to zero in all the cells inside of the domain.
+       * A class derived from DataPostprocessorScalar that computes a
+       * variable that represents the dynamic topography. This
+       * quantity, strictly speaking, only makes sense at the surface
+       * of the domain.  Thus, the value is set to zero in all the
+       * cells inside of the domain. Consider using the
+       * SurfaceDynamicTopography to only output the dynamic
+       * topography at the boundary of the domain.
        *
        * The member functions are all implementations of those declared in the
        * base class. See there for their meaning.

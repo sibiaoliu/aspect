@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -229,7 +229,6 @@ namespace aspect
          * A pointer to the initial topography model.
          */
         InitialTopographyModel::Interface<dim> *topo_model;
-
     };
   }
 }

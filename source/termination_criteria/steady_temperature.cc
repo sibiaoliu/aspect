@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -83,7 +83,7 @@ namespace aspect
       const double average_temperature = global_temperature_integral / this->get_volume();
 
       // Keep a list of times and temperatures at those times
-      time_temperature.push_back(std::make_pair(this->get_time(), average_temperature));
+      time_temperature.emplace_back(this->get_time(), average_temperature);
 
       // If the length of the simulation time covered in the list is shorter than the
       // specified parameter, we must continue the simulation
@@ -136,13 +136,13 @@ namespace aspect
         prm.enter_subsection("Steady state temperature");
         {
           prm.declare_entry ("Maximum relative deviation", "0.05",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The maximum relative deviation of the temperature in recent "
                              "simulation time for the system to be considered in "
                              "steady state. If the actual deviation is smaller "
                              "than this number, then the simulation will be terminated.");
           prm.declare_entry ("Time in steady state", "1e7",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The minimum length of simulation time that the system "
                              "should be in steady state before termination."
                              "Units: years if the "

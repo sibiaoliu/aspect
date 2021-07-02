@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,6 +36,8 @@ namespace aspect
                                       update_gradients | update_quadrature_points)
       {}
 
+
+
       template <int dim>
       void
       StrainRateTensor<dim>::
@@ -55,17 +57,23 @@ namespace aspect
               grad_u[d] = input_data.solution_gradients[q][d];
 
             const SymmetricTensor<2,dim> strain_rate = symmetrize(grad_u);
-            const Tensor<2,dim> compressible_strain_rate
+            const Tensor<2,dim> deviatoric_strain_rate
               = (this->get_material_model().is_compressible()
                  ?
                  strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>()
                  :
                  strain_rate);
 
-            for (unsigned int i=0; i<Tensor<2,dim>::n_independent_components; ++i)
-              computed_quantities[q](i)
-                = compressible_strain_rate[compressible_strain_rate.unrolled_to_component_indices(i)];
+            for (unsigned int d=0; d<dim; ++d)
+              for (unsigned int e=0; e<dim; ++e)
+                computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
+                  = deviatoric_strain_rate[d][e];
           }
+
+        const auto &viz = this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Visualization<dim> >();
+        if (!viz.output_pointwise_stress_and_strain())
+          average_quantities(computed_quantities);
+
       }
     }
   }

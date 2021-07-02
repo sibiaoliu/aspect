@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -50,6 +50,14 @@ namespace aspect
       {
         public:
           Geoid();
+
+          /**
+           * Initialization function. This function is called once at the
+           * beginning of the program after parse_parameters is run and after
+           * the SimulatorAccess (if applicable) is initialized.
+           */
+          void
+          initialize () override;
 
           /**
            * @copydoc DataPostprocessorScalar<dim>::evaluate_vector_field()

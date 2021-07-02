@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -207,7 +207,7 @@ namespace aspect
                     d += (0.5/dim)*(dH+dL);
                   }
                 // Use the basic fluid fraction formula to compute an approximation to the fluid fraction
-                const double fraction_at_point = VolumeOfFluid::Utilities::compute_fluid_fraction<dim> (grad, d);
+                const double fraction_at_point = VolumeOfFluid::Utilities::compute_fluid_fraction (grad, d);
                 volume_of_fluid_val += fraction_at_point * fe_init.JxW (i);
                 cell_vol += fe_init.JxW (i);
               }
@@ -240,4 +240,6 @@ namespace aspect
   template void VolumeOfFluidHandler<dim>::initialize_from_level_set (const VolumeOfFluidField<dim> &field);
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

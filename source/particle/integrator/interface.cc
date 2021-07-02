@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -33,15 +33,21 @@ namespace aspect
       Interface<dim>::~Interface ()
       {}
 
+
+
       template <int dim>
       void
       Interface<dim>::declare_parameters (ParameterHandler &)
       {}
 
+
+
       template <int dim>
       void
       Interface<dim>::parse_parameters (ParameterHandler &)
       {}
+
+
 
       template <int dim>
       bool
@@ -50,12 +56,16 @@ namespace aspect
         return false;
       }
 
+
+
       template <int dim>
       std::size_t
       Interface<dim>::get_data_size() const
       {
         return 0;
       }
+
+
 
       template <int dim>
       const void *
@@ -64,6 +74,8 @@ namespace aspect
       {
         return data;
       }
+
+
 
       template <int dim>
       void *
@@ -103,6 +115,7 @@ namespace aspect
       }
 
 
+
       template <int dim>
       Interface<dim> *
       create_particle_integrator (ParameterHandler &prm)
@@ -121,6 +134,8 @@ namespace aspect
         return std::get<dim>(registered_plugins).create_plugin (name,
                                                                 "Particle::Integrator name");
       }
+
+
 
       template <int dim>
       void
@@ -262,8 +277,8 @@ namespace aspect
   create_particle_integrator<dim> (ParameterHandler &prm);
 
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
   }
 }
-
-

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -346,6 +346,16 @@ namespace aspect
         void
         parse_parameters (ParameterHandler &prm);
 
+        /**
+         * Collects periodic boundary constraints for the given geometry
+         * and @p dof_handler, which will be added to the existing @p constraints.
+         * The default implementation creates cartesian periodic boundary conditions
+         * for all periodic boundary indicators.
+         */
+        virtual
+        void
+        make_periodicity_constraints(const DoFHandler<dim> &dof_handler,
+                                     AffineConstraints<double> &constraints) const;
     };
 
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -26,7 +26,7 @@ namespace aspect
   namespace TerminationCriteria
   {
     // The start_walltime is made as static and initialized here to
-    // make sure it is initialized right way as the programe starts.
+    // make sure it is initialized right way as the program starts.
     template <int dim>
     std::time_t
     EndWalltime<dim>::start_walltime = std::time(nullptr);
@@ -46,8 +46,8 @@ namespace aspect
       prm.enter_subsection("Termination criteria");
       {
         prm.declare_entry ("Wall time",
-                           "24",
-                           Patterns::Double (0),
+                           "24.",
+                           Patterns::Double (0.),
                            "The wall time of the simulation. Unit: hours.");
       }
       prm.leave_subsection ();

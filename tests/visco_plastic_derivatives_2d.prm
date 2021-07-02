@@ -1,13 +1,12 @@
-# This test checks wether the derivatives of the drucker prager
-# material model are the same as the finite difference derivatives 
+# This test checks whether the derivatives of the drucker prager
+# material model are the same as the finite difference derivatives
 # created by the drucker prager material model.
 set Additional shared libraries = tests/libvisco_plastic_derivatives.so
 
 set Dimension                              = 2
 set End time                               = 0
 set Use years in output instead of seconds = true
-set Nonlinear solver scheme                = iterated Advection and Newton Stokes
-set Max nonlinear iterations               = 0
+set Nonlinear solver scheme                = no Advection, no Stokes
 
 # Model geometry (100x100 km, 10 km spacing)
 subsection Geometry model
@@ -20,7 +19,7 @@ subsection Geometry model
   end
 end
 
-# Mesh refinement specifications 
+# Mesh refinement specifications
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
   set Initial global refinement          = 0
@@ -28,7 +27,7 @@ subsection Mesh refinement
 end
 
 
-# Boundary classifications (fixed T boundaries, prescribed velocity) 
+# Boundary classifications (fixed T boundaries, prescribed velocity)
 # The parameters below this comment were created by the update script
 # as replacement for the old 'Model settings' subsection. They can be
 # safely merged with any existing subsections with the same name.

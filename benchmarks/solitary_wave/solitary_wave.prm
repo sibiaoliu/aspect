@@ -1,7 +1,7 @@
 # Listing of Parameters
 # ---------------------
 # Set up the solitary wave benchmark
-# (Barcilon & Richter, 1986; Simpson & Spiegelman, 2011; 
+# (Barcilon & Richter, 1986; Simpson & Spiegelman, 2011;
 # Keller et al., 2013; Schmeling, 200
 
 set Additional shared libraries            = ./libsolitary_wave.so
@@ -62,7 +62,7 @@ end
 
 # we apply the phase speed of the wave here, so that it always stays in the same place in our model
 # the phase speed is c = 5.25e-11 m/s, but we have to convert it to m/years using the same conversion
-# that is used internally in Aspect: year_in_seconds = 60*60*24*365.2425
+# that is used internally in ASPECT: year_in_seconds = 60*60*24*365.2425
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = left, right
   set Prescribed velocity boundary indicators = top:function, bottom:function
@@ -75,7 +75,7 @@ subsection Boundary velocity model
 end
 
 subsection Geometry model
-  set Model name = box # default: 
+  set Model name = box # default:
 
   subsection Box
     set X extent  = 10
@@ -87,7 +87,7 @@ end
 
 
 subsection Gravity model
-  set Model name = vertical # default: 
+  set Model name = vertical # default:
 
 
   subsection Vertical
@@ -100,14 +100,14 @@ end
 
 
 subsection Initial temperature model
-  set Model name = function # default: 
+  set Model name = function # default:
   subsection Function
     set Function expression = 0
   end
 end
 
 subsection Initial composition model
-  set Model name = Solitary wave initial condition # default: 
+  set Model name = Solitary wave initial condition # default:
   subsection Solitary wave initial condition
     set Offset = 200
     set Read solution from file = true
@@ -147,7 +147,7 @@ subsection Postprocess
 
   subsection Visualization
 
-    set List of output variables      = density, viscosity, thermal expansivity, melt material properties 
+    set List of output variables      = density, viscosity, thermal expansivity, melt material properties
 
     subsection Melt material properties
       set List of properties = fluid density, permeability, fluid viscosity, compaction viscosity

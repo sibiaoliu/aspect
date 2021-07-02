@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -182,6 +182,20 @@ namespace aspect
           const double rho = value(temperature,pressure,density_values,interpolation);
           const double drho = value(temperature,pressure+delta_press,density_values,interpolation);
           return (drho - rho) / delta_press;
+        }
+
+        std::vector<std::string>
+        MaterialLookup::phase_volume_column_names() const
+        {
+          return phase_column_names;
+        }
+
+        double
+        MaterialLookup::phase_volume_fraction(const int phase_id,
+                                              const double temperature,
+                                              const double pressure) const
+        {
+          return value(temperature,pressure,phase_volume_fractions[phase_id],interpolation);
         }
 
         double
@@ -472,28 +486,141 @@ namespace aspect
           // Read data from disk and distribute among processes
           std::istringstream in(Utilities::read_and_distribute_file_content(filename, comm));
 
-          std::getline(in, temp); // eat first line
-          std::getline(in, temp); // eat next line
-          std::getline(in, temp); // eat next line
-          std::getline(in, temp); // eat next line
+          // The following lines read in a PerpleX tab file in standard format
+          // The first 13 lines are a header in the format:
+          // |<perplex version>
+          // <table filename>
+          // <grid dim>
+          // <grid variable 1> (usually T(K) or P(bar))
+          // <min grid variable 1>
+          // <delta grid variable 1>
+          // <n steps grid variable 1>
+          // <grid variable 2> (usually T(K) or P(bar))
+          // <min grid variable 2>
+          // <delta grid variable 2>
+          // <n steps grid variable 2>
+          // Number of property columns in the table
+          // Column names
 
-          in >> min_temp;
-          std::getline(in, temp);
-          in >> delta_temp;
-          std::getline(in, temp);
-          in >> n_temperature;
-          std::getline(in, temp);
-          std::getline(in, temp);
-          in >> min_press;
-          min_press *= 1e5;  // conversion from [bar] to [Pa]
-          std::getline(in, temp);
-          in >> delta_press;
-          delta_press *= 1e5; // conversion from [bar] to [Pa]
-          std::getline(in, temp);
-          in >> n_pressure;
-          std::getline(in, temp);
-          std::getline(in, temp);
-          std::getline(in, temp);
+          // First line is the Perplex version number
+          std::getline(in, temp); // get next line, table file name
+
+          std::getline(in, temp); // get next line, dimension of table
+          unsigned int n_variables;
+          in >> n_variables;
+          AssertThrow (n_variables==2, ExcMessage("The PerpleX file " + filename + " must be two dimensional (P(bar)-T(K))."));
+
+          std::getline(in, temp); // get next line, either T(K) or P(bar)
+
+          for (unsigned int i=0; i<2; i++)
+            {
+              std::string natural_variable;
+              in >> natural_variable;
+
+              if (natural_variable == "T(K)")
+                {
+                  std::getline(in, temp);
+                  in >> min_temp;
+                  std::getline(in, temp);
+                  in >> delta_temp;
+                  std::getline(in, temp);
+                  in >> n_temperature;
+                  std::getline(in, temp); // get next line, either T(K), P(bar) or number of columns
+                }
+              else if (natural_variable == "P(bar)")
+                {
+                  std::getline(in, temp);
+                  in >> min_press;
+                  min_press *= 1e5;  // conversion from [bar] to [Pa]
+                  std::getline(in, temp);
+                  in >> delta_press;
+                  delta_press *= 1e5; // conversion from [bar] to [Pa]
+                  std::getline(in, temp);
+                  in >> n_pressure;
+                  std::getline(in, temp); // get next line, either T(K), P(bar) or number of columns
+                }
+              else
+                {
+                  AssertThrow (false, ExcMessage("The start of the PerpleX file " + filename + " does not have the expected format."));
+                }
+            }
+
+          in >> n_columns;
+          std::getline(in, temp); // get next line, column labels
+
+          // here we string match to assign properties to columns
+          // column i in text file -> column j in properties
+          // Properties are stored in the order rho, alpha, cp, vp, vs, h
+          std::vector<int> prp_indices(6, -1);
+          std::vector<int> phase_column_indices;
+
+          // First two columns should be P(bar) and T(K).
+          // Here we find the order.
+          std::string column_name;
+          in >> column_name;
+
+          std::string first_natural_variable;
+          if (column_name == "P(bar)")
+            {
+              first_natural_variable = column_name;
+              in >> column_name;
+              AssertThrow(column_name == "T(K)", ExcMessage("The second column name in PerpleX lookup file " + filename + " should be T(K)."))
+            }
+          else if (column_name == "T(K)")
+            {
+              first_natural_variable = column_name;
+              in >> column_name;
+              AssertThrow(column_name == "P(bar)", ExcMessage("The second column name in PerpleX lookup file " + filename + " should be T(K)."))
+            }
+          else
+            {
+              AssertThrow(false, ExcMessage("The first column name in PerpleX lookup file " + filename + " should be P(bar) or T(K)."))
+            }
+
+          for (unsigned int n=2; n<n_columns; n++)
+            {
+              in >> column_name;
+              if (column_name == "rho,kg/m3")
+                prp_indices[0] = n;
+              else if (column_name == "alpha,1/K")
+                prp_indices[1] = n;
+              else if (column_name == "cp,J/K/kg")
+                prp_indices[2] = n;
+              else if (column_name == "vp,km/s")
+                prp_indices[3] = n;
+              else if (column_name == "vs,km/s")
+                prp_indices[4] = n;
+              else if (column_name == "h,J/kg")
+                prp_indices[5] = n;
+              else if (column_name.length() > 3)
+                {
+                  if (column_name.substr(0,13).compare("vol_fraction_") == 0)
+                    {
+                      if (std::find(phase_column_names.begin(),
+                                    phase_column_names.end(),
+                                    column_name) != phase_column_names.end())
+                        {
+                          AssertThrow(false,
+                                      ExcMessage("The PerpleX lookup file " + filename + " must have unique column names. "
+                                                 "Sometimes, the same phase is stable with >1 composition at the same "
+                                                 "pressure and temperature, so you may see several columns with the same name. "
+                                                 "Either combine columns with the same name, or change the names."));
+                        }
+                      // Populate phase_column_names with the column name
+                      // and phase_column_indices with the column index in the current lookup file.
+                      phase_column_indices.push_back(n);
+                      phase_column_names.push_back(column_name);
+                    }
+                }
+            }
+          AssertThrow(std::all_of(prp_indices.begin(), prp_indices.end(), [](int i)
+          {
+            return i>=0;
+          }),
+          ExcMessage("The PerpleX lookup file " + filename + " must contain columns with names "
+                     "rho,kg/m3, alpha,1/K, cp,J/K/kg, vp,km/s, vs,km/s and h,J/kg."));
+
+          std::getline(in, temp); // first data line
 
           AssertThrow(min_temp >= 0.0, ExcMessage("Read in of Material header failed (mintemp)."));
           AssertThrow(delta_temp > 0, ExcMessage("Read in of Material header failed (delta_temp)."));
@@ -513,60 +640,78 @@ namespace aspect
           vs_values.reinit(n_temperature,n_pressure);
           enthalpy_values.reinit(n_temperature,n_pressure);
 
+          phase_volume_fractions.resize(phase_column_names.size());
+          for (auto &phase_volume_fraction : phase_volume_fractions)
+            phase_volume_fraction.reinit(n_temperature,n_pressure);
+
           unsigned int i = 0;
+          std::vector<double> previous_row_values(n_columns, 0.);
+
           while (!in.eof())
             {
-              double temp1,temp2;
-              double rho,alpha,cp,vp,vs,h;
-              in >> temp1 >> temp2;
-              in >> rho;
-              if (in.fail())
-                {
-                  in.clear();
-                  rho = density_values[(i-1)%n_temperature][(i-1)/n_temperature];
-                }
-              in >> alpha;
-              if (in.fail())
-                {
-                  in.clear();
-                  alpha = thermal_expansivity_values[(i-1)%n_temperature][(i-1)/n_temperature];
-                }
-              in >> cp;
-              if (in.fail())
-                {
-                  in.clear();
-                  cp = specific_heat_values[(i-1)%n_temperature][(i-1)/n_temperature];
-                }
-              in >> vp;
-              if (in.fail())
-                {
-                  in.clear();
-                  vp = vp_values[(i-1)%n_temperature][(i-1)/n_temperature];
-                }
-              in >> vs;
-              if (in.fail())
-                {
-                  in.clear();
-                  vs = vs_values[(i-1)%n_temperature][(i-1)/n_temperature];
-                }
-              in >> h;
-              if (in.fail())
-                {
-                  in.clear();
-                  h = enthalpy_values[(i-1)%n_temperature][(i-1)/n_temperature];
-                }
+              std::vector<double> row_values(n_columns);
 
-              std::getline(in, temp);
+              for (unsigned int n=0; n<n_columns; n++)
+                {
+                  in >> row_values[n]; // assigned as 0 if in.fail() == True
+
+                  // P-T grids created with PerpleX-werami sometimes contain rows
+                  // filled with NaNs at extreme P-T conditions where the thermodynamic
+                  // models break down. These P-T regions are typically not relevant to
+                  // geodynamic modelling (they most commonly appear above
+                  // mantle liquidus temperatures at low pressures).
+                  // More frustratingly, PerpleX-vertex occasionally fails to find a
+                  // valid mineral assemblage in small, isolated regions within the domain,
+                  // and so PerpleX-werami also returns NaNs for pixels within these regions.
+                  // It is recommended that the user preprocesses their input
+                  // files to replace these NaNs before plugging them into ASPECT.
+                  // If this lookup encounters invalid doubles it replaces them
+                  // with the most recent valid double.
+                  if (in.fail())
+                    {
+                      in.clear();
+                      row_values[n] = previous_row_values[n];
+                    }
+                }
+              previous_row_values = row_values;
+
+              std::getline(in, temp); // read next line
               if (in.eof())
                 break;
 
-              density_values[i%n_temperature][i/n_temperature]=rho;
-              thermal_expansivity_values[i%n_temperature][i/n_temperature]=alpha;
-              specific_heat_values[i%n_temperature][i/n_temperature]=cp;
-              vp_values[i%n_temperature][i/n_temperature]=vp;
-              vs_values[i%n_temperature][i/n_temperature]=vs;
-              enthalpy_values[i%n_temperature][i/n_temperature]=h;
+              // The ordering of the first two columns in the PerpleX table files
+              // dictates whether the inner loop is over temperature or pressure.
+              // The first column is always the inner loop.
+              // The following lines populate the material property tables
+              // according to that implicit loop structure.
+              if (first_natural_variable == "T(K)")
+                {
+                  density_values[i%n_temperature][i/n_temperature]=row_values[prp_indices[0]];
+                  thermal_expansivity_values[i%n_temperature][i/n_temperature]=row_values[prp_indices[1]];
+                  specific_heat_values[i%n_temperature][i/n_temperature]=row_values[prp_indices[2]];
+                  vp_values[i%n_temperature][i/n_temperature]=row_values[prp_indices[3]];
+                  vs_values[i%n_temperature][i/n_temperature]=row_values[prp_indices[4]];
+                  enthalpy_values[i%n_temperature][i/n_temperature]=row_values[prp_indices[5]];
 
+                  for (unsigned int n=0; n<phase_volume_fractions.size(); n++)
+                    {
+                      phase_volume_fractions[n][i%n_temperature][i/n_temperature]=row_values[phase_column_indices[n]];
+                    }
+                }
+              else // first_natural_variable == "P(bar)"
+                {
+                  density_values[i/n_pressure][i%n_pressure]=row_values[prp_indices[0]];
+                  thermal_expansivity_values[i/n_pressure][i%n_pressure]=row_values[prp_indices[1]];
+                  specific_heat_values[i/n_pressure][i%n_pressure]=row_values[prp_indices[2]];
+                  vp_values[i/n_pressure][i%n_pressure]=row_values[prp_indices[3]];
+                  vs_values[i/n_pressure][i%n_pressure]=row_values[prp_indices[4]];
+                  enthalpy_values[i/n_pressure][i%n_pressure]=row_values[prp_indices[5]];
+
+                  for (unsigned int n=0; n<phase_volume_fractions.size(); n++)
+                    {
+                      phase_volume_fractions[n][i/n_pressure][i%n_pressure]=row_values[phase_column_indices[n]];
+                    }
+                }
               i++;
             }
           AssertThrow(i == n_temperature*n_pressure, ExcMessage("Material table size not consistent with header."));
@@ -577,10 +722,10 @@ namespace aspect
 
 
       std::vector<double>
-      compute_volume_fractions(const std::vector<double> &compositional_fields,
-                               const ComponentMask &field_mask)
+      compute_composition_fractions(const std::vector<double> &compositional_fields,
+                                    const ComponentMask &field_mask)
       {
-        std::vector<double> volume_fractions(compositional_fields.size()+1);
+        std::vector<double> composition_fractions(compositional_fields.size()+1);
 
         // Clip the compositional fields so they are between zero and one,
         // and sum the compositional fields for normalization purposes.
@@ -593,23 +738,56 @@ namespace aspect
               sum_composition += x_comp[i];
             }
 
-        // Compute background material fraction
+        // Compute background field fraction
         if (sum_composition >= 1.0)
-          volume_fractions[0] = 0.0;
+          composition_fractions[0] = 0.0;
         else
-          volume_fractions[0] = 1.0 - sum_composition;
+          composition_fractions[0] = 1.0 - sum_composition;
 
-        // Compute and possibly normalize volume fractions
+        // Compute and possibly normalize field fractions
         for (unsigned int i=0; i < x_comp.size(); ++i)
           if (field_mask[i] == true)
             {
               if (sum_composition >= 1.0)
-                volume_fractions[i+1] = x_comp[i]/sum_composition;
+                composition_fractions[i+1] = x_comp[i]/sum_composition;
               else
-                volume_fractions[i+1] = x_comp[i];
+                composition_fractions[i+1] = x_comp[i];
             }
 
-        return volume_fractions;
+        return composition_fractions;
+      }
+
+
+
+      std::vector<double>
+      compute_volume_fractions(const std::vector<double> &compositional_fields,
+                               const ComponentMask &field_mask)
+      {
+        return compute_composition_fractions(compositional_fields, field_mask);
+      }
+
+
+
+      std::vector<double>
+      compute_volumes_from_masses(const std::vector<double> &masses,
+                                  const std::vector<double> &densities,
+                                  const bool return_as_fraction)
+      {
+        const unsigned int n_fields = masses.size();
+        std::vector<double> volumes(n_fields);
+        double sum_volumes = 0.0;
+        for (unsigned int j=0; j < n_fields; ++j)
+          {
+            volumes[j] = masses[j] / densities[j];
+            sum_volumes += volumes[j];
+          }
+
+        if (return_as_fraction)
+          {
+            for (unsigned int j=0; j < n_fields; ++j)
+              volumes[j] /= sum_volumes;
+          }
+        return volumes;
       }
 
 
@@ -699,63 +877,44 @@ namespace aspect
       }
 
 
-
-      DruckerPragerInputs::DruckerPragerInputs(const double cohesion_,
-                                               const double friction_angle_,
-                                               const double pressure_,
-                                               const double effective_strain_rate_,
-                                               const double max_yield_strength_)
-        :
-        cohesion(cohesion_),
-        friction_angle(friction_angle_),
-        pressure(pressure_),
-        effective_strain_rate(effective_strain_rate_),
-        max_yield_strength(max_yield_strength_)
-      {}
-
-
-      DruckerPragerOutputs::DruckerPragerOutputs ()
-        :
-        yield_strength(numbers::signaling_nan<double>()),
-        plastic_viscosity(numbers::signaling_nan<double>()),
-        viscosity_pressure_derivative(numbers::signaling_nan<double>())
-      {}
-
-
-
-      template <int dim>
-      void
-      compute_drucker_prager_yielding (const DruckerPragerInputs &in,
-                                       DruckerPragerOutputs &out)
+      double phase_average_value (const std::vector<double> &phase_function_values,
+                                  const std::vector<unsigned int> &n_phases_per_composition,
+                                  const std::vector<double> &parameter_values,
+                                  const unsigned int composition,
+                                  const PhaseUtilities::PhaseAveragingOperation operation)
       {
-        // plasticity
-        const double sin_phi = std::sin(in.friction_angle);
-        const double cos_phi = std::cos(in.friction_angle);
-        const double strength_inv_part = 1. / (std::sqrt(3.0) * (3.0 + sin_phi));
+        // Calculate base index and assign base value
+        unsigned int base = 0;
+        for (unsigned int i=0; i<composition; ++i)
+          base += n_phases_per_composition[i] + 1;
 
-        out.yield_strength = ( (dim==3)
-                               ?
-                               ( 6.0 * in.cohesion * cos_phi + 6.0 * in.pressure * sin_phi) * strength_inv_part
-                               :
-                               in.cohesion * cos_phi + in.pressure * sin_phi);
+        double averaged_parameter = parameter_values[base];
+        if (n_phases_per_composition[composition] > 0)
+          {
+            // Do averaging when there are multiple phases
+            if (operation == PhaseUtilities::logarithmic)
+              averaged_parameter = log(averaged_parameter);
 
-        out.yield_strength = std::min(out.yield_strength, in.max_yield_strength);
+            for (unsigned int i=0; i<n_phases_per_composition[composition]; ++i)
+              {
+                Assert(base+i+1<parameter_values.size(), ExcInternalError());
+                if (operation == PhaseUtilities::logarithmic)
+                  {
+                    // First average by log values and then take the exponential.
+                    // This is used for averaging prefactors in flow laws.
+                    averaged_parameter += phase_function_values[base-composition+i] * log(parameter_values[base+i+1] / parameter_values[base+i]);
+                  }
+                else if (operation == PhaseUtilities::arithmetic)
+                  averaged_parameter += phase_function_values[base-composition+i] * (parameter_values[base+i+1] - parameter_values[base+i]);
 
-        // Rescale the viscosity back onto the yield surface
-        const double strain_rate_effective_inv = 1./(2.*in.effective_strain_rate);
-        out.plastic_viscosity = out.yield_strength * strain_rate_effective_inv;
-
-        out.viscosity_pressure_derivative = sin_phi * strain_rate_effective_inv *
-                                            (dim == 3
-                                             ?
-                                             (6.0 * strength_inv_part)
-                                             :
-                                             1);
-
-        return;
+                else
+                  AssertThrow(false, ExcInternalError());
+              }
+            if (operation == PhaseUtilities::logarithmic)
+              averaged_parameter = exp(averaged_parameter);
+          }
+        return averaged_parameter;
       }
-
-
 
       template <int dim>
       PhaseFunctionInputs<dim>::PhaseFunctionInputs(const double temperature_,
@@ -773,6 +932,7 @@ namespace aspect
       {}
 
 
+
       template <int dim>
       double
       PhaseFunction<dim>::compute_value (const PhaseFunctionInputs<dim> &in) const
@@ -783,9 +943,11 @@ namespace aspect
         if (use_depth_instead_of_pressure)
           {
             // calculate the deviation from the transition point (convert temperature to depth)
-            const double depth_deviation = in.depth - transition_depths[in.phase_index]
-                                           - transition_slopes[in.phase_index] / in.pressure_depth_derivative
-                                           * (in.temperature - transition_temperatures[in.phase_index]);
+            double depth_deviation = in.depth - transition_depths[in.phase_index];
+
+            if (in.pressure_depth_derivative != 0.0)
+              depth_deviation -= transition_slopes[in.phase_index] / in.pressure_depth_derivative
+                                 * (in.temperature - transition_temperatures[in.phase_index]);
 
             // use delta function for width = 0
             if (transition_widths[in.phase_index] == 0)
@@ -871,6 +1033,14 @@ namespace aspect
       }
 
 
+      template <int dim>
+      const std::vector<unsigned int> &
+      PhaseFunction<dim>::n_phase_transitions_for_each_composition () const
+      {
+        return *n_phase_transitions_per_composition;
+      }
+
+
 
       template <int dim>
       double
@@ -887,32 +1057,32 @@ namespace aspect
       PhaseFunction<dim>::declare_parameters (ParameterHandler &prm)
       {
         prm.declare_entry ("Phase transition depths", "",
-                           Patterns::List (Patterns::Double(0)),
+                           Patterns::Anything(),
                            "A list of depths where phase transitions occur. Values must "
                            "monotonically increase. "
-                           "Units: $m$.");
+                           "Units: \\si{\\meter}.");
         prm.declare_entry ("Phase transition widths", "",
-                           Patterns::List (Patterns::Double(0)),
+                           Patterns::Anything(),
                            "A list of widths for each phase transition, in terms of depth. The phase functions "
                            "are scaled with these values, leading to a jump between phases "
                            "for a value of zero and a gradual transition for larger values. "
                            "List must have the same number of entries as Phase transition depths. "
-                           "Units: $m$.");
+                           "Units: \\si{\\meter}.");
         prm.declare_entry ("Phase transition pressures", "",
-                           Patterns::List (Patterns::Double(0)),
+                           Patterns::Anything(),
                            "A list of pressures where phase transitions occur. Values must "
                            "monotonically increase. Define transition by depth instead of "
                            "pressure must be set to false to use this parameter. "
-                           "Units: $Pa$.");
+                           "Units: \\si{\\pascal}.");
         prm.declare_entry ("Phase transition pressure widths", "",
-                           Patterns::List (Patterns::Double(0)),
+                           Patterns::Anything(),
                            "A list of widths for each phase transition, in terms of pressure. The phase functions "
                            "are scaled with these values, leading to a jump between phases "
                            "for a value of zero and a gradual transition for larger values. "
                            "List must have the same number of entries as Phase transition pressures. "
                            "Define transition by depth instead of pressure must be set to false "
                            "to use this parameter. "
-                           "Units: $Pa$.");
+                           "Units: \\si{\\pascal}.");
         prm.declare_entry ("Define transition by depth instead of pressure", "true",
                            Patterns::Bool (),
                            "Whether to list phase transitions by depth or pressure. If this parameter is true, "
@@ -921,15 +1091,15 @@ namespace aspect
                            "phase transition data from Phase transition pressures and "
                            "Phase transition pressure widths.");
         prm.declare_entry ("Phase transition temperatures", "",
-                           Patterns::List (Patterns::Double(0)),
+                           Patterns::Anything(),
                            "A list of temperatures where phase transitions occur. Higher or lower "
                            "temperatures lead to phase transition occurring in smaller or greater "
                            "depths than given in Phase transition depths, depending on the "
                            "Clapeyron slope given in Phase transition Clapeyron slopes. "
                            "List must have the same number of entries as Phase transition depths. "
-                           "Units: $\\si{K}$.");
+                           "Units: \\si{\\kelvin}.");
         prm.declare_entry ("Phase transition Clapeyron slopes", "",
-                           Patterns::List (Patterns::Double()),
+                           Patterns::Anything(),
                            "A list of Clapeyron slopes for each phase transition. A positive "
                            "Clapeyron slope indicates that the phase transition will occur in "
                            "a greater depth, if the temperature is higher than the one given in "
@@ -937,7 +1107,7 @@ namespace aspect
                            "temperature is smaller than the one given in Phase transition temperatures. "
                            "For negative slopes the other way round. "
                            "List must have the same number of entries as Phase transition depths. "
-                           "Units: $Pa/K$.");
+                           "Units: \\si{\\pascal\\per\\kelvin}.");
       }
 
 
@@ -946,43 +1116,68 @@ namespace aspect
       void
       PhaseFunction<dim>::parse_parameters (ParameterHandler &prm)
       {
-        transition_depths = Utilities::string_to_double
-                            (Utilities::split_string_list(prm.get ("Phase transition depths")));
-        transition_widths= Utilities::string_to_double
-                           (Utilities::split_string_list(prm.get ("Phase transition widths")));
-        transition_pressures = Utilities::string_to_double
-                               (Utilities::split_string_list(prm.get ("Phase transition pressures")));
-        transition_pressure_widths= Utilities::string_to_double
-                                    (Utilities::split_string_list(prm.get ("Phase transition pressure widths")));
-        use_depth_instead_of_pressure = prm.get_bool ("Define transition by depth instead of pressure");
-        transition_temperatures = Utilities::string_to_double
-                                  (Utilities::split_string_list(prm.get ("Phase transition temperatures")));
-        transition_slopes = Utilities::string_to_double
-                            (Utilities::split_string_list(prm.get ("Phase transition Clapeyron slopes")));
+        // Establish that a background field is required here
+        const bool has_background_field = true;
 
-        // make sure to check against the depth lists for size errors, since using depth
+        // Retrieve the list of composition names
+        const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
+
+        n_phase_transitions_per_composition.reset(new std::vector<unsigned int>());
+
+        use_depth_instead_of_pressure = prm.get_bool ("Define transition by depth instead of pressure");
+
         if (use_depth_instead_of_pressure)
           {
-            if (transition_widths.size() != transition_depths.size() ||
-                transition_temperatures.size() != transition_depths.size() ||
-                transition_slopes.size() != transition_depths.size())
-              AssertThrow(false, ExcMessage("Error: At least one list that gives input parameters for the phase "
-                                            "transitions has the wrong size. Currently checking against transition depths. "
-                                            "If phase transitions in terms of pressure inputs are desired, check to make sure "
-                                            "'Define transition by depth instead of pressure = false'."));
+            transition_depths          = Utilities::parse_map_to_double_array (prm.get("Phase transition depths"),
+                                                                               list_of_composition_names,
+                                                                               has_background_field,
+                                                                               "Phase transition depths",
+                                                                               true,
+                                                                               n_phase_transitions_per_composition,
+                                                                               true);
+
+            transition_widths          = Utilities::parse_map_to_double_array (prm.get("Phase transition widths"),
+                                                                               list_of_composition_names,
+                                                                               has_background_field,
+                                                                               "Phase transition widths",
+                                                                               true,
+                                                                               n_phase_transitions_per_composition,
+                                                                               true);
           }
-        // make sure to check against the pressure lists for size errors,
-        // since pressure is being used instead of depth.
         else
           {
-            if (transition_pressure_widths.size() != transition_pressures.size() ||
-                transition_temperatures.size() != transition_pressures.size() ||
-                transition_slopes.size() != transition_pressures.size())
-              AssertThrow(false, ExcMessage("Error: At least one list that gives input parameters for the phase "
-                                            "transitions has the wrong size. Currently checking against transition pressures. "
-                                            "If phase transitions in terms of depth inputs are desired, check to make sure "
-                                            "'Define transition by depth instead of pressure = true'."));
+            transition_pressures = Utilities::parse_map_to_double_array (prm.get("Phase transition pressures"),
+                                                                         list_of_composition_names,
+                                                                         has_background_field,
+                                                                         "Phase transition pressures",
+                                                                         true,
+                                                                         n_phase_transitions_per_composition,
+                                                                         true);
+
+            transition_pressure_widths = Utilities::parse_map_to_double_array (prm.get("Phase transition pressure widths"),
+                                                                               list_of_composition_names,
+                                                                               has_background_field,
+                                                                               "Phase transition pressure widths",
+                                                                               true,
+                                                                               n_phase_transitions_per_composition,
+                                                                               true);
           }
+
+        transition_temperatures = Utilities::parse_map_to_double_array (prm.get("Phase transition temperatures"),
+                                                                        list_of_composition_names,
+                                                                        has_background_field,
+                                                                        "Phase transition temperatures",
+                                                                        true,
+                                                                        n_phase_transitions_per_composition,
+                                                                        true);
+
+        transition_slopes = Utilities::parse_map_to_double_array (prm.get("Phase transition Clapeyron slopes"),
+                                                                  list_of_composition_names,
+                                                                  has_background_field,
+                                                                  "Phase transition Clapeyron slopes",
+                                                                  true,
+                                                                  n_phase_transitions_per_composition,
+                                                                  true);
       }
     }
   }
@@ -997,14 +1192,12 @@ namespace aspect
     namespace MaterialUtilities
     {
 #define INSTANTIATE(dim) \
-  template \
-  void \
-  compute_drucker_prager_yielding<dim> (const DruckerPragerInputs &, \
-                                        DruckerPragerOutputs &); \
   template struct PhaseFunctionInputs<dim>; \
   template class PhaseFunction<dim>;
 
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
   }
 }

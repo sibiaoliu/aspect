@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -112,7 +112,7 @@ namespace aspect
       for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
         {
           // Obtain the normal direction for the face in question
-          // Deall.II orders faces as dim*2+(face_direction_is_positive?1:0)
+          // Deal.II orders faces as dim*2+(face_direction_is_positive?1:0)
           const unsigned int face_normal_direction = face_no/2;
 
           if (face_normal_direction != calc_dir)
@@ -369,11 +369,10 @@ namespace aspect
       const bool n_face_normal_is_positive = (neighbor_face_no%2==1);
 
       if ((!face->at_boundary() && !face->has_children())
-          ||
-          (face->at_boundary() && neighbor->active()))
+          || (face->at_boundary() && neighbor->is_active()))
         {
           if (neighbor->level () == cell->level () &&
-              neighbor->active() &&
+              neighbor->is_active() &&
               (((neighbor->is_locally_owned()) && (cell->index() < neighbor->index()))
                ||
                ((!neighbor->is_locally_owned()) && (cell->subdomain_id() < neighbor->subdomain_id()))))
@@ -523,7 +522,7 @@ namespace aspect
         }
       else // face->has_children() so always assemble from here
         {
-          for (unsigned int subface_no=0; subface_no< face->number_of_children(); ++subface_no)
+          for (unsigned int subface_no=0; subface_no< face->n_children(); ++subface_no)
             {
               const typename DoFHandler<dim>::active_cell_iterator neighbor_child
                 = ( cell_has_periodic_neighbor
@@ -640,6 +639,8 @@ namespace aspect
   template class VolumeOfFluidAssembler<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 
   }
 }

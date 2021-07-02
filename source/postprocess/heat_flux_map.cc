@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -93,12 +93,18 @@ namespace aspect
         distributed_heat_flux_vector = 0.;
         heat_flux_vector = 0.;
 
-        typename MaterialModel::Interface<dim>::MaterialModelInputs in(fe_volume_values.n_quadrature_points, simulator_access.n_compositional_fields());
-        typename MaterialModel::Interface<dim>::MaterialModelOutputs out(fe_volume_values.n_quadrature_points, simulator_access.n_compositional_fields());
-        typename HeatingModel::HeatingModelOutputs heating_out(fe_volume_values.n_quadrature_points, simulator_access.n_compositional_fields());
+        typename MaterialModel::Interface<dim>::MaterialModelInputs
+        in(fe_volume_values.n_quadrature_points, simulator_access.n_compositional_fields());
+        typename MaterialModel::Interface<dim>::MaterialModelOutputs
+        out(fe_volume_values.n_quadrature_points, simulator_access.n_compositional_fields());
 
-        typename MaterialModel::Interface<dim>::MaterialModelInputs face_in(fe_face_values.n_quadrature_points, simulator_access.n_compositional_fields());
-        typename MaterialModel::Interface<dim>::MaterialModelOutputs face_out(fe_face_values.n_quadrature_points, simulator_access.n_compositional_fields());
+        HeatingModel::HeatingModelOutputs
+        heating_out(fe_volume_values.n_quadrature_points, simulator_access.n_compositional_fields());
+
+        typename MaterialModel::Interface<dim>::MaterialModelInputs
+        face_in(fe_face_values.n_quadrature_points, simulator_access.n_compositional_fields());
+        typename MaterialModel::Interface<dim>::MaterialModelOutputs
+        face_out(fe_face_values.n_quadrature_points, simulator_access.n_compositional_fields());
 
         std::vector<double> old_temperatures (n_q_points);
         std::vector<double> old_old_temperatures (n_q_points);
@@ -192,7 +198,14 @@ namespace aspect
                   const double material_prefactor = density_c_P + latent_heat_LHS;
 
                   const double artificial_viscosity_cell = static_cast<double>(artificial_viscosity(cell->active_cell_index()));
-                  const double diffusion_constant = std::max(out.thermal_conductivities[q],
+
+                  // The SUPG parameter tau does not have the physical dimensions of a thermal conductivity and as such should not be included in heat flux calculations
+                  // By default, ASPECT includes the artificial viscosity in the thermal conductivity when calculating boundary heat flux.
+                  const double diffusion_constant = (simulator_access.get_parameters().advection_stabilization_method ==
+                                                     Parameters<dim>::AdvectionStabilizationMethod::supg) ?
+                                                    out.thermal_conductivities[q]
+                                                    :
+                                                    std::max(out.thermal_conductivities[q],
                                                              artificial_viscosity_cell);
 
                   for (unsigned int i = 0; i<dofs_per_cell; ++i)
@@ -450,7 +463,7 @@ namespace aspect
                                             heat_flux_and_area[cell->active_cell_index()][f].second;
 
                 // store final position and heat flow
-                stored_values.push_back (std::make_pair(midpoint_at_surface, flux_density));
+                stored_values.emplace_back (midpoint_at_surface, flux_density);
               }
 
 
@@ -501,8 +514,9 @@ namespace aspect
               // determined the maximal message length, we use this feature here
               // rather than trying to find out the exact message length with
               // a call to MPI_Probe.
-              MPI_Recv (&tmp[0], max_data_length, MPI_CHAR, p, mpi_tag,
-                        this->get_mpi_communicator(), &status);
+              const int ierr = MPI_Recv (&tmp[0], max_data_length, MPI_CHAR, p, mpi_tag,
+                                         this->get_mpi_communicator(), &status);
+              AssertThrowMPI(ierr);
 
               // output the string. note that 'tmp' has length max_data_length,
               // but we only wrote a certain piece of it in the MPI_Recv, ended
@@ -515,8 +529,9 @@ namespace aspect
         // on other processors, send the data to processor zero. include the \0
         // character at the end of the string
         {
-          MPI_Send (&output.str()[0], output.str().size()+1, MPI_CHAR, 0, mpi_tag,
-                    this->get_mpi_communicator());
+          const int ierr = MPI_Send (&output.str()[0], output.str().size()+1, MPI_CHAR, 0, mpi_tag,
+                                     this->get_mpi_communicator());
+          AssertThrowMPI(ierr);
         }
 
       return std::pair<std::string,std::string>("Writing heat flux map:",
@@ -537,6 +552,8 @@ namespace aspect
   template LinearAlgebra::BlockVector compute_dirichlet_boundary_heat_flux_solution_vector (const SimulatorAccess<dim> &simulator_access);
 
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
 
     ASPECT_REGISTER_POSTPROCESSOR(HeatFluxMap,

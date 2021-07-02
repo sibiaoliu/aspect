@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,6 +22,7 @@
 #include <aspect/simulator.h>
 #include <aspect/mesh_deformation/free_surface.h>
 #include <aspect/mesh_deformation/interface.h>
+#include <aspect/particle/world.h>
 
 namespace aspect
 {
@@ -619,24 +620,17 @@ namespace aspect
   }
 
 
-
+#ifdef ASPECT_WITH_WORLD_BUILDER
   template <int dim>
   const WorldBuilder::World &
   SimulatorAccess<dim>::get_world_builder () const
   {
-#ifdef ASPECT_USE_WORLD_BUILDER
     Assert (simulator->world_builder.get() != nullptr,
             ExcMessage("You can not call this function if the World Builder is not enabled. "
                        "Enable it by providing a path to a world builder file."));
-#else
-    AssertThrow (false,
-                 ExcMessage ("Configuration of ASPECT did not find a copy of the "
-                             "WorldBuilder library. Consequently, accessing it "
-                             "can not work at runtime."));
-#endif
     return *(simulator->world_builder);
   }
-
+#endif
 
 
   template <int dim>
@@ -675,7 +669,7 @@ namespace aspect
   }
 
   template <int dim>
-  const ConstraintMatrix &
+  const AffineConstraints<double> &
   SimulatorAccess<dim>::get_current_constraints() const
   {
     return simulator->current_constraints;
@@ -720,6 +714,55 @@ namespace aspect
   {
     return simulator->postprocess_manager;
   }
+
+
+  template <int dim>
+  const Particle::World<dim> &
+  SimulatorAccess<dim>::get_particle_world() const
+  {
+    Assert (simulator->particle_world.get() != nullptr,
+            ExcMessage("You can not call this function if there is no particle world."));
+    return *simulator->particle_world.get();
+  }
+
+  template <int dim>
+  Particle::World<dim> &
+  SimulatorAccess<dim>::get_particle_world()
+  {
+    Assert (simulator->particle_world.get() != nullptr,
+            ExcMessage("You can not call this function if there is no particle world."));
+    return *simulator->particle_world.get();
+  }
+
+
+
+  template <int dim>
+  bool SimulatorAccess<dim>::is_stokes_matrix_free()
+  {
+    return (simulator->stokes_matrix_free ? true : false);
+  }
+
+
+
+  template <int dim>
+  const StokesMatrixFreeHandler<dim> &
+  SimulatorAccess<dim>::get_stokes_matrix_free () const
+  {
+    Assert (simulator->stokes_matrix_free.get() != nullptr,
+            ExcMessage("You can not call this function if the matrix-free Stokes solver is not used."));
+    return *(simulator->stokes_matrix_free);
+  }
+
+
+
+  template <int dim>
+  RotationProperties<dim>
+  SimulatorAccess<dim>::compute_net_angular_momentum(const bool use_constant_density,
+                                                     const LinearAlgebra::BlockVector &solution,
+                                                     const bool limit_to_top_faces) const
+  {
+    return simulator->compute_net_angular_momentum(use_constant_density, solution, limit_to_top_faces);
+  }
 }
 
 
@@ -730,4 +773,6 @@ namespace aspect
   template class SimulatorAccess<dim>;
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

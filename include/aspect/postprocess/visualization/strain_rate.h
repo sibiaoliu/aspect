@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -51,6 +51,9 @@ namespace aspect
           public Interface<dim>
       {
         public:
+          /**
+           * Constructor.
+           */
           StrainRate ();
 
           void

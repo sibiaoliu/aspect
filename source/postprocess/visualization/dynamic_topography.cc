@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,19 +35,27 @@ namespace aspect
                                       update_quadrature_points)
       {}
 
+
+
       template <int dim>
       void
       DynamicTopography<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
                             std::vector<Vector<double> > &computed_quantities) const
       {
+        // Initialize everything to zero, so that we can ignore faces we are
+        // not interested in (namely, those not labeled as 'top' or 'bottom'
         for (unsigned int q=0; q<computed_quantities.size(); ++q)
           computed_quantities[q](0) = 0;
 
         const Postprocess::DynamicTopography<dim> &dynamic_topography =
           this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::DynamicTopography<dim> >();
 
+#if DEAL_II_VERSION_GTE(9,3,0)
+        auto cell = input_data.template get_cell<dim>();
+#else
         auto cell = input_data.template get_cell<DoFHandler<dim> >();
+#endif
 
         // We only want to output dynamic topography at the top and bottom
         // boundary, so only compute it if the current cell has
@@ -139,7 +147,12 @@ namespace aspect
                                                   "within which we produce data for visualization. You probably "
                                                   "only want to visualize whatever data this postprocessor generates "
                                                   "at the surface of your domain and simply ignore the rest of the "
-                                                  "data generated.")
+                                                  "data generated."
+                                                  "\n\n"
+                                                  "Alternatively, consider using the "
+                                                  "\"surface dynamic topography\" visualization postprocessor "
+                                                  "to only output the dynamic topography at the boundary of "
+                                                  "the domain.")
     }
   }
 }

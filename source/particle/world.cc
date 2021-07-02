@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,6 +23,8 @@
 #include <aspect/utilities.h>
 #include <aspect/compat.h>
 #include <aspect/geometry_model/box.h>
+#include <aspect/geometry_model/two_merged_boxes.h>
+#include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/citation_info.h>
 
 #include <deal.II/base/quadrature_lib.h>
@@ -65,6 +67,10 @@ namespace aspect
                                                                       this->get_mapping(),
                                                                       property_manager->get_n_property_components());
 
+      particle_handler_backup.initialize(this->get_triangulation(),
+                                         this->get_mapping(),
+                                         property_manager->get_n_property_components());
+
       auto size_callback_function
       = [&] () -> std::size_t
       {
@@ -90,6 +96,10 @@ namespace aspect
                                                                  store_callback_function,
                                                                  load_callback_function);
 
+      particle_handler_backup.register_additional_store_load_functions(size_callback_function,
+                                                                       store_callback_function,
+                                                                       load_callback_function);
+
       connect_to_signals(this->get_signals());
     }
 
@@ -100,12 +110,98 @@ namespace aspect
       return *property_manager;
     }
 
+
+
     template <int dim>
     const Particles::ParticleHandler<dim> &
     World<dim>::get_particle_handler() const
     {
       return *particle_handler.get();
     }
+
+
+
+    template <int dim>
+    Particles::ParticleHandler<dim> &
+    World<dim>::get_particle_handler()
+    {
+      return *particle_handler.get();
+    }
+
+
+
+    template <int dim>
+    void
+    World<dim>::copy_particle_handler (const Particles::ParticleHandler<dim> &from_particle_handler,
+                                       Particles::ParticleHandler<dim> &to_particle_handler) const
+    {
+      {
+        TimerOutput::Scope timer_section(this->get_computing_timer(), "Particles: Copy");
+
+#if DEAL_II_VERSION_GTE(9,3,0)
+        to_particle_handler.copy_from(from_particle_handler);
+#else
+        // initialize to_particle_handler
+        const unsigned int n_properties = property_manager->get_n_property_components();
+        to_particle_handler.clear();
+        to_particle_handler.initialize(this->get_triangulation(),
+                                       this->get_mapping(),
+                                       n_properties);
+
+        std::multimap<typename Triangulation<dim>::active_cell_iterator, Particles::Particle<dim> > new_particles;
+
+        for (const auto &particle : from_particle_handler)
+          {
+            Particles::Particle<dim> new_particle (particle.get_location(),
+                                                   particle.get_reference_location(),
+                                                   particle.get_id());
+
+            new_particle.set_property_pool(to_particle_handler.get_property_pool());
+            new_particle.set_properties(particle.get_properties());
+
+#ifdef DEAL_II_WITH_CXX14
+            new_particles.emplace_hint(new_particles.end(),
+                                       particle.get_surrounding_cell(this->get_triangulation()),
+                                       std::move(new_particle));
+#else
+            new_particles.insert(new_particles.end(),
+                                 std::make_pair(particle.get_surrounding_cell(this->get_triangulation()),
+                                                std::move(new_particle)));
+#endif
+          }
+        to_particle_handler.insert_particles(new_particles);
+#endif
+      }
+
+#if !DEAL_II_VERSION_GTE(9,3,0)
+      if (update_ghost_particles &&
+          dealii::Utilities::MPI::n_mpi_processes(this->get_mpi_communicator()) > 1)
+        {
+          TimerOutput::Scope timer_section(this->get_computing_timer(), "Particles: Exchange ghosts");
+          to_particle_handler.exchange_ghost_particles();
+        }
+#endif
+    }
+
+
+
+    template <int dim>
+    void
+    World<dim>::backup_particles ()
+    {
+      copy_particle_handler (*particle_handler.get(), particle_handler_backup);
+    }
+
+
+
+    template <int dim>
+    void
+    World<dim>::restore_particles ()
+    {
+      copy_particle_handler (particle_handler_backup, *particle_handler.get());
+    }
+
+
 
     template <int dim>
     const Interpolator::Interface<dim> &
@@ -124,6 +220,7 @@ namespace aspect
     }
 
 
+
     template <int dim>
     void
     World<dim>::connect_to_signals(aspect::SimulatorSignals<dim> &signals)
@@ -134,60 +231,76 @@ namespace aspect
         this->setup_initial_state();
       });
 
+      connect_particle_handler_signals(signals,*particle_handler);
+      // Particle handler backup will not be stored for checkpointing
+      connect_particle_handler_signals(signals, particle_handler_backup, false);
+
+      signals.post_refinement_load_user_data.connect(
+        [&] (typename parallel::distributed::Triangulation<dim> &)
+      {
+        this->apply_particle_per_cell_bounds();
+      });
+
+      signals.post_resume_load_user_data.connect(
+        [&] (typename parallel::distributed::Triangulation<dim> &)
+      {
+        this->apply_particle_per_cell_bounds();
+      });
+    }
+
+
+
+    template <int dim>
+    void
+    World<dim>::connect_particle_handler_signals(aspect::SimulatorSignals<dim> &signals,
+                                                 ParticleHandler<dim> &particle_handler_,
+                                                 const bool connect_to_checkpoint_signals) const
+    {
       signals.pre_refinement_store_user_data.connect(
         [&] (typename parallel::distributed::Triangulation<dim> &)
       {
-#if !DEAL_II_VERSION_GTE(9,1,0)
-        particle_handler->register_store_callback_function(false);
-#else
-        particle_handler->register_store_callback_function();
-#endif
+        particle_handler_.register_store_callback_function();
       });
 
       signals.post_refinement_load_user_data.connect(
         [&] (typename parallel::distributed::Triangulation<dim> &)
       {
-        particle_handler->register_load_callback_function(false);
+        particle_handler_.register_load_callback_function(false);
       });
 
-      signals.pre_checkpoint_store_user_data.connect(
-        [&] (typename parallel::distributed::Triangulation<dim> &)
-      {
-#if !DEAL_II_VERSION_GTE(9,1,0)
-        particle_handler->register_store_callback_function(false);
-#else
-        particle_handler->register_store_callback_function();
-#endif
-      });
+      // Only connect to checkpoint signals if requested
+      if (connect_to_checkpoint_signals)
+        {
+          signals.pre_checkpoint_store_user_data.connect(
+            [&] (typename parallel::distributed::Triangulation<dim> &)
+          {
+            particle_handler_.register_store_callback_function();
+          });
 
-      signals.post_resume_load_user_data.connect(
-        [&] (typename parallel::distributed::Triangulation<dim> &)
-      {
-        particle_handler->register_load_callback_function(true);
-      });
-
-      signals.post_refinement_load_user_data.connect(
-        [&] (typename parallel::distributed::Triangulation<dim> &)
-      {
-        this->apply_particle_per_cell_bounds();
-      });
-
-      signals.post_resume_load_user_data.connect(
-        [&] (typename parallel::distributed::Triangulation<dim> &)
-      {
-        this->apply_particle_per_cell_bounds();
-      });
+          signals.post_resume_load_user_data.connect(
+            [&] (typename parallel::distributed::Triangulation<dim> &)
+          {
+            particle_handler_.register_load_callback_function(true);
+          });
+        }
 
       if (update_ghost_particles &&
           dealii::Utilities::MPI::n_mpi_processes(this->get_mpi_communicator()) > 1)
         {
           auto lambda = [&] (typename parallel::distributed::Triangulation<dim> &)
           {
-            particle_handler->exchange_ghost_particles();
+            particle_handler_.exchange_ghost_particles();
           };
           signals.post_refinement_load_user_data.connect(lambda);
           signals.post_resume_load_user_data.connect(lambda);
         }
+
+      signals.post_mesh_deformation.connect(
+        [&] (const SimulatorAccess<dim> &)
+      {
+        particle_handler->sort_particles_into_subdomains_and_cells();
+      },
+      boost::signals2::at_front);
     }
 
 
@@ -227,11 +340,8 @@ namespace aspect
 
               types::particle_index local_start_index = 0.0;
 
-#if DEAL_II_VERSION_GTE(9,1,0)
-              MPI_Scan(&particles_to_add_locally, &local_start_index, 1, DEAL_II_PARTICLE_INDEX_MPI_TYPE, MPI_SUM, this->get_mpi_communicator());
-#else
-              MPI_Scan(&particles_to_add_locally, &local_start_index, 1, PARTICLE_INDEX_MPI_TYPE, MPI_SUM, this->get_mpi_communicator());
-#endif
+              const int ierr = MPI_Scan(&particles_to_add_locally, &local_start_index, 1, DEAL_II_PARTICLE_INDEX_MPI_TYPE, MPI_SUM, this->get_mpi_communicator());
+              AssertThrowMPI(ierr);
 
               local_start_index -= particles_to_add_locally;
               local_next_particle_index += local_start_index;
@@ -281,31 +391,43 @@ namespace aspect
                 else if ((particle_load_balancing & ParticleLoadBalancing::remove_particles) &&
                          (n_particles_in_cell > max_particles_per_cell))
                   {
+                    const unsigned int n_particles_to_remove = n_particles_in_cell - max_particles_per_cell;
+
+#if DEAL_II_VERSION_GTE(10,0,0)
+                    for (unsigned int i=0; i < n_particles_to_remove; ++i)
+                      {
+                        const unsigned int current_n_particles_in_cell = particle_handler->n_particles_in_cell(cell);
+                        const unsigned int index_to_remove = std::uniform_int_distribution<unsigned int>
+                                                             (0,current_n_particles_in_cell-1)(random_number_generator);
+
+                        auto particle_to_remove = particle_handler->particles_in_cell(cell).begin();
+                        std::advance(particle_to_remove, index_to_remove);
+                        particle_handler->remove_particle(particle_to_remove);
+                      }
+#else
                     const boost::iterator_range<typename ParticleHandler<dim>::particle_iterator> particles_in_cell
                       = particle_handler->particles_in_cell(cell);
-
-                    const unsigned int n_particles_to_remove = n_particles_in_cell - max_particles_per_cell;
 
                     std::set<unsigned int> particle_ids_to_remove;
                     while (particle_ids_to_remove.size() < n_particles_to_remove)
                       particle_ids_to_remove.insert(random_number_generator() % n_particles_in_cell);
 
-                    std::list<typename ParticleHandler<dim>::particle_iterator> particles_to_remove;
+                    std::vector<typename ParticleHandler<dim>::particle_iterator> particles_to_remove;
+                    particles_to_remove.reserve(n_particles_to_remove);
 
-                    for (std::set<unsigned int>::const_iterator id = particle_ids_to_remove.begin();
-                         id != particle_ids_to_remove.end(); ++id)
+                    for (const auto id : particle_ids_to_remove)
                       {
                         typename ParticleHandler<dim>::particle_iterator particle_to_remove = particles_in_cell.begin();
-                        std::advance(particle_to_remove,*id);
+                        std::advance(particle_to_remove, id);
 
                         particles_to_remove.push_back(particle_to_remove);
                       }
 
-                    for (typename std::list<typename ParticleHandler<dim>::particle_iterator>::iterator particle = particles_to_remove.begin();
-                         particle != particles_to_remove.end(); ++particle)
+                    for (const auto &particle : particles_to_remove)
                       {
-                        particle_handler->remove_particle(*particle);
+                        particle_handler->remove_particle(particle);
                       }
+#endif
                   }
               }
 
@@ -318,7 +440,7 @@ namespace aspect
     World<dim>::cell_weight(const typename parallel::distributed::Triangulation<dim>::cell_iterator &cell,
                             const typename parallel::distributed::Triangulation<dim>::CellStatus status)
     {
-      if (cell->active() && !cell->is_locally_owned())
+      if (cell->is_active() && !cell->is_locally_owned())
         return 0;
 
       if (status == parallel::distributed::Triangulation<dim>::CELL_PERSIST
@@ -365,41 +487,127 @@ namespace aspect
       // If the geometry is not a box, we simply discard particles that have left the
       // model domain.
 
-      const GeometryModel::Box<dim> *geometry
-        = dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model());
-
-      if (geometry != nullptr)
+      if (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()))
         {
-          const Point<dim> origin = geometry->get_origin();
-          const Point<dim> extent = geometry->get_extents();
+          const GeometryModel::Box<dim> &geometry
+            = Plugins::get_plugin_as_type<const GeometryModel::Box<dim>>(this->get_geometry_model());
+
+          const Point<dim> origin = geometry.get_origin();
+          const Point<dim> extent = geometry.get_extents();
           const std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundaries =
-            geometry->get_periodic_boundary_pairs();
+            geometry.get_periodic_boundary_pairs();
 
-          const std::map<types::subdomain_id, unsigned int> subdomain_to_neighbor_map(get_subdomain_id_to_neighbor_map());
-
-          std::vector<bool> periodic(dim,false);
-          std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >::const_iterator boundary =
-            periodic_boundaries.begin();
-          for (; boundary != periodic_boundaries.end(); ++boundary)
-            periodic[boundary->second] = true;
-
-          typename ParticleHandler<dim>::particle_iterator particle = particle_handler->begin();
-          for (; particle != particle_handler->end(); ++particle)
+          if (periodic_boundaries.size() != 0)
             {
-              // modify the particle position if it crossed a periodic boundary
-              Point<dim> particle_position = particle->get_location();
-              for (unsigned int i = 0; i < dim; ++i)
+              std::vector<bool> periodic(dim,false);
+              std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >::const_iterator boundary =
+                periodic_boundaries.begin();
+              for (; boundary != periodic_boundaries.end(); ++boundary)
+                periodic[boundary->second] = true;
+
+              typename ParticleHandler<dim>::particle_iterator particle = particle_handler->begin();
+              for (; particle != particle_handler->end(); ++particle)
                 {
-                  if (periodic[i])
+                  // modify the particle position if it crossed a periodic boundary
+                  Point<dim> particle_position = particle->get_location();
+                  for (unsigned int i = 0; i < dim; ++i)
                     {
-                      if (particle_position[i] < origin[i])
-                        particle_position[i] += extent[i];
-                      else if (particle_position[i] > origin[i] + extent[i])
-                        particle_position[i] -= extent[i];
+                      if (periodic[i])
+                        {
+                          if (particle_position[i] < origin[i])
+                            particle_position[i] += extent[i];
+                          else if (particle_position[i] > origin[i] + extent[i])
+                            particle_position[i] -= extent[i];
+                        }
                     }
+                  particle->set_location(particle_position);
                 }
-              particle->set_location(particle_position);
             }
+        }
+      else if (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
+        {
+          const GeometryModel::TwoMergedBoxes<dim> &geometry
+            = Plugins::get_plugin_as_type<const GeometryModel::TwoMergedBoxes<dim>>(this->get_geometry_model());
+
+          const Point<dim> origin = geometry.get_origin();
+          const Point<dim> extent = geometry.get_extents();
+          const std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundaries =
+            geometry.get_periodic_boundary_pairs();
+
+          if (periodic_boundaries.size() != 0)
+            {
+              std::vector<bool> periodic(dim,false);
+              std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >::const_iterator boundary =
+                periodic_boundaries.begin();
+              for (; boundary != periodic_boundaries.end(); ++boundary)
+                periodic[boundary->second] = true;
+
+              typename ParticleHandler<dim>::particle_iterator particle = particle_handler->begin();
+              for (; particle != particle_handler->end(); ++particle)
+                {
+                  // modify the particle position if it crossed a periodic boundary
+                  Point<dim> particle_position = particle->get_location();
+                  for (unsigned int i = 0; i < dim; ++i)
+                    {
+                      if (periodic[i])
+                        {
+                          if (particle_position[i] < origin[i])
+                            particle_position[i] += extent[i];
+                          else if (particle_position[i] > origin[i] + extent[i])
+                            particle_position[i] -= extent[i];
+                        }
+                    }
+                  particle->set_location(particle_position);
+                }
+            }
+        }
+      else if (Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>> (this->get_geometry_model()))
+        {
+          const GeometryModel::SphericalShell<dim> &geometry
+            = Plugins::get_plugin_as_type<const GeometryModel::SphericalShell<dim>>(this->get_geometry_model());
+
+          const auto &periodic_boundaries = geometry.get_periodic_boundary_pairs();
+
+          if (periodic_boundaries.size() != 0)
+            {
+              AssertThrow(dim == 2,
+                          ExcMessage("Periodic boundaries combined with particles currently "
+                                     "only work with 2D spherical shell."));
+              AssertThrow(geometry.opening_angle() == 90,
+                          ExcMessage("Periodic boundaries combined with particles currently "
+                                     "only work with 90 degree opening angle in spherical shell."));
+
+              typename ParticleHandler<dim>::particle_iterator particle = particle_handler->begin();
+              for (; particle != particle_handler->end(); ++particle)
+                {
+                  // modify the particle position if it crossed a periodic boundary
+                  Point<dim> particle_position = particle->get_location();
+
+                  if (particle_position[0] < 0.)
+                    {
+                      const double temp = particle_position[0];
+                      particle_position[0] = particle_position[1];
+                      particle_position[1] = -temp;
+                    }
+                  else if (particle_position[1] < 0.)
+                    {
+                      const double temp = particle_position[0];
+                      particle_position[0] = -particle_position[1];
+                      particle_position[1] = temp;
+                    }
+                  else
+                    continue;
+
+                  particle->set_location(particle_position);
+                }
+            }
+
+        }
+      else
+        {
+          AssertThrow(this->get_geometry_model().get_periodic_boundary_pairs().size() == 0,
+                      ExcMessage("Periodic boundaries combined with particles currently "
+                                 "only work with box, two merged boxes, and spherical shell geometry models."));
         }
     }
 
@@ -508,7 +716,7 @@ namespace aspect
                 = this->get_fe().component_to_system_index(this->introspection()
                                                            .component_indices.velocities[dir],j);
 
-              velocity_at_support_point[dir] = this->get_solution()[cell_dof_indices[support_point_index]];
+              velocity_at_support_point[dir] = this->get_current_linearization_point()[cell_dof_indices[support_point_index]];
               old_velocity_at_support_point[dir] = this->get_old_solution()[cell_dof_indices[support_point_index]];
             }
 
@@ -551,6 +759,8 @@ namespace aspect
                                        this->get_timestep());
     }
 
+
+
     template <int dim>
     void
     World<dim>::setup_initial_state ()
@@ -564,6 +774,8 @@ namespace aspect
       initialize_particles();
     }
 
+
+
     template <int dim>
     void
     World<dim>::generate_particles()
@@ -575,26 +787,28 @@ namespace aspect
 
       std::multimap<typename Triangulation<dim>::active_cell_iterator, Particles::Particle<dim> > new_particles;
 
-      for (typename std::multimap<Particles::internal::LevelInd, Particles::Particle<dim> >::const_iterator particle = particles.begin();
-           particle != particles.end(); ++particle)
+      for (const auto &particle : particles)
         new_particles.insert(new_particles.end(),
                              std::make_pair(typename Triangulation<dim>::active_cell_iterator(&this->get_triangulation(),
-                                            particle->first.first,particle->first.second),
-                                            particle->second));
+                                            particle.first.first, particle.first.second),
+                                            particle.second));
 
       particle_handler->insert_particles(new_particles);
     }
+
+
 
     template <int dim>
     void
     World<dim>::initialize_particles()
     {
+#if !DEAL_II_VERSION_GTE(10,0,0)
       // Initialize the particle's access to the property_pool. This is necessary
       // even if the Particle do not carry properties, because they need a
       // way to determine the number of properties they carry.
       for (ParticleIterator<dim> particle = particle_handler->begin(); particle!=particle_handler->end(); ++particle)
         particle->set_property_pool(particle_handler->get_property_pool());
-
+#endif
 
       // TODO: Change this loop over all cells to use the WorkStream interface
       if (property_manager->get_n_property_components() > 0)
@@ -603,18 +817,11 @@ namespace aspect
 
           particle_handler->get_property_pool().reserve(2 * particle_handler->n_locally_owned_particles());
 
-          // Loop over all cells and initialize the particles cell-wise
-          for (const auto &cell : this->get_dof_handler().active_cell_iterators())
-            if (cell->is_locally_owned())
-              {
-                typename ParticleHandler<dim>::particle_iterator_range
-                particles_in_cell = particle_handler->particles_in_cell(cell);
 
-                // Only initialize particles, if there are any in this cell
-                if (particles_in_cell.begin() != particles_in_cell.end())
-                  local_initialize_particles(particles_in_cell.begin(),
-                                             particles_in_cell.end());
-              }
+          if (particle_handler->n_locally_owned_particles() > 0)
+            local_initialize_particles(particle_handler->begin(),
+                                       particle_handler->end());
+
           if (update_ghost_particles &&
               dealii::Utilities::MPI::n_mpi_processes(this->get_mpi_communicator()) > 1)
             {
@@ -623,6 +830,8 @@ namespace aspect
             }
         }
     }
+
+
 
     template <int dim>
     void
@@ -649,6 +858,8 @@ namespace aspect
               }
         }
     }
+
+
 
     template <int dim>
     void
@@ -686,6 +897,8 @@ namespace aspect
       }
     }
 
+
+
     template <int dim>
     void
     World<dim>::advance_timestep()
@@ -713,6 +926,8 @@ namespace aspect
         }
     }
 
+
+
     template <int dim>
     void
     World<dim>::save (std::ostringstream &os) const
@@ -721,6 +936,8 @@ namespace aspect
       oa << (*this);
     }
 
+
+
     template <int dim>
     void
     World<dim>::load (std::istringstream &is)
@@ -728,6 +945,8 @@ namespace aspect
       aspect::iarchive ia (is);
       ia >> (*this);
     }
+
+
 
     template <int dim>
     void
@@ -798,6 +1017,7 @@ namespace aspect
     }
 
 
+
     template <int dim>
     void
     World<dim>::parse_parameters (ParameterHandler &prm)
@@ -816,13 +1036,6 @@ namespace aspect
                              "in this case particles can move more than one cell "
                              "diameter in one time step and therefore skip the layer "
                              "of ghost cells around the local subdomain."));
-
-      AssertThrow(!this->get_parameters().mesh_deformation_enabled,
-                  ExcMessage("Combining particles and a deforming mesh is currently untested "
-                             "and not officially supported. If you disable this assertion make "
-                             "sure you benchmark the particle accuracy, and carefully check for "
-                             "problems related to storing the particle reference coordinates for "
-                             "a deforming mesh."));
 
       prm.enter_subsection("Postprocess");
       {
@@ -918,5 +1131,7 @@ namespace aspect
   template class World<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

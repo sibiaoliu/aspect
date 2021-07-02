@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,7 +35,8 @@ namespace aspect
     namespace VisualizationPostprocessors
     {
       /**
-       * A class derived from DataPostprocessor that outputs the gravity.
+       * A class derived from DataPostprocessorVector that outputs the gravity
+       * as a vector field.
        */
       template <int dim>
       class Gravity

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2012 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2012 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -44,10 +44,26 @@
 
 namespace aspect
 {
+  template<int dim>
+  struct SimulatorSignals;
+
   namespace Particle
   {
     using namespace dealii;
     using namespace dealii::Particles;
+
+    namespace Generator
+    {
+      template <int dim>
+      class Interface;
+    }
+
+
+    namespace Property
+    {
+      template <int dim>
+      class Manager;
+    }
 
     /**
      * This class manages the storage and handling of particles. It provides
@@ -88,12 +104,63 @@ namespace aspect
         get_property_manager() const;
 
         /**
-         * Get the particle handler for this particle world.
+         * Get the const particle handler for this particle world.
          *
          * @return The particle handler for this world.
          */
         const Particles::ParticleHandler<dim> &
         get_particle_handler() const;
+
+        /**
+         * Get the particle handler for this particle world.
+         * There is no get_particles() function in the deal.II
+         * ParticleHandler, so we get and set the positions
+         * of the particles. These getter/setter functions are
+         * not const, and neither are the calling functions,
+         * but the existing get_particle_handler is.
+         * Therefore this non-const function is added.
+         *
+         * @return The particle handler for this world.
+         */
+        Particles::ParticleHandler<dim> &
+        get_particle_handler();
+
+        /**
+         * Copy the state of particle handler @p from_particle_handler into the
+         * particle handler @p to_particle_handler. This will copy
+         * all particles and properties and leave @p to_particle_handler
+         * as an identical copy of @p from_particle_handler, assuming it
+         * was set up by this particle world class. This means we assume
+         * @p from_particle_handler uses the same triangulation and
+         * particle properties as are used in this model. Existing
+         * particles in @p to_particle_handler are deleted.
+         *
+         * This function is expensive as it has to duplicate all data
+         * in @p from_particle_handler, and insert it into @p to_particle_handler,
+         * which may be a significant amount of data. However, it can
+         * be useful to save the state of a particle
+         * collection at a certain point in time and reset this
+         * state later under certain conditions, for example if
+         * a timestep has to be undone and repeated.
+         */
+        void copy_particle_handler (const Particles::ParticleHandler<dim> &from_particle_handler,
+                                    Particles::ParticleHandler<dim> &to_particle_handler) const;
+
+        /**
+         * @brief Stores a copy of the particle handler in particle_handler_backup. This copy can be
+         * used to restore the position and properties of the particles for example after advection
+         * solver iterations of the iterated advection scheme or when a timestep has to be repeated.
+         */
+        void backup_particles ();
+
+        /**
+         * @brief Restores the particle handler particle_handler based on the copy
+         * in particle_handler_backup. This restores the position and properties of the particles
+         * to those in the copy and can be used for example after advection solver iterations
+         * of the iterated advection scheme or when a timestep has to be repeated.
+         */
+        void restore_particles ();
+
 
         /**
          * Do initial logic for handling pre-refinement steps
@@ -242,6 +309,14 @@ namespace aspect
         std::unique_ptr<Particles::ParticleHandler<dim> > particle_handler;
 
         /**
+         * Particle handler object that is responsible for storing and
+         * managing the internal particle structures before starting nonlinear iterations
+         * such that the particle position and properties can be restored after
+         * each outer advection iteration.
+         */
+        Particles::ParticleHandler<dim> particle_handler_backup;
+
+        /**
          * Strategy for particle load balancing.
          */
         typename ParticleLoadBalancing::Kind particle_load_balancing;
@@ -352,6 +427,15 @@ namespace aspect
         local_advect_particles(const typename DoFHandler<dim>::active_cell_iterator &cell,
                                const typename ParticleHandler<dim>::particle_iterator &begin_particle,
                                const typename ParticleHandler<dim>::particle_iterator &end_particle);
+
+        /**
+         * This function registers the necessary functions to the
+         * @p signals that the @p particle_handler needs to know about.
+         */
+        void
+        connect_particle_handler_signals(aspect::SimulatorSignals<dim> &signals,
+                                         ParticleHandler<dim> &particle_handler,
+                                         const bool connect_to_checkpoint_signals = true) const;
     };
 
     /* -------------------------- inline and template functions ---------------------- */

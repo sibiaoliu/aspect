@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -21,19 +21,13 @@
 #include <aspect/global.h>
 #include <aspect/volume_of_fluid/handler.h>
 
-#if DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/affine_constraints.h>
-#else
-#  include <deal.II/lac/constraint_matrix.h>
-#endif
+#include <deal.II/lac/affine_constraints.h>
 
 #ifdef ASPECT_USE_PETSC
 #include <deal.II/lac/solver_cg.h>
 #else
 #include <deal.II/lac/trilinos_solver.h>
 #endif
-
-#include <deal.II/lac/pointer_matrix.h>
 
 #include <deal.II/fe/fe_values.h>
 
@@ -44,7 +38,7 @@ namespace aspect
   {
     const unsigned int block_idx = field.volume_fraction.block_index;
 
-    sim.computing_timer.enter_section ("Solve volume of fluid system");
+    TimerOutput::Scope timer (sim.computing_timer, "Solve volume of fluid system");
     this->get_pcout() << "   Solving volume of fluid system... " << std::flush;
 
     const double tolerance = std::max(1e-50,
@@ -63,7 +57,7 @@ namespace aspect
 #endif
 
     // Create distributed vector (we need all blocks here even though we only
-    // solve for the current block) because only have a ConstraintMatrix
+    // solve for the current block) because only have a AffineConstraints<double>
     // for the whole system, current_linearization_point contains our initial guess.
     LinearAlgebra::BlockVector distributed_solution (
       this->introspection().index_sets.system_partitioning,
@@ -106,8 +100,6 @@ namespace aspect
     // Do not add VolumeOfFluid solver iterations to statistics, duplication due to
     // dimensional splitting results in incorrect line formatting (lines of
     // data split inconsistently with missing values)
-
-    sim.computing_timer.exit_section();
   }
 }
 
@@ -118,4 +110,6 @@ namespace aspect
 
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

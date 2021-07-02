@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -97,7 +97,7 @@ namespace aspect
   {
     /**
      * A namespace for the definition of classes that have to do with the
-     * plugin architecture of Aspect.
+     * plugin architecture of ASPECT.
      */
     namespace Plugins
     {
@@ -163,12 +163,11 @@ namespace aspect
          * the run-time parameters this plugin takes from the parameter file.
          * - A function that can produce objects of this plugin type.
          */
-        typedef
-        std::tuple<std::string,
-            std::string,
-            void ( *) (ParameterHandler &),
-            InterfaceClass *( *) ()>
-            PluginInfo;
+        using PluginInfo
+        = std::tuple<std::string,
+        std::string,
+        void ( *) (ParameterHandler &),
+        InterfaceClass *( *) ()>;
 
         /**
          * A pointer to a list of all registered plugins.
@@ -388,7 +387,7 @@ namespace aspect
           names_and_descriptions[std::get<0>(*p)] = std::get<1>(*p);;
 
         // then output it all
-        typename std::map<std::string,std::string>::const_iterator
+        std::map<std::string,std::string>::const_iterator
         p = names_and_descriptions.begin();
         while (true)
           {
@@ -531,7 +530,7 @@ namespace aspect
             // again using \n to make dot/neato show these parts of
             // the name on separate lines
             const std::vector<std::string> plugin_label_parts
-              = Utilities::break_text_into_lines(p->first, 15);
+              = dealii::Utilities::break_text_into_lines(p->first, 15);
             Assert (plugin_label_parts.size()>0, ExcInternalError());
             std::string plugin_name = plugin_label_parts[0];
             for (unsigned int i=1; i<plugin_label_parts.size(); ++i)

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -66,15 +66,23 @@ namespace aspect
          * spherical shell. Historically, this was permanently set to 6 (hence
          * the class name SphericalHexagonalPerturbation) The default is 6 in
          * order to provide backwards compatibility.
-         *
+         */
+        unsigned int angular_mode;
+
+        /**
          * The rotation offset describes the number of degrees to rotate the
          * perturbation counterclockwise. Setting the rotation offset to 0
          * will cause one of the perturbations to point north/up. Rotation
          * offset is set to -45 degrees by default in order to provide
          * backwards compatibility.
          */
-        int angular_mode;
         double rotation_offset;
+
+        /**
+         * Outer radius.
+         */
+        double R1;
+
     };
 
 
@@ -119,10 +127,19 @@ namespace aspect
         double sigma;
         double sign;
         unsigned int npoint;
-        std::string initial_geotherm_table;
 
         std::vector<double> radial_position;
         std::vector<double> geotherm;
+
+        /**
+         * Inner radius.
+         */
+        double R0;
+
+        /**
+         * Outer radius.
+         */
+        double R1;
     };
   }
 }

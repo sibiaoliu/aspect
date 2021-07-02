@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -38,13 +38,6 @@ namespace aspect
     boundary_temperature (const types::boundary_id boundary_indicator,
                           const Point<dim> &/*position*/) const
     {
-      // verify that the geometry is a box since only for this geometry
-      // do we know for sure what boundary indicators it uses and what they mean
-      Assert (dynamic_cast<const GeometryModel::Box<dim>*>(&this->get_geometry_model())
-              != nullptr,
-              ExcMessage ("This boundary model is only implemented if the geometry is "
-                          "a box."));
-
       Assert (boundary_indicator<2*dim, ExcMessage ("Given boundary indicator needs to be less than 2*dimension."));
       return temperature_[boundary_indicator];
     }
@@ -92,26 +85,26 @@ namespace aspect
       {
         prm.enter_subsection("Box");
         {
-          prm.declare_entry ("Left temperature", "1",
+          prm.declare_entry ("Left temperature", "1.",
                              Patterns::Double (),
-                             "Temperature at the left boundary (at minimal $x$-value). Units: $\\si{K}$.");
-          prm.declare_entry ("Right temperature", "0",
+                             "Temperature at the left boundary (at minimal $x$-value). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Right temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the right boundary (at maximal $x$-value). Units: $\\si{K}$.");
-          prm.declare_entry ("Bottom temperature", "0",
+                             "Temperature at the right boundary (at maximal $x$-value). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Bottom temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the bottom boundary (at minimal $z$-value). Units: $\\si{K}$.");
-          prm.declare_entry ("Top temperature", "0",
+                             "Temperature at the bottom boundary (at minimal $z$-value). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Top temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the top boundary (at maximal $x$-value). Units: $\\si{K}$.");
+                             "Temperature at the top boundary (at maximal $x$-value). Units: \\si{\\kelvin}.");
           if (dim==3)
             {
-              prm.declare_entry ("Front temperature", "0",
+              prm.declare_entry ("Front temperature", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the front boundary (at minimal $y$-value). Units: $\\si{K}$.");
-              prm.declare_entry ("Back temperature", "0",
+                                 "Temperature at the front boundary (at minimal $y$-value). Units: \\si{\\kelvin}.");
+              prm.declare_entry ("Back temperature", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the back boundary (at maximal $y$-value). Units: $\\si{K}$.");
+                                 "Temperature at the back boundary (at maximal $y$-value). Units: \\si{\\kelvin}.");
             }
         }
         prm.leave_subsection ();
@@ -149,6 +142,13 @@ namespace aspect
               default:
                 Assert (false, ExcNotImplemented());
             }
+
+          // verify that the geometry is a box since only for this geometry
+          // do we know for sure what boundary indicators it uses and what they mean
+          AssertThrow (Plugins::plugin_type_matches<const GeometryModel::Box<dim>>(this->get_geometry_model()),
+                       ExcMessage ("This boundary model is only implemented if the geometry is "
+                                   "a box."));
+
         }
         prm.leave_subsection ();
       }

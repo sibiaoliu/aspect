@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -34,17 +34,17 @@ namespace aspect
         data.push_back(0.0);
       }
 
+
+
       template <int dim>
       void
-      IntegratedStrainInvariant<dim>::update_one_particle_property(const unsigned int data_position,
-                                                                   const Point<dim> &,
-                                                                   const Vector<double> &,
-                                                                   const std::vector<Tensor<1,dim> > &gradients,
-                                                                   const ArrayView<double> &data) const
+      IntegratedStrainInvariant<dim>::update_particle_property(const unsigned int data_position,
+                                                               const Vector<double> &/*solution*/,
+                                                               const std::vector<Tensor<1,dim> > &gradients,
+                                                               typename ParticleHandler<dim>::particle_iterator &particle) const
       {
-
-
         // Integrated strain invariant from prior time step
+        auto &data = particle->get_properties();
         double old_strain = data[data_position];
 
         // Current timestep
@@ -64,8 +64,9 @@ namespace aspect
         // New strain is the old strain plus dt*edot_ii
         const double new_strain = old_strain + dt*edot_ii;
         data[data_position] = new_strain;
-
       }
+
+
 
       template <int dim>
       UpdateTimeFlags
@@ -74,12 +75,16 @@ namespace aspect
         return update_time_step;
       }
 
+
+
       template <int dim>
       UpdateFlags
       IntegratedStrainInvariant<dim>::get_needed_update_flags () const
       {
         return update_gradients;
       }
+
+
 
       template <int dim>
       std::vector<std::pair<std::string, unsigned int> >
@@ -111,4 +116,3 @@ namespace aspect
     }
   }
 }
-

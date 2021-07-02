@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -39,16 +39,15 @@ namespace aspect
 
       template <int dim>
       void
-      Composition<dim>::update_one_particle_property(const unsigned int data_position,
-                                                     const Point<dim> &,
-                                                     const Vector<double> &solution,
-                                                     const std::vector<Tensor<1,dim> > &,
-                                                     const ArrayView<double> &data) const
+      Composition<dim>::update_particle_property(const unsigned int data_position,
+                                                 const Vector<double> &solution,
+                                                 const std::vector<Tensor<1,dim> > &/*gradients*/,
+                                                 typename ParticleHandler<dim>::particle_iterator &particle) const
       {
         for (unsigned int i = 0; i < this->n_compositional_fields(); i++)
           {
             const unsigned int solution_component = this->introspection().component_indices.compositional_fields[i];
-            data[data_position+i] = solution[solution_component];
+            particle->get_properties()[data_position+i] = solution[solution_component];
           }
       }
 
@@ -109,4 +108,3 @@ namespace aspect
     }
   }
 }
-

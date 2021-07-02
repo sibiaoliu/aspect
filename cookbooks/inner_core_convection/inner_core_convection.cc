@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -199,7 +199,7 @@ namespace aspect
 
       // We want the right-hand side of the momentum equation to be (- Ra T gravity) and
       // density * cp to be 1
-      for (unsigned int q=0; q < in.position.size(); ++q)
+      for (unsigned int q=0; q < in.n_evaluation_points(); ++q)
         {
           out.densities[q] = - out.thermal_expansion_coefficients[q] * in.temperature[q]
                              + phase_function (in.position[q], in.temperature[q]) * transition_density_change;
@@ -253,13 +253,13 @@ namespace aspect
                              Patterns::Double (0),
                              "The distance from the center of the Earth where the phase "
                              "transition occurs. "
-                             "Units: m.");
+                             "Units: \\si{\\meter}.");
           prm.declare_entry ("Phase transition width", "0.0",
                              Patterns::Double (0),
                              "The width of the phase transition. The argument of the phase function "
                              "is scaled with this value, leading to a jump between phases "
                              "for a value of zero and a gradual transition for larger values. "
-                             "Units: m.");
+                             "Units: \\si{\\meter}.");
           prm.declare_entry ("Phase transition temperature", "0.0",
                              Patterns::Double (0),
                              "The temperature at which the phase transition occurs in the depth "
@@ -267,7 +267,7 @@ namespace aspect
                              "temperatures lead to phase transition occurring in shallower or greater "
                              "depths, depending on the Clapeyron slope given in 'Phase transition "
                              "Clapeyron slope'. "
-                             "Units: K.");
+                             "Units: \\si{\\kelvin}.");
           prm.declare_entry ("Phase transition Clapeyron slope", "0.0",
                              Patterns::Double (),
                              "The Clapeyron slope of the phase transition. A positive "
@@ -281,7 +281,7 @@ namespace aspect
                              Patterns::Double (),
                              "The density change that occurs across the phase transition. "
                              "A positive value means that the density increases with depth. "
-                             "Units: kg/m$^3$.");
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Compute quadratic pressure profile from gravity", "true",
                              Patterns::Bool (),
                              "Whether to automatically compute the hydrostatic pressure profile "

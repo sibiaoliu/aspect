@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -53,15 +53,15 @@ namespace aspect
           using Interface<dim>::properties_at_points;
 
           /**
-          * @copydoc Interface<dim>::declare_parameters()
-          **/
+           * @copydoc Interface<dim>::declare_parameters()
+           */
           static
           void
           declare_parameters (ParameterHandler &prm);
 
           /**
            * @copydoc Interface<dim>::parse_parameters()
-           **/
+           */
           void
           parse_parameters (ParameterHandler &prm) override;
 

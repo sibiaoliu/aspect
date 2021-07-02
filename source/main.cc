@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,6 +28,8 @@
 #include <deal.II/base/revision.h>
 #include <csignal>
 #include <string>
+#include <thread>
+#include <chrono>
 
 #ifdef DEBUG
 #ifdef ASPECT_USE_FP_EXCEPTIONS
@@ -207,7 +209,8 @@ void validate_shared_lib_list (const bool before_loading_shared_libs)
   // find everything that is interesting
   std::set<std::string> dealii_shared_lib_names;
   for (const auto &p : shared_lib_names)
-    if (p.find ("libdeal_II") != std::string::npos)
+    if (p.find ("libdeal_II") != std::string::npos ||
+        p.find ("libdeal.ii") != std::string::npos)
       dealii_shared_lib_names.insert (p);
 
   // produce an error if we load deal.II more than once
@@ -275,17 +278,17 @@ void possibly_load_shared_libs (const std::string &parameters)
       const std::vector<std::string>
       shared_libs_list = Utilities::split_string_list (shared_libs);
 
-      for (unsigned int i=0; i<shared_libs_list.size(); ++i)
+      for (const auto &shared_lib : shared_libs_list)
         {
           if (Utilities::MPI::this_mpi_process (MPI_COMM_WORLD) == 0)
             std::cout << "Loading shared library <"
-                      << shared_libs_list[i]
+                      << shared_lib
                       << ">" << std::endl;
 
-          void *handle = dlopen (shared_libs_list[i].c_str(), RTLD_LAZY);
+          void *handle = dlopen (shared_lib.c_str(), RTLD_LAZY);
           AssertThrow (handle != nullptr,
                        ExcMessage (std::string("Could not successfully load shared library <")
-                                   + shared_libs_list[i] + ">. The operating system reports "
+                                   + shared_lib + ">. The operating system reports "
                                    + "that the error is this: <"
                                    + dlerror() + ">."));
 
@@ -395,14 +398,16 @@ read_parameter_file(const std::string &parameter_file_name)
         {
           input_as_string = read_until_end (std::cin);
           int size = input_as_string.size()+1;
-          MPI_Bcast (&size,
-                     1,
-                     MPI_INT,
-                     /*root=*/0, MPI_COMM_WORLD);
-          MPI_Bcast (const_cast<char *>(input_as_string.c_str()),
-                     size,
-                     MPI_CHAR,
-                     /*root=*/0, MPI_COMM_WORLD);
+          int ierr = MPI_Bcast (&size,
+                                1,
+                                MPI_INT,
+                                /*root=*/0, MPI_COMM_WORLD);
+          AssertThrowMPI(ierr);
+          ierr = MPI_Bcast (const_cast<char *>(input_as_string.c_str()),
+                            size,
+                            MPI_CHAR,
+                            /*root=*/0, MPI_COMM_WORLD);
+          AssertThrowMPI(ierr);
         }
       else
         {
@@ -411,14 +416,16 @@ read_parameter_file(const std::string &parameter_file_name)
           // text in, get it from processor 0, and copy it to
           // input_as_string
           int size;
-          MPI_Bcast (&size, 1,
-                     MPI_INT,
-                     /*root=*/0, MPI_COMM_WORLD);
+          int ierr = MPI_Bcast (&size, 1,
+                                MPI_INT,
+                                /*root=*/0, MPI_COMM_WORLD);
+          AssertThrowMPI(ierr);
 
           std::vector<char> p (size);
-          MPI_Bcast (p.data(), size,
-                     MPI_CHAR,
-                     /*root=*/0, MPI_COMM_WORLD);
+          ierr = MPI_Bcast (p.data(), size,
+                            MPI_CHAR,
+                            /*root=*/0, MPI_COMM_WORLD);
+          AssertThrowMPI(ierr);
           input_as_string = p.data();
         }
     }
@@ -466,7 +473,8 @@ parse_parameters (const std::string &input_as_string,
   // so, do the broadcast in integers
   {
     int isuccess = (success ? 1 : 0);
-    MPI_Bcast (&isuccess, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    const int ierr = MPI_Bcast (&isuccess, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    AssertThrowMPI(ierr);
     success = (isuccess == 1);
   }
 
@@ -670,12 +678,7 @@ int main (int argc, char *argv[])
         }
       else if (arg=="-j" || arg =="--threads")
         {
-#ifdef ASPECT_USE_PETSC
-          std::cerr << "Using multiple threads (using -j) is not supported when using PETSc for linear algebra. Exiting." << std::endl;
-          return -1;
-#else
           use_threads = true;
-#endif
         }
       else if (arg == "--test")
         {
@@ -855,6 +858,11 @@ int main (int argc, char *argv[])
       // root when we already know that processor 0 will generate
       // an exception. We do this to avoid creating too much
       // (duplicate) screen output.
+
+      // Sleep a few seconds before aborting. This allows text output from
+      // other ranks to be printed before the MPI implementation might kill
+      // the computation.
+      std::this_thread::sleep_for(std::chrono::seconds(5));
       return 1;
     }
   catch (...)

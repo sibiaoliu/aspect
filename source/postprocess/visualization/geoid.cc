@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,6 +23,7 @@
 #include <aspect/utilities.h>
 #include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/postprocess/visualization/geoid.h>
+#include <aspect/citation_info.h>
 
 
 
@@ -43,6 +44,14 @@ namespace aspect
       template <int dim>
       void
       Geoid<dim>::
+      initialize()
+      {
+        CitationInfo::add("geoid");
+      }
+
+      template <int dim>
+      void
+      Geoid<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
                             std::vector<Vector<double> > &computed_quantities) const
       {
@@ -56,7 +65,11 @@ namespace aspect
         const Postprocess::Geoid<dim> &geoid =
           this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Geoid<dim> >();
 
+#if DEAL_II_VERSION_GTE(9,3,0)
+        auto cell = input_data.template get_cell<dim>();
+#else
         auto cell = input_data.template get_cell<DoFHandler<dim> >();
+#endif
 
         bool cell_at_top_boundary = false;
         for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
@@ -92,7 +105,7 @@ namespace aspect
                                                   "geoid",
                                                   "Visualization for the geoid solution. The geoid is given "
                                                   "by the equivalent water column height due to a gravity perturbation. "
-                                                  "Units: $\\si{m}$.")
+                                                  "Units: \\si{\\meter}.")
     }
   }
 }

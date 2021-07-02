@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,9 +35,9 @@ namespace aspect
      * This includes a left hand side and a right hand side term:
      *
      * The left hand side is
-     *   $ -\rho T frac{\partial S}{\partial T} \frac{D T}{D t}$
+     *   $ -\rho T \frac{\partial S}{\partial T} \frac{D T}{D t}$
      * so that we can add
-     *   $ -\rho T frac{\partial S}{\partial T} $
+     *   $ -\rho T \frac{\partial S}{\partial T} $
      * to the $\rho C_p$ term.
      *
      * The right-hand side term from latent heating is

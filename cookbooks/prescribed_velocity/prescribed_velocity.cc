@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -177,21 +177,27 @@ namespace aspect
       }
   }
 
+  /**
+   * A set of helper functions that either return the point passed to it (if
+   * the current dimension is the same) or return a dummy value (otherwise).
+   */
   namespace
   {
-    template <int dim>
-    const Point<2> &as_2d(const Point<dim> &p);
+    const Point<2> as_2d(const Point<3> &/*p*/)
+    {
+      return Point<2>();
+    }
 
-    template <>
     const Point<2> &as_2d(const Point<2> &p)
     {
       return p;
     }
 
-    template <int dim>
-    const Point<3> &as_3d(const Point<dim> &p);
+    const Point<3> as_3d(const Point<2> &/*p*/)
+    {
+      return Point<3>();
+    }
 
-    template <>
     const Point<3> &as_3d(const Point<3> &p)
     {
       return p;
@@ -207,7 +213,7 @@ namespace aspect
    */
   template <int dim>
   void constrain_internal_velocities (const SimulatorAccess<dim> &simulator_access,
-                                      ConstraintMatrix &current_constraints)
+                                      AffineConstraints<double> &current_constraints)
   {
     if (prescribe_internal_velocities)
       {
@@ -223,7 +229,7 @@ namespace aspect
           if (! cell->is_artificial())
             {
               fe_values.reinit (cell);
-              std::vector<unsigned int> local_dof_indices(simulator_access.get_fe().dofs_per_cell);
+              std::vector<types::global_dof_index> local_dof_indices(simulator_access.get_fe().dofs_per_cell);
               cell->get_dof_indices (local_dof_indices);
 
               for (unsigned int q=0; q<quadrature.size(); q++)
@@ -318,7 +324,7 @@ namespace aspect
     signals.post_constraints_creation.connect (&constrain_internal_velocities<dim>);
   }
 
-  // Tell Aspect to send signals to the connector functions
+  // Tell ASPECT to send signals to the connector functions
   ASPECT_REGISTER_SIGNALS_PARAMETER_CONNECTOR(parameter_connector)
   ASPECT_REGISTER_SIGNALS_CONNECTOR(signal_connector<2>, signal_connector<3>)
 }

@@ -1,7 +1,7 @@
 # A test by Juliane Dannberg
 #
 # This test verifies whether physical diffusion works as expected.
-# It sets up a halfspace heated from above and cooled from below
+# It sets up a half-space heated from above and cooled from below
 # for which we know that (if infinite) the temperature should behave
 # as a time dependent function like
 #   T(z,t) = (T_halfspace - T_0) * erf(z / (2*sqrt(kappa * t))) + T_0
@@ -98,7 +98,7 @@ subsection Boundary temperature model
   #
   # `spherical constant': A model in which the temperature is chosen constant
   # on the inner and outer boundaries of a spherical shell. Parameters are
-  # read from subsection 'Sherical constant'.
+  # read from subsection 'Spherical constant'.
   set List of model names = box
 
   subsection Box
@@ -143,20 +143,20 @@ subsection Geometry model
   # `box': A box geometry parallel to the coordinate directions. The extent of
   # the box in each coordinate direction is set in the parameter file.
   #
-  # `spherical shell': A geometry representing a spherical shell or a pice of
+  # `spherical shell': A geometry representing a spherical shell or a piece of
   # it. Inner and outer radii are read from the parameter file in subsection
   # 'Spherical shell'.
   set Model name = box
 
   subsection Box
-    # Extent of the box in x-direction. Units: m.
+    # Extent of the box in x-direction. Units: \\si{\\meter}.
     set X extent = 1 # default: 1
 
-    # Extent of the box in y-direction. Units: m.
+    # Extent of the box in y-direction. Units: \\si{\\meter}.
     set Y extent = 1
 
     # Extent of the box in z-direction. This value is ignored if the
-    # simulation is in 2d Units: m.
+    # simulation is in 2d Units: \\si{\\meter}.
     set Z extent = 1
   end
 end
@@ -210,22 +210,22 @@ subsection Material model
   set Model name = simple
 
   subsection Simple model
-    # Reference density $\rho_0$. Units: $kg/m^3$.
+    # Reference density $\rho_0$. Units: \\si{\\kilogram\\per\\meter\\cubed}.
     set Reference density             = 1    # default: 3300
 
-    # The value of the specific heat $cp$. Units: $JG/kgK$.
+    # The value of the specific heat $cp$. Units: \\si{\\joule\\per\\kelvin\\per\\kilogram}.
     set Reference specific heat       = 1250
 
-    # The reference temperature $T_0$. Units: $K$.
+    # The reference temperature $T_0$. Units: \\si{\\kelvin}.
     set Reference temperature         = 0    # default: 293
 
-    # The value of the thermal conductivity $k$. Units: $W/m/K$.
+    # The value of the thermal conductivity $k$. Units: \\si{\\watt\\per\\meter\\per\\kelvin}.
     set Thermal conductivity          = 1e-6 # default: 4.7
 
-    # The value of the thermal expansion coefficient $\beta$. Units: $1/K$.
+    # The value of the thermal expansion coefficient $\beta$. Units: \\si{\\per\\kelvin}.
     set Thermal expansion coefficient = 2e-5
 
-    # The value of the constant viscosity. Units: $kg/m/s$.
+    # The value of the constant viscosity. Units: \\si{\\pascal\\second}.
     set Viscosity                     = 1    # default: 5e24
   end
 

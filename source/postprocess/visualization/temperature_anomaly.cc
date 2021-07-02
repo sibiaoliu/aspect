@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -101,7 +101,6 @@ namespace aspect
             const double slice_depth = (depth*n_slices)/max_depth + 0.5;
             const unsigned int idx = static_cast<unsigned int>(slice_depth);
             const double fractional_slice = slice_depth - static_cast<double>(idx);
-            Assert(idx>=0, ExcInternalError());
             Assert(idx<n_slices+1, ExcInternalError());
             const double depth_average_temperature= (1. - fractional_slice)*padded_temperature_depth_average[idx] + fractional_slice*padded_temperature_depth_average[idx+1];
             computed_quantities[q](0) = temperature - depth_average_temperature;
@@ -124,12 +123,12 @@ namespace aspect
                                  "average temperature.");
               prm.declare_entry ("Use maximal temperature for bottom","true",
                                  Patterns::Bool(),
-                                 "If true, use the specified boundary temepratures as average temperatures at the surface. "
+                                 "If true, use the specified boundary temperatures as average temperatures at the surface. "
                                  "If false, extrapolate the temperature gradient between the first and second cells to the surface. "
                                  "This option will only work for models with a fixed surface temperature. ");
               prm.declare_entry ("Use minimal temperature for surface","true",
                                  Patterns::Bool(),
-                                 "Whether to use the minimal speficied boundary temperature as the bottom boundary temperature. "
+                                 "Whether to use the minimal specified boundary temperature as the bottom boundary temperature. "
                                  "This option will only work for models with a fixed bottom boundary temperature. ");
 
             }

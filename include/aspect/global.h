@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,19 +22,11 @@
 #ifndef _aspect_global_h
 #define _aspect_global_h
 
+#include <aspect/config.h>
+
 #include <deal.II/base/mpi.h>
 
 DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
-
-#ifdef ASPECT_USE_PETSC
-#  include <deal.II/lac/petsc_parallel_block_vector.h>
-#  include <deal.II/lac/petsc_parallel_block_sparse_matrix.h>
-#  include <deal.II/lac/petsc_precondition.h>
-#else
-#  include <deal.II/lac/trilinos_parallel_block_vector.h>
-#  include <deal.II/lac/trilinos_block_sparse_matrix.h>
-#  include <deal.II/lac/trilinos_precondition.h>
-#endif
 
 #include <deal.II/lac/generic_linear_algebra.h>
 
@@ -57,25 +49,25 @@ namespace aspect
     /**
      * Number of seconds in a year [s]
      */
-    extern const double year_in_seconds;
+    constexpr double year_in_seconds = 60*60*24*365.2425;
 
     /**
      * Zero degrees Celsius to Kelvin [K]
      */
-    extern const double celsius_to_kelvin;
+    constexpr double celsius_to_kelvin = 273.15;
 
     /**
      * Gas constant (also known as R) [J K^-1 mol^-1]
      */
-    extern const double gas_constant;
+    constexpr double gas_constant = 8.3144621;
     /**
      * Avogadro's constant [mol^-1]
      */
-    extern const double avogadro;
+    constexpr double avogadro = 6.02214129e23;
     /**
      * Gravitational constant [m^3 kg^-1 s^-2]
      */
-    extern const double big_g;
+    constexpr double big_g = 6.67384e-11;
 
     /**
      * Constants for Earth:
@@ -91,94 +83,93 @@ namespace aspect
         /**
          * Planet mass [kg]
          */
-        extern const double planet;
+        constexpr double planet = 5.9736e24;
         /**
          * Mass of the whole core [kg]
          */
-        extern const double core;
+        constexpr double core = 1.932e24;
         /**
          * Mass of the mantle [kg]
          */
-        extern const double mantle;
+        constexpr double mantle = 4.043e24;
       }
 
       /**
-       * Earth structure radii taken from the IASP91 model:
+       * Earth structure radii taken from the IASP91 model
        */
       namespace iasp91_radii
       {
         /**
          * Inner core radius [m], equivalent of 5150 km depth
          */
-        extern const double inner_core;
+        constexpr double inner_core = 1.2171e6;
         /**
          * Inner core radius [m], equivalent of 2889 km depth
          */
-        extern const double core;
+        constexpr double core = 3.482e6;
         /**
          * Lower mantle radius [m], equivalent of 660 km depth
          */
-        extern const double lower_mantle;
+        constexpr double lower_mantle = 5.711e6;
         /**
          * Radius [m], equivalent of 5150 km depth
          */
-        extern const double planet;
+        constexpr double planet = 6.371e6;
       }
 
       /**
-       * Gravity values taken from the PREM (Dziewonski and Anderson, 1981):
+       * Gravity values taken from the PREM (Dziewonski and Anderson, 1981)
        */
       namespace prem_gravity
       {
         /**
          * Inner core boundary gravity [ms^-2]
          */
-        extern const double icb;
+        constexpr double icb = 4.4002;
         /**
          * Core-mantle boundary gravity [ms^-2]
          */
-        extern const double cmb;
+        constexpr double cmb = 10.6823;
         /**
          * Upper-lower mantle boundary gravity [ms^-2]
          */
-        extern const double ulmb;
+        constexpr double ulmb = 10.0143;
         /**
          * Surface gravity [ms^-2]
          */
-        extern const double surface;
+        constexpr double surface = 9.8156;
       }
 
       /**
-       * "Standard gravity" (average gravitational acceleration at surface
+       * NIST "Standard gravity" (average gravitational acceleration at surface
        * [ms^-2]
        */
-      extern const double surface_gravity;
+      constexpr double surface_gravity = 9.80665;
     }
 
     /**
-     * Constants for Mars:
+     * Constants for Mars
      */
     namespace mars
     {
-
       /**
        * Mars structure radii
        */
       namespace radii
       {
         /**
-         * Planetary radius [m]
+         * Planetary radius from Seidermann et al., 2007 [m]
          */
-        extern const double planet;
+        constexpr double planet = 3.3895e6;
         /**
-         * Core radius [m]
+         * Core radius from Rivoldini et al., 2011 [m]
          */
-        extern const double core;
+        constexpr double core = 1.794e6;
       }
       /**
-       * Surface gravity [ms^-2]
+       * Surface gravity from Lodders et al., 1998 [ms^-2]
        */
-      extern const double surface_gravity;
+      constexpr double surface_gravity = 3.711;
     }
   }
 
@@ -193,14 +184,14 @@ namespace aspect
    * serialization. The type chosen here is a binary archive which we
    * subsequently will have to un-compress.
    */
-  typedef boost::archive::binary_iarchive iarchive;
+  using iarchive = boost::archive::binary_iarchive;
 
   /**
    * A typedef that denotes the BOOST stream type for writing data during
    * serialization. The type chosen here is a binary archive which we compress
    * before writing it into a file.
    */
-  typedef boost::archive::binary_oarchive oarchive;
+  using oarchive = boost::archive::binary_oarchive;
 
   /**
    * A class we throw in exceptions in parallel jobs and that we can silently
@@ -226,125 +217,125 @@ namespace aspect
     /**
      * Typedef for the vector type used.
      */
-    typedef dealii::PETScWrappers::MPI::Vector Vector;
+    using Vector = dealii::PETScWrappers::MPI::Vector;
 
     /**
      * Typedef for the type used to describe vectors that consist of multiple
      * blocks.
      */
-    typedef dealii::PETScWrappers::MPI::BlockVector BlockVector;
+    using BlockVector = dealii::PETScWrappers::MPI::BlockVector;
 
     /**
      * Typedef for the sparse matrix type used.
      */
-    typedef dealii::PETScWrappers::MPI::SparseMatrix SparseMatrix;
+    using SparseMatrix = dealii::PETScWrappers::MPI::SparseMatrix;
 
     /**
      * Typedef for the type used to describe sparse matrices that consist of
      * multiple blocks.
      */
-    typedef dealii::PETScWrappers::MPI::BlockSparseMatrix BlockSparseMatrix;
+    using BlockSparseMatrix = dealii::PETScWrappers::MPI::BlockSparseMatrix;
 
     /**
      * Typedef for the base class for all preconditioners.
      */
-    typedef dealii::PETScWrappers::PreconditionerBase PreconditionBase;
+    using PreconditionBase = dealii::PETScWrappers::PreconditionerBase;
 
     /**
      * Typedef for the AMG preconditioner type used for the top left block of
      * the Stokes matrix.
      */
-    typedef dealii::PETScWrappers::PreconditionBoomerAMG PreconditionAMG;
+    using PreconditionAMG = dealii::PETScWrappers::PreconditionBoomerAMG;
 
     /**
      * Typedef for the Incomplete Cholesky preconditioner used for other
      * blocks of the system matrix.
      */
-    typedef dealii::PETScWrappers::PreconditionICC PreconditionIC;
+    using PreconditionIC = dealii::PETScWrappers::PreconditionICC;
 
     /**
      * Typedef for the Incomplete LU decomposition preconditioner used for
      * other blocks of the system matrix. Note that PETSc does not support a
      * communicating ILU, so we use Jacobi here.
      */
-    typedef dealii::PETScWrappers::PreconditionBlockJacobi PreconditionILU;
+    using PreconditionILU = dealii::PETScWrappers::PreconditionBlockJacobi;
 
     /**
      * Typedef for the Jacobi preconditioner used for free surface velocity
      * projection.
      */
-    typedef dealii::PETScWrappers::PreconditionJacobi PreconditionJacobi;
+    using PreconditionJacobi = dealii::PETScWrappers::PreconditionJacobi;
 
     /**
      * Typedef for the block compressed sparsity pattern type.
      */
-    typedef dealii::BlockDynamicSparsityPattern BlockDynamicSparsityPattern;
+    using BlockDynamicSparsityPattern = dealii::BlockDynamicSparsityPattern;
 
     /**
      * Typedef for the compressed sparsity pattern type.
      */
-    typedef dealii::DynamicSparsityPattern DynamicSparsityPattern;
+    using DynamicSparsityPattern = dealii::DynamicSparsityPattern;
 #else
     /**
      * Typedef for the vector type used.
      */
-    typedef dealii::TrilinosWrappers::MPI::Vector Vector;
+    using Vector = dealii::TrilinosWrappers::MPI::Vector;
 
     /**
      * Typedef for the type used to describe vectors that consist of multiple
      * blocks.
      */
-    typedef dealii::TrilinosWrappers::MPI::BlockVector BlockVector;
+    using BlockVector = dealii::TrilinosWrappers::MPI::BlockVector;
 
     /**
      * Typedef for the sparse matrix type used.
      */
-    typedef dealii::TrilinosWrappers::SparseMatrix SparseMatrix;
+    using SparseMatrix = dealii::TrilinosWrappers::SparseMatrix;
 
     /**
      * Typedef for the type used to describe sparse matrices that consist of
      * multiple blocks.
      */
-    typedef dealii::TrilinosWrappers::BlockSparseMatrix BlockSparseMatrix;
+    using BlockSparseMatrix = dealii::TrilinosWrappers::BlockSparseMatrix;
 
     /**
      * Typedef for the base class for all preconditioners.
      */
-    typedef dealii::TrilinosWrappers::PreconditionBase PreconditionBase;
+    using PreconditionBase = dealii::TrilinosWrappers::PreconditionBase;
 
     /**
      * Typedef for the AMG preconditioner type used for the top left block of
      * the Stokes matrix.
      */
-    typedef dealii::TrilinosWrappers::PreconditionAMG PreconditionAMG;
+    using PreconditionAMG = dealii::TrilinosWrappers::PreconditionAMG;
 
     /**
      * Typedef for the Incomplete Cholesky preconditioner used for other
      * blocks of the system matrix.
      */
-    typedef dealii::TrilinosWrappers::PreconditionIC PreconditionIC;
+    using PreconditionIC = dealii::TrilinosWrappers::PreconditionIC;
 
     /**
      * Typedef for the Incomplete LU decomposition preconditioner used for
      * other blocks of the system matrix.
      */
-    typedef dealii::TrilinosWrappers::PreconditionILU PreconditionILU;
+    using PreconditionILU = dealii::TrilinosWrappers::PreconditionILU;
 
     /**
      * Typedef for the Jacobi preconditioner used for free surface velocity
      * projection.
      */
-    typedef dealii::TrilinosWrappers::PreconditionJacobi PreconditionJacobi;
+    using PreconditionJacobi = dealii::TrilinosWrappers::PreconditionJacobi;
 
     /**
      * Typedef for the block compressed sparsity pattern type.
      */
-    typedef dealii::TrilinosWrappers::BlockSparsityPattern BlockDynamicSparsityPattern;
+    using BlockDynamicSparsityPattern = dealii::TrilinosWrappers::BlockSparsityPattern;
 
     /**
      * Typedef for the compressed sparsity pattern type.
      */
-    typedef dealii::TrilinosWrappers::SparsityPattern DynamicSparsityPattern;
+    using DynamicSparsityPattern = dealii::TrilinosWrappers::SparsityPattern;
 #endif
   }
 }

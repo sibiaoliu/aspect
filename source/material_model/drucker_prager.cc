@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -41,14 +41,14 @@ namespace aspect
 
       EquationOfStateOutputs<dim> eos_outputs (1);
 
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           // To avoid negative yield strengths and eventually viscosities,
           // we make sure the pressure is not negative
           const double pressure=std::max(in.pressure[i],0.0);
 
           // calculate effective viscosity
-          if (in.strain_rate.size() > 0)
+          if (in.requests_property(MaterialProperties::viscosity))
             {
               const SymmetricTensor<2,dim> strain_rate_deviator = deviator(in.strain_rate[i]);
 
@@ -105,11 +105,13 @@ namespace aspect
               else
                 {
                   // plasticity
-                  const MaterialUtilities::DruckerPragerInputs plastic_in(cohesion, angle_of_internal_friction, pressure, std::sqrt(strain_rate_effective));
-                  MaterialUtilities::DruckerPragerOutputs plastic_out;
-                  MaterialUtilities::compute_drucker_prager_yielding<dim> (plastic_in, plastic_out);
+                  const double eta_plastic = drucker_prager_plasticity.compute_viscosity(cohesion,
+                                                                                         angle_of_internal_friction,
+                                                                                         pressure,
+                                                                                         std::sqrt(strain_rate_effective),
+                                                                                         std::numeric_limits<double>::infinity());
 
-                  const double eta_plastic = plastic_out.plastic_viscosity;
+                  const double viscosity_pressure_derivative = drucker_prager_plasticity.compute_derivative(angle_of_internal_friction,std::sqrt(strain_rate_effective));
 
                   // Cut off the viscosity between a minimum and maximum value to avoid
                   // a numerically unfavourable large viscosity range.
@@ -128,7 +130,7 @@ namespace aspect
                                                       / ((eta_plastic + minimum_viscosity + maximum_viscosity) * (eta_plastic + minimum_viscosity + maximum_viscosity));
                       const SymmetricTensor<2,dim> effective_viscosity_strain_rate_derivatives
                         = -0.5 * averaging_factor * (eta_plastic / edot_ii_strict) * strain_rate_deviator;
-                      const double effective_viscosity_pressure_derivatives = averaging_factor * plastic_out.viscosity_pressure_derivative;
+                      const double effective_viscosity_pressure_derivatives = averaging_factor * viscosity_pressure_derivative;
 
                       derivatives->viscosity_derivative_wrt_strain_rate[i] = deviator_tensor<dim>() * effective_viscosity_strain_rate_derivatives;
 
@@ -192,12 +194,12 @@ namespace aspect
         {
           EquationOfState::LinearizedIncompressible<dim>::declare_parameters (prm);
 
-          prm.declare_entry ("Reference temperature", "293",
-                             Patterns::Double (0),
+          prm.declare_entry ("Reference temperature", "293.",
+                             Patterns::Double (0.),
                              "The reference temperature $T_0$. The reference temperature is used "
-                             "in the density calculation. Units: $\\si{K}$.");
+                             "in the density calculation. Units: \\si{\\kelvin}.");
           prm.declare_entry ("Reference viscosity", "1e22",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The reference viscosity that is used for pressure scaling. "
                              "To understand how pressure scaling works, take a look at "
                              "\\cite{KHB12}. In particular, the value of this parameter "
@@ -217,32 +219,33 @@ namespace aspect
                              "magnitude of the viscosities that appear, such as an average "
                              "value or the value one would use to compute a Rayleigh number."
                              "\n\n"
-                             "Units: $Pa \\, s$");
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Thermal conductivity", "4.7",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the thermal conductivity $k$. "
-                             "Units: $W/m/K$.");
+                             "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
           prm.enter_subsection ("Viscosity");
           {
+
             prm.declare_entry ("Minimum viscosity", "1e19",
-                               Patterns::Double (0),
-                               "The value of the minimum viscosity cutoff $\\eta_min$. Units: $Pa\\;s$.");
+                               Patterns::Double (0.),
+                               "The value of the minimum viscosity cutoff $\\eta_min$. Units: \\si{\\pascal\\second}.");
             prm.declare_entry ("Maximum viscosity", "1e24",
-                               Patterns::Double (0),
-                               "The value of the maximum viscosity cutoff $\\eta_max$. Units: $Pa\\;s$.");
+                               Patterns::Double (0.),
+                               "The value of the maximum viscosity cutoff $\\eta_max$. Units: \\si{\\pascal\\second}.");
             prm.declare_entry ("Reference strain rate", "1e-15",
-                               Patterns::Double (0),
+                               Patterns::Double (0.),
                                "The value of the initial strain rate prescribed during the "
-                               "first nonlinear iteration $\\dot{\\epsilon}_ref$. Units: $1/s$.");
-            prm.declare_entry ("Angle of internal friction", "0",
-                               Patterns::Double (0),
+                               "first nonlinear iteration $\\dot{\\epsilon}_ref$. Units: \\si{\\per\\second}.");
+            prm.declare_entry ("Angle of internal friction", "0.",
+                               Patterns::Double (0.),
                                "The value of the angle of internal friction $\\phi$. "
                                "For a value of zero, in 2D the von Mises "
                                "criterion is retrieved. Angles higher than 30 degrees are "
                                "harder to solve numerically. Units: degrees.");
             prm.declare_entry ("Cohesion", "2e7",
-                               Patterns::Double (0),
-                               "The value of the cohesion $C$. Units: $Pa$.");
+                               Patterns::Double (0.),
+                               "The value of the cohesion $C$. Units: \\si{\\pascal}.");
           }
           prm.leave_subsection();
         }

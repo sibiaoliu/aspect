@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -403,15 +403,15 @@ namespace aspect
                             "the missing corner value will be calculated so all faces are parallel.");
           prm.declare_entry("Depth",
                             "500000.0",
-                            Patterns::Double(0),
+                            Patterns::Double(0.),
                             "Bottom depth of model region.");
           prm.declare_entry("Semi-major axis",
                             "6378137.0",
-                            Patterns::Double(0),
+                            Patterns::Double(0.),
                             "The semi-major axis (a) of an ellipsoid. This is the radius for a sphere (eccentricity=0). Default WGS84 semi-major axis.");
           prm.declare_entry("Eccentricity",
                             "8.1819190842622e-2",
-                            Patterns::Double(0),
+                            Patterns::Double(0.),
                             "Eccentricity of the ellipsoid. Zero is a perfect sphere, default (8.1819190842622e-2) is WGS84.");
           prm.declare_entry("East-West subdivisions",
                             "1",
@@ -643,7 +643,7 @@ namespace aspect
     double
     EllipsoidalChunk<dim>::depth(const Point<dim> &position) const
     {
-      return std::max(std::min(-manifold.pull_back(position)[2], maximal_depth()), 0.0);
+      return std::max(std::min(-manifold.pull_back(position)[dim-1], maximal_depth()), 0.0);
     }
 
     template <int dim>
@@ -769,10 +769,16 @@ namespace aspect
       Assert(dim == 3,ExcMessage("This geometry model doesn't support 2d."));
       // the chunk manifold works internally with a vector with longitude, latitude, depth.
       // We need to output radius, longitude, latitude to be consistent.
+      // Ignore the topography by calling pull_back_ellipsoid to avoid a loop when calling the
+      // AsciiDataBoundary for topography which uses this function....
+      Point<3> cartesian_point;
+      for (unsigned int d=0; d<dim; ++d)
+        cartesian_point[d] = position_point[d];
 
-      Point<dim> transformed_point = manifold.pull_back(position_point);
+      Point<3> transformed_point = manifold.pull_back_ellipsoid(cartesian_point, semi_major_axis_a, eccentricity);
 
-      const double radius = get_radius(position_point);
+      const double radius =  semi_major_axis_a /
+                             (std::sqrt(1 - eccentricity * eccentricity * std::sin(transformed_point[1]) * std::sin(transformed_point[1])));
       std::array<double,dim> position_array;
       position_array[0] = radius + transformed_point(2);
       position_array[1] = transformed_point(0);
@@ -795,7 +801,9 @@ namespace aspect
     EllipsoidalChunk<3>::natural_to_cartesian_coordinates(const std::array<double,3> &position_tensor) const
     {
       // We receive radius, longitude, latitude and we need to turn it first back into
-      // longitude, latitude, depth for internal use, and push_forward to cartesian coordiantes.
+      // longitude, latitude, depth for internal use, and push_forward to cartesian coordinates.
+      // Ignore the topography by calling push_forward_ellipsoid to avoid a loop when calling the
+      // AsciiDataBoundary for topography which uses this function....
       Point<3> position_point;
       position_point(0) = position_tensor[1];
       position_point(1) = position_tensor[2];
@@ -803,7 +811,7 @@ namespace aspect
       const double radius = semi_major_axis_a / (std::sqrt(1 - eccentricity * eccentricity * std::sin(position_point(1)) * std::sin(position_point(1))));
       position_point(2) = position_tensor[0] - radius;
 
-      Point<3> transformed_point = manifold.push_forward(position_point);
+      Point<3> transformed_point = manifold.push_forward_ellipsoid(position_point, semi_major_axis_a, eccentricity);
       return transformed_point;
     }
 
@@ -813,7 +821,7 @@ namespace aspect
     EllipsoidalChunk<2>::natural_to_cartesian_coordinates(const std::array<double,2> &/*position_tensor*/) const
     {
       Assert(false, ExcMessage("This geometry model doesn't support 2d."));
-      return Point<2>();
+      return {};
     }
 
   }

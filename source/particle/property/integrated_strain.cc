@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -38,12 +38,13 @@ namespace aspect
 
       template <int dim>
       void
-      IntegratedStrain<dim>::update_one_particle_property(const unsigned int data_position,
-                                                          const Point<dim> &,
-                                                          const Vector<double> &,
-                                                          const std::vector<Tensor<1,dim> > &gradients,
-                                                          const ArrayView<double> &data) const
+      IntegratedStrain<dim>::update_particle_property(const unsigned int data_position,
+                                                      const Vector<double> &/*solution*/,
+                                                      const std::vector<Tensor<1,dim> > &gradients,
+                                                      typename ParticleHandler<dim>::particle_iterator &particle) const
       {
+        auto &data = particle->get_properties();
+
         Tensor<2,dim> old_strain;
         for (unsigned int i = 0; i < Tensor<2,dim>::n_independent_components ; ++i)
           old_strain[Tensor<2,dim>::unrolled_to_component_indices(i)] = data[data_position + i];
@@ -123,4 +124,3 @@ namespace aspect
     }
   }
 }
-

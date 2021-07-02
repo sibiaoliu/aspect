@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -173,33 +173,12 @@ namespace aspect
         }
     }
 
-    template <>
+
+
+    template <int dim>
     double
-    S40RTSPerturbation<2>::
-    initial_temperature (const Point<2> &) const
-    {
-      // we shouldn't get here but instead should already have been
-      // kicked out by the assertion in the parse_parameters()
-      // function
-      Assert (false, ExcNotImplemented());
-      return 0;
-    }
-
-
-    template <>
-    double
-    S40RTSPerturbation<2>::
-    get_Vs (const Point<2> &/*position*/) const
-    {
-      Assert (false, ExcNotImplemented());
-      return 0;
-    }
-
-
-    template <>
-    double
-    S40RTSPerturbation<3>::
-    get_Vs (const Point<3> &position) const
+    S40RTSPerturbation<dim>::
+    get_Vs (const Point<dim> &position) const
     {
       // get the degree from the input file (20 or 40)
       unsigned int max_degree = spherical_harmonics_lookup->maxdegree();
@@ -215,41 +194,45 @@ namespace aspect
       const unsigned int num_spline_knots = 21;
 
       // get the spherical harmonics coefficients
-      const std::vector<double> a_lm = spherical_harmonics_lookup->cos_coeffs();
-      const std::vector<double> b_lm = spherical_harmonics_lookup->sin_coeffs();
+      const std::vector<double> &a_lm = spherical_harmonics_lookup->cos_coeffs();
+      const std::vector<double> &b_lm = spherical_harmonics_lookup->sin_coeffs();
 
       // get spline knots and rescale them from [-1 1] to [CMB Moho]
-      const std::vector<double> r = spline_depths_lookup->spline_depths();
+      const std::vector<double> &r = spline_depths_lookup->spline_depths();
       const double rmoho = 6346e3;
       const double rcmb = 3480e3;
-      std::vector<double> depth_values(num_spline_knots,0);
+      std::vector<double> depth_values(num_spline_knots, 0);
 
       for (unsigned int i = 0; i<num_spline_knots; ++i)
-        depth_values[i] = rcmb+(rmoho-rcmb)*0.5*(r[i]+1);
+        depth_values[i] = rcmb+(rmoho-rcmb)*0.5*(r[i]+1.);
 
       // convert coordinates from [x,y,z] to [r, phi, theta]
-      std::array<double,3> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(position);
+      std::array<double,dim> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(position);
 
       // Evaluate the spherical harmonics at this position. Since they are the
       // same for all depth splines, do it once to avoid multiple evaluations.
       // NOTE: there is apparently a factor of sqrt(2) difference
       // between the standard orthonormalized spherical harmonics
       // and those used for S40RTS (see PR # 966)
-      std::vector<std::vector<double> > cosine_components(max_degree+1,std::vector<double>(max_degree+1,0.0));
-      std::vector<std::vector<double> > sine_components(max_degree+1,std::vector<double>(max_degree+1,0.0));
+      std::vector<std::vector<double> > cosine_components(max_degree+1, std::vector<double>(max_degree+1, 0.0));
+      std::vector<std::vector<double> > sine_components(max_degree+1, std::vector<double>(max_degree+1, 0.0));
 
       for (unsigned int degree_l = 0; degree_l < max_degree+1; ++degree_l)
         {
           for (unsigned int order_m = 0; order_m < degree_l+1; ++order_m)
             {
-              const std::pair<double,double> sph_harm_vals = Utilities::real_spherical_harmonic(degree_l, order_m, scoord[2], scoord[1]);
+              const double phi = scoord[1];
+              const double theta = (dim == 3) ? scoord[2] : numbers::PI_2;
+              const std::pair<double,double> sph_harm_vals =
+                Utilities::real_spherical_harmonic(degree_l, order_m, theta, phi);
+
               cosine_components[degree_l][order_m] = sph_harm_vals.first;
               sine_components[degree_l][order_m] = sph_harm_vals.second;
             }
         }
 
       // iterate over all degrees and orders at each depth and sum them all up.
-      std::vector<double> spline_values(num_spline_knots,0);
+      std::vector<double> spline_values(num_spline_knots, 0.);
       double prefact;
       unsigned int ind = 0;
 
@@ -268,7 +251,8 @@ namespace aspect
                   else if (order_m != 0)
                     // this removes the sqrt(2) factor difference in normalization (see PR # 966)
                     prefact = 1./sqrt(2.);
-                  else prefact = 1.0;
+                  else
+                    prefact = 1.0;
 
                   spline_values[depth_interp] += prefact * (a_lm[ind] * cosine_components[degree_l][order_m]
                                                             + b_lm[ind] * sine_components[degree_l][order_m]);
@@ -289,17 +273,17 @@ namespace aspect
       // at the boundary (i.e. Moho and CMB). Values outside the range are linearly
       // extrapolated.
       aspect::Utilities::tk::spline s;
-      s.set_points(depth_values,spline_values_inv);
+      s.set_points(depth_values, spline_values_inv);
 
       // Return value of Vs perturbation at specific depth
       return s(scoord[0]);
     }
 
 
-    template <>
+    template <int dim>
     double
-    S40RTSPerturbation<3>::
-    initial_temperature (const Point<3> &position) const
+    S40RTSPerturbation<dim>::
+    initial_temperature (const Point<dim> &position) const
     {
 
       // use either the user-input reference temperature as background temperature
@@ -337,12 +321,12 @@ namespace aspect
           // see if we need to ask material model for the thermal expansion coefficient
           if (use_material_model_thermal_alpha)
             {
-              MaterialModel::MaterialModelInputs<3> in(1, this->n_compositional_fields());
-              MaterialModel::MaterialModelOutputs<3> out(1, this->n_compositional_fields());
+              MaterialModel::MaterialModelInputs<dim> in(1, this->n_compositional_fields());
+              MaterialModel::MaterialModelOutputs<dim> out(1, this->n_compositional_fields());
               in.position[0] = position;
               in.temperature[0] = background_temperature;
               in.pressure[0] = this->get_adiabatic_conditions().pressure(position);
-              in.velocity[0] = Tensor<1,3> ();
+              in.velocity[0] = Tensor<1,dim> ();
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 in.composition[0][c] = this->get_initial_composition_manager().initial_composition(position, c);
               in.strain_rate.resize(0);
@@ -387,14 +371,14 @@ namespace aspect
                              "Method that is used to specify how the vs-to-density scaling varies "
                              "with depth.");
           prm.declare_entry ("Vs to density scaling", "0.25",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "This parameter specifies how the perturbation in shear wave velocity "
                              "as prescribed by S20RTS or S40RTS is scaled into a density perturbation. "
                              "See the general description of this model for more detailed information.");
           prm.declare_entry ("Thermal expansion coefficient in initial temperature scaling", "2e-5",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the thermal expansion coefficient $\\beta$. "
-                             "Units: $1/K$.");
+                             "Units: \\si{\\per\\kelvin}.");
           prm.declare_entry ("Use thermal expansion coefficient from material model", "false",
                              Patterns::Bool (),
                              "Option to take the thermal expansion coefficient from the "
@@ -406,10 +390,11 @@ namespace aspect
                              "which will ensure that the laterally averaged temperature for a fixed "
                              "depth is equal to the background temperature.");
           prm.declare_entry ("Reference temperature", "1600.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The reference temperature that is perturbed by the spherical "
                              "harmonic functions. Only used in incompressible models.");
-          prm.declare_entry ("Remove temperature heterogeneity down to specified depth", boost::lexical_cast<std::string>(-std::numeric_limits<double>::max()),
+          prm.declare_entry ("Remove temperature heterogeneity down to specified depth",
+                             boost::lexical_cast<std::string>(-std::numeric_limits<double>::max()),
                              Patterns::Double (),
                              "This will set the heterogeneity prescribed by S20RTS or S40RTS to zero "
                              "down to the specified depth (in meters). Note that your resolution has "
@@ -443,10 +428,6 @@ namespace aspect
     void
     S40RTSPerturbation<dim>::parse_parameters (ParameterHandler &prm)
     {
-      AssertThrow (dim == 3,
-                   ExcMessage ("The 'S40RTS perturbation' model for the initial "
-                               "temperature is only available for 3d computations."));
-
       prm.enter_subsection ("Initial temperature model");
       {
         prm.enter_subsection("S40RTS perturbation");
@@ -480,8 +461,6 @@ namespace aspect
         prm.leave_subsection ();
       }
       prm.leave_subsection ();
-
-      initialize ();
     }
   }
 }
@@ -507,10 +486,10 @@ namespace aspect
                                               "'Vs to density scaling' parameter or depth-dependent and "
                                               "read in from a file. To convert density the user can specify "
                                               "the 'Thermal expansion coefficient in initial temperature scaling' "
-                                              "parameter. The scaling is as follows: $\\delta ln \\rho "
-                                              "(r,\\theta,\\phi) = \\xi \\cdot \\delta ln v_s(r,\\theta, "
+                                              "parameter. The scaling is as follows: $\\delta \\ln \\rho "
+                                              "(r,\\theta,\\phi) = \\xi \\cdot \\delta \\ln v_s(r,\\theta, "
                                               "\\phi)$ and $\\delta T(r,\\theta,\\phi) = - \\frac{1}{\\alpha} "
-                                              "\\delta ln \\rho(r,\\theta,\\phi)$. $\\xi$ is the `vs to "
+                                              "\\delta \\ln \\rho(r,\\theta,\\phi)$. $\\xi$ is the `vs to "
                                               "density scaling' parameter and $\\alpha$ is the 'Thermal "
                                               "expansion coefficient in initial temperature scaling' "
                                               "parameter. The temperature perturbation is added to an "
@@ -537,6 +516,9 @@ namespace aspect
                                               "depth range will be assigned the maximum or minimum depth values, "
                                               "respectively. Points do not need to be equidistant, "
                                               "but the computation of properties is optimized in speed "
-                                              "if they are.")
+                                              "if they are."
+                                              "\n"
+                                              "If the plugin is used in 2D it will use an equatorial "
+                                              "slice of the seismic tomography model.")
   }
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -732,7 +732,11 @@ namespace aspect
       if (!neighbor->has_children())
         {
           if (neighbor->level () == cell->level () &&
+#if DEAL_II_VERSION_GTE(9,2,0)
+              neighbor->is_active() &&
+#else
               neighbor->active() &&
+#endif
               (((neighbor->is_locally_owned()) && (cell->index() < neighbor->index()))
                ||
                ((!neighbor->is_locally_owned()) && (cell->subdomain_id() < neighbor->subdomain_id()))))
@@ -1063,7 +1067,7 @@ namespace aspect
           // the children of the periodic neighbor's corresponding face since we know that the letter does indeed have
           // children (because we know that the neighbor is refined).
           typename DoFHandler<dim>::face_iterator neighbor_face=neighbor->face(neighbor2);
-          for (unsigned int subface_no=0; subface_no<neighbor_face->number_of_children(); ++subface_no)
+          for (unsigned int subface_no=0; subface_no<neighbor_face->n_children(); ++subface_no)
             {
               const typename DoFHandler<dim>::active_cell_iterator neighbor_child
                 = ( cell_has_periodic_neighbor
@@ -1412,5 +1416,7 @@ namespace aspect
   template class AdvectionSystemBoundaryHeatFlux<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -108,11 +108,11 @@ namespace aspect
       {
         prm.enter_subsection("Latent heat melt");
         {
-          prm.declare_entry ("Melting entropy change", "-300",
+          prm.declare_entry ("Melting entropy change", "-300.",
                              Patterns::Double (),
                              "The entropy change for the phase transition "
                              "from solid to melt. "
-                             "Units: $J/(kg K)$.");
+                             "Units: \\si{\\joule\\per\\kelvin\\per\\kilogram}.");
         }
         prm.leave_subsection();
       }

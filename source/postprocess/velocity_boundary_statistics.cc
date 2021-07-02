@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -56,12 +56,10 @@ namespace aspect
       const std::set<types::boundary_id>
       boundary_indicators
         = this->get_geometry_model().get_used_boundary_indicators ();
-      for (std::set<types::boundary_id>::const_iterator
-           p = boundary_indicators.begin();
-           p != boundary_indicators.end(); ++p)
+      for (const auto p : boundary_indicators)
         {
-          local_max_vel[*p] = -std::numeric_limits<double>::max();
-          local_min_vel[*p] = std::numeric_limits<double>::max();
+          local_max_vel[p] = -std::numeric_limits<double>::max();
+          local_min_vel[p] = std::numeric_limits<double>::max();
         }
 
       // for every surface face that is part of a geometry boundary
@@ -119,15 +117,13 @@ namespace aspect
         std::vector<double> local_velocity_square_integral_values;
         std::vector<double> local_boundary_area_values;
 
-        for (std::set<types::boundary_id>::const_iterator
-             p = boundary_indicators.begin();
-             p != boundary_indicators.end(); ++p)
+        for (const auto p : boundary_indicators)
           {
-            local_max_values.push_back (local_max_vel[*p]);
-            local_min_values.push_back (local_min_vel[*p]);
+            local_max_values.push_back (local_max_vel[p]);
+            local_min_values.push_back (local_min_vel[p]);
 
-            local_velocity_square_integral_values.push_back (local_velocity_square_integral[*p]);
-            local_boundary_area_values.push_back (local_boundary_area[*p]);
+            local_velocity_square_integral_values.push_back (local_velocity_square_integral[p]);
+            local_boundary_area_values.push_back (local_boundary_area[p]);
           }
         // then collect contributions from all processors
         std::vector<double> global_max_values (local_max_values.size());
@@ -182,7 +178,7 @@ namespace aspect
                                                                                          .translate_id_to_symbol_name (rms->first))
                                            + " (m/yr)";
               statistics.add_value (name_rms, rms->second*year_in_seconds);
-              // also make sure that the other columns filled by the this object
+              // also make sure that the other columns filled by this object
               // all show up with sufficient accuracy and in scientific notation
               statistics.set_precision (name_max, 8);
               statistics.set_scientific (name_max, true);

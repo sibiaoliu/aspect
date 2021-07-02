@@ -1,0 +1,36 @@
+###
+#
+#  ASPECT configuration:
+#        ASPECT_VERSION:            2.4.0-pre
+#        GIT REVISION:              6ab11e12f (master)
+#        CMAKE_BUILD_TYPE:          Debug
+#
+#        DEAL_II_DIR:               /Applications/deal.II.app/Contents/Resources/Libraries/lib/cmake/deal.II
+#        DEAL_II VERSION:           9.3.0
+#        ASPECT_USE_PETSC:          OFF
+#        ASPECT_USE_FP_EXCEPTIONS:  OFF
+#        ASPECT_RUN_ALL_TESTS:      OFF
+#        ASPECT_USE_SHARED_LIBS:    ON
+#        ASPECT_HAVE_LINK_H:        OFF
+#        ASPECT_WITH_LIBDAP:        OFF
+#        ASPECT_WITH_WORLD_BUILDER: ON /Users/sliu/GoogleDrive/1_Research/Aspect/aspect_July21/contrib/world_builder
+#        ASPECT_PRECOMPILE_HEADERS: ON
+#        ASPECT_UNITY_BUILD:        ON
+#
+#        CMAKE_INSTALL_PREFIX:      /usr/local
+#        CMAKE_SOURCE_DIR:          /Users/sliu/GoogleDrive/1_Research/Aspect/aspect_July21
+#        CMAKE_BINARY_DIR:          /Users/sliu/GoogleDrive/1_Research/Aspect/aspect_July21/ASPECT_build
+#        CMAKE_CXX_COMPILER:        Clang 12.0.5.12050022 on platform Darwin x86_64
+#                                   /Applications/deal.II.app/Contents/Resources/spack/opt/spack/openmpi-4.0.5-yh6r/bin/mpic++
+#        PARAMETER_GUI_EXECUTABLE:  PARAMETER_GUI_EXECUTABLE-NOTFOUND
+#
+#        LINKAGE:                   DYNAMIC
+#
+#        COMPILE_FLAGS:             
+#
+#        _WITH_CXX14:               ON
+#        _WITH_CXX17:               FALSE
+#        _MPI_VERSION:              3.1
+#        _WITH_64BIT_INDICES:       OFF
+#
+###

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -144,7 +144,7 @@ namespace aspect
                   this->get_timestep_number() == 0,
                   ExcMessage("After displacement of the mesh, this function can no longer be used to determine whether a point lies in the domain or not."));
 
-      AssertThrow(dynamic_cast<const InitialTopographyModel::ZeroTopography<dim>*>(&this->get_initial_topography_model()) != nullptr,
+      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
                   ExcMessage("After adding topography, this function can no longer be used to determine whether a point lies in the domain or not."));
 
       const double radius = point.norm();
@@ -192,9 +192,9 @@ namespace aspect
       {
         prm.enter_subsection("Sphere");
         {
-          prm.declare_entry ("Radius", "6371000",
-                             Patterns::Double (0),
-                             "Radius of the sphere. Units: $\\si{m}$.");
+          prm.declare_entry ("Radius", "6371000.",
+                             Patterns::Double (0.),
+                             "Radius of the sphere. Units: \\si{\\meter}.");
         }
         prm.leave_subsection();
       }

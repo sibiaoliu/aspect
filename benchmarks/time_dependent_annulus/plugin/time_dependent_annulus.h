@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -8,7 +8,7 @@
   the Free Software Foundation; either version 2, or (at your option)
   any later version.
 
-  ASPEC is distributed in the hope that it will be useful,
+  ASPECT is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -124,7 +124,7 @@ namespace aspect
         virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                               MaterialModel::MaterialModelOutputs<dim> &out) const
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               if (use_analytic_density)
                 out.densities[i] = density_function->value(in.position[i]);
@@ -387,6 +387,3 @@ namespace aspect
     };
   }
 }
-
-
-

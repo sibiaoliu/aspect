@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -49,14 +49,6 @@ namespace aspect
 
   template <int dim>
   VariableDeclaration<dim>::VariableDeclaration()
-  {}
-
-  template <int dim>
-  VariableDeclaration<dim>::VariableDeclaration(const VariableDeclaration &other)
-    : name (other.name),
-      fe (other.fe),
-      multiplicity (other.multiplicity),
-      n_blocks (other.n_blocks)
   {}
 
   template <int dim>
@@ -262,6 +254,8 @@ namespace aspect
   template struct VariableDeclaration<dim>; \
   template struct FEVariable<dim>; \
   template class FEVariableCollection<dim>; \
-   
+
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

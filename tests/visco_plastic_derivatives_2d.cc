@@ -54,6 +54,12 @@ void f(const aspect::SimulatorAccess<dim> &simulator_access,
   in_base.pressure[3] = 2e11;
   in_base.pressure[4] = 5e8;
 
+  in_base.position[0] = Point<dim>();
+  in_base.position[1] = Point<dim>();
+  in_base.position[2] = Point<dim>();
+  in_base.position[3] = Point<dim>();
+  in_base.position[4] = Point<dim>();
+
   /**
    * We can't take too small strain-rates, because then the difference in the
    * viscosity will be too small for the double accuracy which stores
@@ -99,8 +105,8 @@ void f(const aspect::SimulatorAccess<dim> &simulator_access,
   // initialize the material we want to test.
   aspect::ParameterHandler prm;
 
-  const aspect::MaterialModel::ViscoPlastic<dim> const_material_model = dynamic_cast<const aspect::MaterialModel::ViscoPlastic<dim> &>(simulator_access.get_material_model());
-  aspect::MaterialModel::ViscoPlastic<dim> material_model = const_cast<aspect::MaterialModel::ViscoPlastic<dim> &>(const_material_model);
+  const aspect::MaterialModel::ViscoPlastic<dim> &const_material_model = dynamic_cast<const aspect::MaterialModel::ViscoPlastic<dim> &>(simulator_access.get_material_model());
+  aspect::MaterialModel::ViscoPlastic<dim> &material_model = const_cast<aspect::MaterialModel::ViscoPlastic<dim> &>(const_material_model);
 
   material_model.declare_parameters(prm);
 
@@ -165,8 +171,12 @@ void f(const aspect::SimulatorAccess<dim> &simulator_access,
 
       for (unsigned int i = 0; i < 5; i++)
         {
+          // components that are not on the diagonal are multiplied by 0.5, because the symmetric tensor
+          // is modified by 0.5 in both symmetric directions (xy/yx) simultaneously and we compute the combined
+          // derivative
           in_dviscositydstrainrate.strain_rate[i] = in_base.strain_rate[i]
                                                     + std::fabs(in_base.strain_rate[i][strain_rate_indices])
+                                                    * (component > dim-1 ? 0.5 : 1 )
                                                     * finite_difference_accuracy
                                                     * aspect::Utilities::nth_basis_for_symmetric_tensors<dim>(component);
         }
@@ -242,4 +252,3 @@ void signal_connector (aspect::SimulatorSignals<dim> &signals)
 
 ASPECT_REGISTER_SIGNALS_CONNECTOR(signal_connector<2>,
                                   signal_connector<3>)
-

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,6 +23,7 @@
 
 #include <aspect/global.h>
 #include <aspect/material_model/interface.h>
+#include <aspect/material_model/utilities.h>
 #include <aspect/simulator_access.h>
 
 namespace aspect
@@ -33,6 +34,22 @@ namespace aspect
 
     namespace Rheology
     {
+      /**
+       * Data structure for diffusion creep parameters.
+       */
+      struct DiffusionCreepParameters
+      {
+        /**
+         * The diffusion creep prefactor, activation energy, activation volume
+         * and grain size exponent.
+         */
+        double prefactor;
+        double activation_energy;
+        double activation_volume;
+        double stress_exponent;
+        double grain_size_exponent;
+      };
+
       template <int dim>
       class DiffusionCreep : public ::aspect::SimulatorAccess<dim>
       {
@@ -50,18 +67,57 @@ namespace aspect
           declare_parameters (ParameterHandler &prm);
 
           /**
-           * Read the parameters from the parameter file.
+           * Read the parameters this class declares from the parameter file.
+           * If @p expected_n_phases_per_composition points to a vector of
+           * unsigned integers this is considered the number of phase transitions
+           * for each compositional field and will be checked against the parsed
+           * parameters.
            */
           void
-          parse_parameters (ParameterHandler &prm);
+          parse_parameters (ParameterHandler &prm,
+                            const std::shared_ptr<std::vector<unsigned int>> &expected_n_phases_per_composition =
+                              std::shared_ptr<std::vector<unsigned int>>());
+
+
+          /**
+           * Compute the creep parameters for the diffusion creep law.
+           * If @p expected_n_phases_per_composition points to a vector of
+           * unsigned integers this is considered the number of phase transitions
+           * for each compositional field and viscosity will be first computed on
+           * each phase and then averaged for each compositional field.
+           */
+          const DiffusionCreepParameters
+          compute_creep_parameters (const unsigned int composition,
+                                    const std::vector<double> &phase_function_values = std::vector<double>(),
+                                    const std::vector<unsigned int> &n_phases_per_composition = std::vector<unsigned int>()) const;
 
           /**
            * Compute the viscosity based on the diffusion creep law.
+           * If @p expected_n_phases_per_composition points to a vector of
+           * unsigned integers this is considered the number of phase transitions
+           * for each compositional field and viscosity will be first computed on
+           * each phase and then averaged for each compositional field.
            */
           double
           compute_viscosity (const double pressure,
                              const double temperature,
-                             const unsigned int composition) const;
+                             const unsigned int composition,
+                             const std::vector<double> &phase_function_values = std::vector<double>(),
+                             const std::vector<unsigned int> &n_phases_per_composition = std::vector<unsigned int>()) const;
+
+          /**
+           * Compute the strain rate and first stress derivative as a function
+           * of stress based on the diffusion creep law. If @p
+           * expected_n_phases_per_composition points to a vector of unsigned
+           * integers this is considered the number of phase transitions for
+           * each compositional field and viscosity will be first computed on
+           * each phase and then averaged for each compositional field.
+           */
+          std::pair<double, double>
+          compute_strain_rate_and_derivative (const double stress,
+                                              const double pressure,
+                                              const double temperature,
+                                              const DiffusionCreepParameters creep_parameters) const;
 
         private:
 
@@ -71,7 +127,12 @@ namespace aspect
           std::vector<double> prefactors_diffusion;
 
           /**
-           * List of diffusion creep grain size exponenents m.
+           * List of diffusion creep stress exponents n (usually = 1).
+           */
+          std::vector<double> stress_exponents_diffusion;
+
+          /**
+           * List of diffusion creep grain size exponents m.
            */
           std::vector<double> grain_size_exponents_diffusion;
 

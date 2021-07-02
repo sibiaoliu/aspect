@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -51,7 +51,12 @@ namespace aspect
         const std::vector<double> accumulated_cell_weights = compute_local_accumulated_cell_weights();
 
         // Sum the local integrals over all nodes
-        double local_weight_integral = accumulated_cell_weights.back();
+        double local_weight_integral = (accumulated_cell_weights.size() > 0)
+                                       ?
+                                       accumulated_cell_weights.back()
+                                       :
+                                       0.0;
+
         const double global_weight_integral = Utilities::MPI::sum (local_weight_integral,
                                                                    this->get_mpi_communicator());
 
@@ -67,12 +72,15 @@ namespace aspect
         // Determine the starting weight of this process, which is the sum of
         // the weights of all processes with a lower rank
         double local_start_weight = 0.0;
-        MPI_Scan(&local_weight_integral, &local_start_weight, 1, MPI_DOUBLE, MPI_SUM, this->get_mpi_communicator());
-        local_start_weight -= local_weight_integral;
+        const int ierr = MPI_Exscan(&local_weight_integral, &local_start_weight, 1, MPI_DOUBLE, MPI_SUM, this->get_mpi_communicator());
+        AssertThrowMPI(ierr);
 
-        // Calculate start id and number of local particles
-        const types::particle_index start_id = llround(static_cast<double> (n_particles)  * local_start_weight / global_weight_integral);
-        const types::particle_index n_local_particles = llround(static_cast<double> (n_particles) * local_weight_integral / global_weight_integral);
+        // Calculate start id
+        const types::particle_index start_particle_id = llround(static_cast<double> (n_particles)  * local_start_weight / global_weight_integral);
+
+        // Calculate number of local particles
+        const types::particle_index end_particle_id = llround(static_cast<double> (n_particles)  * (local_start_weight + local_weight_integral) / global_weight_integral);
+        const types::particle_index n_local_particles = end_particle_id-start_particle_id;
 
         std::vector<unsigned int> particles_per_cell(this->get_triangulation().n_locally_owned_active_cells(),0);
 
@@ -115,7 +123,7 @@ namespace aspect
                 }
           }
 
-        generate_particles_in_subdomain(particles_per_cell,start_id,n_local_particles,particles);
+        generate_particles_in_subdomain(particles_per_cell,start_particle_id,n_local_particles,particles);
       }
 
       template <int dim>
@@ -206,7 +214,7 @@ namespace aspect
           prm.enter_subsection("Particles");
           {
             prm.declare_entry ("Number of particles", "1000",
-                               Patterns::Double (0),
+                               Patterns::Double (0.),
                                "Total number of particles to create (not per processor or per element). "
                                "The number is parsed as a floating point number (so that one can "
                                "specify, for example, '1e4' particles) but it is interpreted as "
@@ -237,7 +245,8 @@ namespace aspect
                                    "runs. Change to get a different distribution. In parallel "
                                    "computations the seed is further modified on each process "
                                    "to ensure different particle patterns on different "
-                                   "processes.");
+                                   "processes. Note that the number of particles per processor "
+                                   "is not affected by the seed.");
               }
               prm.leave_subsection();
             }

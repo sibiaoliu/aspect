@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -85,12 +85,12 @@ namespace aspect
       {
         prm.enter_subsection("Spherical constant");
         {
-          prm.declare_entry ("Outer temperature", "0",
+          prm.declare_entry ("Outer temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the outer boundary (lithosphere water/air). Units: $\\si{K}$.");
-          prm.declare_entry ("Inner temperature", "6000",
+                             "Temperature at the outer boundary (lithosphere water/air). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Inner temperature", "6000.",
                              Patterns::Double (),
-                             "Temperature at the inner boundary (core mantle boundary). Units: $\\si{K}$.");
+                             "Temperature at the inner boundary (core mantle boundary). Units: \\si{\\kelvin}.");
         }
         prm.leave_subsection ();
       }

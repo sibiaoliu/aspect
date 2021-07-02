@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -151,7 +151,7 @@ namespace aspect
                                   "adiabatic heating of melt. The full model implements the "
                                   "heating term \n"
                                   "$\\alpha T (-\\phi \\mathbf u_s \\cdot \\nabla p) "
-                                  "+ \\alpha T (\\phi \\mathbf u_f \\cdot \nabla p)$.\n"
+                                  "+ \\alpha T (\\phi \\mathbf u_f \\cdot \\nabla p)$.\n"
                                   "For full adiabatic heating, "
                                   "this has to be used in combination with the heating model "
                                   "`adiabatic heating' to also include adiabatic heating for "

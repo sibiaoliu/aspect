@@ -19,11 +19,11 @@ strain-rate: point = 1, component = 1, Finite difference = -6.58657e+26, Analyti
 strain-rate: point = 2, component = 1, Finite difference = -1.23761e+27, Analytical derivative = -1.23761e+27
 strain-rate: point = 3, component = 1, Finite difference = 0, Analytical derivative = 0
 strain-rate: point = 4, component = 1, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
-strain-rate: point = 0, component = 2, Finite difference = -2.55212e+33, Analytical derivative = -2.55212e+33
-strain-rate: point = 1, component = 2, Finite difference = 3.5961e+28, Analytical derivative = 3.5961e+28
-strain-rate: point = 2, component = 2, Finite difference = -2.2502e+28, Analytical derivative = -2.2502e+28
+strain-rate: point = 0, component = 2, Finite difference = -1.27606e+33, Analytical derivative = -1.27606e+33
+strain-rate: point = 1, component = 2, Finite difference = 1.79805e+28, Analytical derivative = 1.79805e+28
+strain-rate: point = 2, component = 2, Finite difference = -1.1251e+28, Analytical derivative = -1.1251e+28
 strain-rate: point = 3, component = 2, Finite difference = 0, Analytical derivative = 0
-strain-rate: point = 4, component = 2, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
+strain-rate: point = 4, component = 2, Finite difference = -4.41942e+32, Analytical derivative = -4.41942e+32
 OK
 
 Testing ViscoPlastic derivatives against analytical derivatives for averaging parameter geometric
@@ -42,11 +42,11 @@ strain-rate: point = 1, component = 1, Finite difference = -6.58596e+26, Analyti
 strain-rate: point = 2, component = 1, Finite difference = -1.23785e+27, Analytical derivative = -1.23761e+27
 strain-rate: point = 3, component = 1, Finite difference = 0, Analytical derivative = 0
 strain-rate: point = 4, component = 1, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
-strain-rate: point = 0, component = 2, Finite difference = -2.55212e+33, Analytical derivative = -2.55212e+33
-strain-rate: point = 1, component = 2, Finite difference = 3.5961e+28, Analytical derivative = 3.5961e+28
-strain-rate: point = 2, component = 2, Finite difference = -2.2502e+28, Analytical derivative = -2.2502e+28
+strain-rate: point = 0, component = 2, Finite difference = -1.27607e+33, Analytical derivative = -1.27606e+33
+strain-rate: point = 1, component = 2, Finite difference = 1.79805e+28, Analytical derivative = 1.79805e+28
+strain-rate: point = 2, component = 2, Finite difference = -1.1251e+28, Analytical derivative = -1.1251e+28
 strain-rate: point = 3, component = 2, Finite difference = 0, Analytical derivative = 0
-strain-rate: point = 4, component = 2, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
+strain-rate: point = 4, component = 2, Finite difference = -4.41942e+32, Analytical derivative = -4.41942e+32
 OK
 
 Testing ViscoPlastic derivatives against analytical derivatives for averaging parameter arithmetic
@@ -65,11 +65,11 @@ strain-rate: point = 1, component = 1, Finite difference = -6.58657e+26, Analyti
 strain-rate: point = 2, component = 1, Finite difference = -1.23761e+27, Analytical derivative = -1.23761e+27
 strain-rate: point = 3, component = 1, Finite difference = 0, Analytical derivative = 0
 strain-rate: point = 4, component = 1, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
-strain-rate: point = 0, component = 2, Finite difference = -2.55212e+33, Analytical derivative = -2.55212e+33
-strain-rate: point = 1, component = 2, Finite difference = 3.5961e+28, Analytical derivative = 3.5961e+28
-strain-rate: point = 2, component = 2, Finite difference = -2.2502e+28, Analytical derivative = -2.2502e+28
+strain-rate: point = 0, component = 2, Finite difference = -1.27606e+33, Analytical derivative = -1.27606e+33
+strain-rate: point = 1, component = 2, Finite difference = 1.79805e+28, Analytical derivative = 1.79805e+28
+strain-rate: point = 2, component = 2, Finite difference = -1.1251e+28, Analytical derivative = -1.1251e+28
 strain-rate: point = 3, component = 2, Finite difference = 0, Analytical derivative = 0
-strain-rate: point = 4, component = 2, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
+strain-rate: point = 4, component = 2, Finite difference = -4.41942e+32, Analytical derivative = -4.41942e+32
 OK
 
 Testing ViscoPlastic derivatives against analytical derivatives for averaging parameter maximum composition
@@ -88,16 +88,16 @@ strain-rate: point = 1, component = 1, Finite difference = -6.58657e+26, Analyti
 strain-rate: point = 2, component = 1, Finite difference = -1.23761e+27, Analytical derivative = -1.23761e+27
 strain-rate: point = 3, component = 1, Finite difference = 0, Analytical derivative = 0
 strain-rate: point = 4, component = 1, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
-strain-rate: point = 0, component = 2, Finite difference = -2.55212e+33, Analytical derivative = -2.55212e+33
-strain-rate: point = 1, component = 2, Finite difference = 3.5961e+28, Analytical derivative = 3.5961e+28
-strain-rate: point = 2, component = 2, Finite difference = -2.2502e+28, Analytical derivative = -2.2502e+28
+strain-rate: point = 0, component = 2, Finite difference = -1.27606e+33, Analytical derivative = -1.27606e+33
+strain-rate: point = 1, component = 2, Finite difference = 1.79805e+28, Analytical derivative = 1.79805e+28
+strain-rate: point = 2, component = 2, Finite difference = -1.1251e+28, Analytical derivative = -1.1251e+28
 strain-rate: point = 3, component = 2, Finite difference = 0, Analytical derivative = 0
-strain-rate: point = 4, component = 2, Finite difference = -8.83883e+32, Analytical derivative = -8.83883e+32
+strain-rate: point = 4, component = 2, Finite difference = -4.41942e+32, Analytical derivative = -4.41942e+32
 OK
 Number of active cells: 100 (on 1 levels)
 Number of degrees of freedom: 2,767 (882+121+441+441+441+441)
 
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
 
    Postprocessing:
      RMS, max velocity:                  0 m/year, 0 m/year
@@ -107,7 +107,4 @@ Number of degrees of freedom: 2,767 (882+121+441+441+441+441)
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

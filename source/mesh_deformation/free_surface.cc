@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,6 +28,10 @@
 #include <aspect/simulator.h>
 
 #include <deal.II/dofs/dof_tools.h>
+
+#ifdef ASPECT_USE_PETSC
+#  include <deal.II/lac/sparsity_tools.h>
+#endif
 
 namespace aspect
 {
@@ -163,21 +167,21 @@ namespace aspect
       const std::map<types::boundary_id, std::pair<std::string,std::vector<std::string> > >
       tmp_active_vel_boundary_indicators = this->get_boundary_velocity_manager().get_active_boundary_velocity_names();
 
-      for (std::map<types::boundary_id, std::pair<std::string, std::vector<std::string> > >::const_iterator p = tmp_active_vel_boundary_indicators.begin();
-           p != tmp_active_vel_boundary_indicators.end(); ++p)
-        velocity_boundary_indicators.insert(p->first);
+      for (const auto &p : tmp_active_vel_boundary_indicators)
+        velocity_boundary_indicators.insert(p.first);
 
       // Get the mesh deformation boundary indicators
       const std::set<types::boundary_id> tmp_mesh_deformation_boundary_indicators = this->get_mesh_deformation_boundary_indicators();
-      for (std::set<types::boundary_id>::const_iterator p = tmp_mesh_deformation_boundary_indicators.begin();
-           p != tmp_mesh_deformation_boundary_indicators.end(); ++p)
-        AssertThrow(velocity_boundary_indicators.find(*p) == velocity_boundary_indicators.end(),
+      for (const auto &p : tmp_mesh_deformation_boundary_indicators)
+        AssertThrow(velocity_boundary_indicators.find(p) == velocity_boundary_indicators.end(),
                     ExcMessage("The free surface mesh deformation plugin cannot be used with the current velocity boundary conditions"));
 
-      this->get_signals().set_assemblers.connect(std::bind(&FreeSurface<dim>::set_assemblers,
-                                                           std::cref(*this),
-                                                           std::placeholders::_1,
-                                                           std::placeholders::_2));
+      this->get_signals().set_assemblers.connect(
+        [&](const SimulatorAccess<dim> &sim_access,
+            aspect::Assemblers::Manager<dim> &assemblers)
+      {
+        this->set_assemblers(sim_access, assemblers);
+      });
     }
 
 
@@ -232,14 +236,14 @@ namespace aspect
       std::vector<Tensor<1,dim> > velocity_values(n_face_q_points);
 
       // set up constraints
-      ConstraintMatrix mass_matrix_constraints(mesh_locally_relevant);
+      AffineConstraints<double> mass_matrix_constraints(mesh_locally_relevant);
       DoFTools::make_hanging_node_constraints(mesh_deformation_dof_handler, mass_matrix_constraints);
 
-      typedef std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundary_pairs;
+      using periodic_boundary_pairs = std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >;
       periodic_boundary_pairs pbp = this->get_geometry_model().get_periodic_boundary_pairs();
-      for (periodic_boundary_pairs::iterator p = pbp.begin(); p != pbp.end(); ++p)
+      for (const auto &p : pbp)
         DoFTools::make_periodicity_constraints(mesh_deformation_dof_handler,
-                                               (*p).first.first, (*p).first.second, (*p).second, mass_matrix_constraints);
+                                               p.first.first, p.first.second, p.second, mass_matrix_constraints);
 
       mass_matrix_constraints.close();
 
@@ -362,7 +366,7 @@ namespace aspect
     template <int dim>
     void
     FreeSurface<dim>::compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
-                                                               ConstraintMatrix &mesh_velocity_constraints,
+                                                               AffineConstraints<double> &mesh_velocity_constraints,
                                                                const std::set<types::boundary_id> &boundary_id) const
     {
       // For the free surface indicators we constrain the displacement to be v.n
@@ -378,11 +382,18 @@ namespace aspect
                                      mesh_locally_relevant, boundary_velocity);
 
       // now insert the relevant part of the solution into the mesh constraints
+#if DEAL_II_VERSION_GTE(9,3,0)
+      const IndexSet constrained_dofs =
+        DoFTools::extract_boundary_dofs(mesh_deformation_dof_handler,
+                                        ComponentMask(dim, true),
+                                        boundary_id);
+#else
       IndexSet constrained_dofs;
       DoFTools::extract_boundary_dofs(mesh_deformation_dof_handler,
                                       ComponentMask(dim, true),
                                       constrained_dofs,
                                       boundary_id);
+#endif
 
       for (unsigned int i = 0; i < constrained_dofs.n_elements();  ++i)
         {
@@ -406,7 +417,7 @@ namespace aspect
         prm.enter_subsection ("Free surface");
         {
           prm.declare_entry("Free surface stabilization theta", "0.5",
-                            Patterns::Double(0,1),
+                            Patterns::Double(0., 1.),
                             "Theta parameter described in \\cite{KMM2010}. "
                             "An unstabilized free surface can overshoot its "
                             "equilibrium position quite easily and generate "

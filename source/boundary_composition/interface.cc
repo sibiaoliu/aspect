@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -198,12 +198,12 @@ namespace aspect
 
       // go through the list, create objects and let them parse
       // their own parameters
-      for (unsigned int i=0; i<model_names.size(); ++i)
+      for (auto &model_name : model_names)
         {
           // create boundary composition objects
           boundary_composition_objects.push_back (std::unique_ptr<Interface<dim> >
                                                   (std::get<dim>(registered_plugins)
-                                                   .create_plugin (model_names[i],
+                                                   .create_plugin (model_name,
                                                                    "Boundary composition::Model names")));
 
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(boundary_composition_objects.back().get()))
@@ -412,5 +412,7 @@ namespace aspect
   template class Manager<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

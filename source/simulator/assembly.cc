@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,6 +23,7 @@
 #include <aspect/utilities.h>
 #include <aspect/compat.h>
 #include <aspect/simulator_access.h>
+#include <aspect/citation_info.h>
 
 #include <aspect/simulator/assemblers/interface.h>
 #include <aspect/melt.h>
@@ -31,13 +32,12 @@
 #include <aspect/simulator/assemblers/stokes.h>
 #include <aspect/simulator/assemblers/advection.h>
 
+#include <aspect/stokes_matrix_free.h>
+
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/work_stream.h>
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/lac/full_matrix.h>
-#if !DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/constraint_matrix.h>
-#endif
 #include <deal.II/grid/tria_iterator.h>
 #include <deal.II/grid/filtered_iterator.h>
 #include <deal.II/dofs/dof_accessor.h>
@@ -96,10 +96,6 @@ namespace aspect
       for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
         material_model_inputs.composition[q][c] = composition_values[c][q];
 
-    DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
-    material_model_inputs.cell = &cell;
-    DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
-
     material_model_inputs.current_cell = cell;
   }
 
@@ -124,15 +120,17 @@ namespace aspect
   template <int dim>
   void
   Simulator<dim>::
-  set_default_assemblers()
+  set_stokes_assemblers()
   {
     assemblers->stokes_preconditioner.push_back(std_cxx14::make_unique<aspect::Assemblers::StokesPreconditioner<dim> >());
     assemblers->stokes_system.push_back(std_cxx14::make_unique<aspect::Assemblers::StokesIncompressibleTerms<dim> >());
 
     if (material_model->is_compressible())
       {
-        assemblers->stokes_preconditioner.push_back(
-          std_cxx14::make_unique<aspect::Assemblers::StokesCompressiblePreconditioner<dim> >());
+        // The compressible part of the preconditioner is only necessary if we use the simplified A block
+        if (parameters.use_full_A_block_preconditioner == false)
+          assemblers->stokes_preconditioner.push_back(
+            std_cxx14::make_unique<aspect::Assemblers::StokesCompressiblePreconditioner<dim> >());
 
         assemblers->stokes_system.push_back(
           std_cxx14::make_unique<aspect::Assemblers::StokesCompressibleStrainRateViscosityTerm<dim> >());
@@ -170,6 +168,7 @@ namespace aspect
     else if (parameters.formulation_mass_conservation ==
              Parameters<dim>::Formulation::MassConservation::projected_density_field)
       {
+        CitationInfo::add("pda");
         assemblers->stokes_system.push_back(
           std_cxx14::make_unique<aspect::Assemblers::StokesProjectedDensityFieldTerm<dim> >());
       }
@@ -190,6 +189,13 @@ namespace aspect
       assemblers->stokes_system.push_back(
         std_cxx14::make_unique<aspect::Assemblers::StokesPressureRHSCompatibilityModification<dim> >());
 
+  }
+
+  template <int dim>
+  void
+  Simulator<dim>::
+  set_advection_assemblers()
+  {
     assemblers->advection_system.push_back(
       std_cxx14::make_unique<aspect::Assemblers::AdvectionSystem<dim> >());
 
@@ -202,11 +208,17 @@ namespace aspect
     if (parameters.use_discontinuous_temperature_discretization ||
         parameters.use_discontinuous_composition_discretization)
       {
+        const bool no_field_method = std::find(parameters.compositional_field_methods.begin(),
+                                               parameters.compositional_field_methods.end(),
+                                               Parameters<dim>::AdvectionFieldMethod::fem_field)
+                                     == parameters.compositional_field_methods.end();
+
         // TODO: This currently does not work in parallel, because the sparsity
         // pattern of the matrix does not seem to know about flux terms
         // across periodic faces of different levels. Fix this.
         AssertThrow(geometry_model->get_periodic_boundary_pairs().size() == 0 ||
                     Utilities::MPI::n_mpi_processes(mpi_communicator) == 1 ||
+                    no_field_method ||
                     (parameters.initial_adaptive_refinement == 0 &&
                      parameters.adaptive_refinement_interval == 0),
                     ExcMessage("Combining discontinuous elements with periodic boundaries and "
@@ -258,7 +270,8 @@ namespace aspect
     if (!parameters.include_melt_transport
         && !assemble_newton_stokes_system)
       {
-        set_default_assemblers();
+        set_advection_assemblers();
+        set_stokes_assemblers();
       }
     else if (parameters.include_melt_transport
              && !assemble_newton_stokes_system)
@@ -268,6 +281,7 @@ namespace aspect
     else if (!parameters.include_melt_transport
              && assemble_newton_stokes_system)
       {
+        set_advection_assemblers();
         newton_handler->set_assemblers(*assemblers);
       }
     else if (parameters.include_melt_transport
@@ -359,9 +373,7 @@ namespace aspect
 
     const QGauss<dim> quadrature_formula(parameters.stokes_velocity_degree+1);
 
-    typedef
-    FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
-    CellFilter;
+    using CellFilter = FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>;
 
     // determine which update flags to use for the cell integrals
     const UpdateFlags cell_update_flags
@@ -452,9 +464,6 @@ namespace aspect
     Amg_preconditioner = std_cxx14::make_unique<LinearAlgebra::PreconditionAMG>();
 
     LinearAlgebra::PreconditionAMG::AdditionalData Amg_data;
-#ifdef ASPECT_USE_PETSC
-    Amg_data.symmetric_operator = false;
-#else
     Amg_data.constant_modes = constant_modes;
     Amg_data.elliptic = true;
     Amg_data.higher_order_elements = true;
@@ -472,7 +481,6 @@ namespace aspect
     Amg_data.smoother_sweeps = parameters.AMG_smoother_sweeps;
     Amg_data.aggregation_threshold = parameters.AMG_aggregation_threshold;
     Amg_data.output_details = parameters.AMG_output_details;
-#endif
 
     /*  The stabilization term for the free surface (Kaus et. al., 2010)
      *  makes changes to the system matrix which are of the same form as
@@ -519,7 +527,7 @@ namespace aspect
         Mp_preconditioner_AMG->initialize (system_preconditioner_matrix.block(1,1), Amg_data);
       }
 
-    if (parameters.mesh_deformation_enabled || parameters.include_melt_transport || parameters.use_full_A_block_preconditioner)
+    if (parameters.use_full_A_block_preconditioner)
       Amg_preconditioner->initialize (system_matrix.block(0,0),
                                       Amg_data);
     else
@@ -560,10 +568,12 @@ namespace aspect
       data.local_pressure_shape_function_integrals = 0;
 
     // initialize the material model data on the cell
+    const bool update_strain_rate =
+      assemble_newton_stokes_system || this->parameters.enable_prescribed_dilation || rebuild_stokes_matrix;
     compute_material_model_input_values (current_linearization_point,
                                          scratch.finite_element_values,
                                          cell,
-                                         assemble_newton_stokes_system ? true : rebuild_stokes_matrix,
+                                         update_strain_rate,
                                          scratch.material_model_inputs);
 
     for (unsigned int i=0; i<assemblers->stokes_system.size(); ++i)
@@ -680,20 +690,21 @@ namespace aspect
   {
     std::string timer_section_name = "Assemble Stokes system";
 
-    // Matrix-free, only assemble RHS
-    if (stokes_matrix_free)
+    if (assemble_newton_stokes_system)
       {
-        rebuild_stokes_matrix = false;
-        timer_section_name += " rhs";
-      }
-    else if (assemble_newton_stokes_system)
-      {
-        if (!assemble_newton_stokes_matrix)
+        if (!assemble_newton_stokes_matrix && !stokes_matrix_free)
           timer_section_name += " rhs";
         else if (assemble_newton_stokes_matrix && newton_handler->parameters.newton_derivative_scaling_factor == 0)
           timer_section_name += " Picard";
         else if (assemble_newton_stokes_matrix && newton_handler->parameters.newton_derivative_scaling_factor != 0)
           timer_section_name += " Newton";
+      }
+
+    if (stokes_matrix_free)
+      {
+        rebuild_stokes_matrix = false;
+        assemble_newton_stokes_matrix = false;
+        timer_section_name += " rhs";
       }
 
     TimerOutput::Scope timer (computing_timer,
@@ -723,9 +734,7 @@ namespace aspect
     const QGauss<dim>   quadrature_formula(parameters.stokes_velocity_degree+1);
     const QGauss<dim-1> face_quadrature_formula(parameters.stokes_velocity_degree+1);
 
-    typedef
-    FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
-    CellFilter;
+    using CellFilter = FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>;
 
     // determine which updates flags we need on cells and faces
     const UpdateFlags cell_update_flags
@@ -804,6 +813,13 @@ namespace aspect
     system_matrix.compress(VectorOperation::add);
     system_rhs.compress(VectorOperation::add);
 
+    // If we change the system_rhs, matrix-free Stokes must update
+    if (stokes_matrix_free)
+      {
+        stokes_matrix_free->evaluate_material_model();
+        stokes_matrix_free->correct_stokes_rhs();
+      }
+
     // if the model is compressible then we need to adjust the right hand
     // side of the equation to make it compatible with the matrix on the
     // left
@@ -812,7 +828,6 @@ namespace aspect
         pressure_shape_function_integrals.compress(VectorOperation::add);
         make_pressure_rhs_compatible(system_rhs);
       }
-
 
     // record that we have just rebuilt the matrix
     rebuild_stokes_matrix = false;
@@ -823,14 +838,20 @@ namespace aspect
   template <int dim>
   void
   Simulator<dim>::build_advection_preconditioner(const AdvectionField &advection_field,
-                                                 LinearAlgebra::PreconditionILU &preconditioner)
+                                                 LinearAlgebra::PreconditionILU &preconditioner,
+                                                 const double diagonal_strengthening)
   {
     TimerOutput::Scope timer (computing_timer, (advection_field.is_temperature() ?
                                                 "Build temperature preconditioner" :
                                                 "Build composition preconditioner"));
 
     const unsigned int block_idx = advection_field.block_index(introspection);
-    preconditioner.initialize (system_matrix.block(block_idx, block_idx));
+
+
+    LinearAlgebra::PreconditionILU::AdditionalData data;
+    data.ilu_atol = diagonal_strengthening;
+
+    preconditioner.initialize (system_matrix.block(block_idx, block_idx), data);
   }
 
 
@@ -1129,9 +1150,7 @@ namespace aspect
     system_rhs.block(block_idx) = 0;
 
 
-    typedef
-    FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>
-    CellFilter;
+    using CellFilter = FilteredIterator<typename DoFHandler<dim>::active_cell_iterator>;
 
     Vector<double> viscosity_per_cell;
     viscosity_per_cell.reinit(triangulation.n_active_cells());
@@ -1244,7 +1263,8 @@ namespace aspect
                                                                      const internal::Assembly::CopyData::StokesSystem<dim> &data); \
   template void Simulator<dim>::assemble_stokes_system (); \
   template void Simulator<dim>::build_advection_preconditioner (const AdvectionField &, \
-                                                                aspect::LinearAlgebra::PreconditionILU &preconditioner); \
+                                                                aspect::LinearAlgebra::PreconditionILU &preconditioner, \
+                                                                const double diagonal_strengthening); \
   template void Simulator<dim>::local_assemble_advection_system ( \
                                                                   const AdvectionField          &advection_field, \
                                                                   const Vector<double>           &viscosity_per_cell, \
@@ -1265,4 +1285,6 @@ namespace aspect
 
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

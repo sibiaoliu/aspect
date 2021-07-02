@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2020 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -75,10 +75,9 @@ namespace aspect
 
         if (n_particles > 0)
           {
-            for (typename ParticleHandler<dim>::particle_iterator particle = particle_range.begin();
-                 particle != particle_range.end(); ++particle)
+            for (const auto &particle : particle_range)
               {
-                const ArrayView<const double> &particle_properties = particle->get_properties();
+                const ArrayView<const double> &particle_properties = particle.get_properties();
 
                 for (unsigned int i = 0; i < particle_properties.size(); ++i)
                   if (selected_properties[i])
@@ -153,8 +152,9 @@ namespace aspect
             prm.declare_entry ("Allow cells without particles", "false",
                                Patterns::Bool (),
                                "By default, every cell needs to contain particles to use this interpolator "
-                               "plugin. If this parameter is set to true, cells are allowed to have no particles, "
-                               "in which case the interpolator will return 0 for the cell's properties.");
+                               "plugin. If this parameter is set to true, cells are allowed to have no particles. "
+                               "In case both the current cell and its neighbors are empty, "
+                               "the interpolator will return 0 for the current cell's properties.");
           }
           prm.leave_subsection ();
         }
@@ -193,7 +193,10 @@ namespace aspect
                                             "harmonic average",
                                             "Return the harmonic average of all particle properties in the "
                                             "given cell. If the cell contains no particles, return the "
-                                            "harmonic average of the properties in the neighboring cells.")
+                                            "harmonic average of the properties in the neighboring cells. "
+                                            "In case the neighboring cells are also empty, and 'Allow cells "
+                                            "without particles' is set to true, the interpolator returns 0. "
+                                            "Otherwise, an exception is thrown. ")
     }
   }
 }

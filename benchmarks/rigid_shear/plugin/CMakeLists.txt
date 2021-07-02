@@ -1,4 +1,4 @@
-# Copyright (C) 2019 by the authors of the ASPECT code.
+# Copyright (C) 2019 - 2021 by the authors of the ASPECT code.
 #
 # This file is part of ASPECT.
 #
@@ -18,7 +18,7 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8)
 
-FIND_PACKAGE(Aspect 2.1.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
+FIND_PACKAGE(Aspect 2.2.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
 
 IF (NOT Aspect_FOUND)
   MESSAGE(FATAL_ERROR "\n"
@@ -36,4 +36,4 @@ SET(TARGET "rigid_shear")
 PROJECT(${TARGET})
 
 ADD_LIBRARY(${TARGET} SHARED rigid_shear.cc)
-ASPECT_SETUP_PLUGIN(${TARGET})  
+ASPECT_SETUP_PLUGIN(${TARGET})

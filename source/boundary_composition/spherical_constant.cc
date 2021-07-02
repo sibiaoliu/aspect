@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -64,8 +64,7 @@ namespace aspect
     SphericalConstant<dim>::
     minimal_composition (const std::set<types::boundary_id> &) const
     {
-      const GeometryModel::Interface<dim> *geometry_model = &this->get_geometry_model();
-      if (dynamic_cast<const GeometryModel::Sphere<dim>*>(geometry_model) != nullptr)
+      if (Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>>(this->get_geometry_model()))
         return outer_composition;
       else
         return std::min (inner_composition, outer_composition);
@@ -78,8 +77,7 @@ namespace aspect
     SphericalConstant<dim>::
     maximal_composition (const std::set<types::boundary_id> &) const
     {
-      const GeometryModel::Interface<dim> *geometry_model = &this->get_geometry_model();
-      if (dynamic_cast<const GeometryModel::Sphere<dim>*>(geometry_model) != nullptr)
+      if (Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>>(this->get_geometry_model()))
         return outer_composition;
       else
         return std::max (inner_composition, outer_composition);
@@ -95,12 +93,12 @@ namespace aspect
       {
         prm.enter_subsection("Spherical constant");
         {
-          prm.declare_entry ("Outer composition", "0",
+          prm.declare_entry ("Outer composition", "0.",
                              Patterns::Double (),
                              "Composition at the outer boundary (lithosphere water/air). "
                              "For a spherical geometry model, this is the only boundary. "
                              "Units: none.");
-          prm.declare_entry ("Inner composition", "1",
+          prm.declare_entry ("Inner composition", "1.",
                              Patterns::Double (),
                              "Composition at the inner boundary (core mantle boundary). Units: none.");
         }

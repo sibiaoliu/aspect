@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -32,16 +32,24 @@ namespace aspect
 
       template <int dim>
       ViscoPlasticStrainInvariant<dim>::ViscoPlasticStrainInvariant ()
+        :
+        n_components(0),
+        material_inputs(1,0)
       {}
+
+
 
       template <int dim>
       void
       ViscoPlasticStrainInvariant<dim>::initialize ()
       {
-        AssertThrow(dynamic_cast<const MaterialModel::ViscoPlastic<dim> *>(&this->get_material_model()) != nullptr,
-                    ExcMessage("This initial condition only makes sense in combination with the visco_plastic material model."));
+        AssertThrow(Plugins::plugin_type_matches<const MaterialModel::ViscoPlastic<dim>>
+                    (this->get_material_model()),
+                    ExcMessage("This initial condition only makes sense in combination "
+                               "with the visco_plastic material model."));
 
         n_components = 0;
+        material_inputs = MaterialModel::MaterialModelInputs<dim>(1,this->n_compositional_fields());
 
         // Find out which fields are used.
         if (this->introspection().compositional_name_exists("plastic_strain"))
@@ -54,8 +62,12 @@ namespace aspect
           n_components += 1;
 
         if (n_components == 0)
-          AssertThrow(false, ExcMessage("This particle property requires a compositional strain field (plastic_strain, viscous_strain, or total_strain)."));
+          AssertThrow(false,
+                      ExcMessage("This particle property requires a compositional "
+                                 "strain field (plastic_strain, viscous_strain, "
+                                 "or total_strain)."));
       }
+
 
 
       template <int dim>
@@ -75,13 +87,14 @@ namespace aspect
 
       }
 
+
+
       template <int dim>
       void
-      ViscoPlasticStrainInvariant<dim>::update_one_particle_property(const unsigned int data_position,
-                                                                     const Point<dim> &,
-                                                                     const Vector<double> &solution,
-                                                                     const std::vector<Tensor<1,dim> > &gradients,
-                                                                     const ArrayView<double> &data) const
+      ViscoPlasticStrainInvariant<dim>::update_particle_property(const unsigned int data_position,
+                                                                 const Vector<double> &solution,
+                                                                 const std::vector<Tensor<1,dim> > &gradients,
+                                                                 typename ParticleHandler<dim>::particle_iterator &particle) const
       {
         // Current timestep
         const double dt = this->get_timestep();
@@ -91,26 +104,24 @@ namespace aspect
         for (unsigned int d=0; d<dim; ++d)
           grad_u[d] = gradients[d];
 
-        // Calculate strain rate from velocity gradients
-        const SymmetricTensor<2,dim> strain_rate = symmetrize (grad_u);
+        material_inputs.pressure[0] = solution[this->introspection().component_indices.pressure];
+        material_inputs.temperature[0] = solution[this->introspection().component_indices.temperature];
+        material_inputs.position[0] = particle->get_location();
 
+        // Calculate strain rate from velocity gradients
+        material_inputs.strain_rate[0] = symmetrize (grad_u);
 
         // Put compositional fields into single variable
-        std::vector<double> composition(this->n_compositional_fields());
         for (unsigned int i = 0; i < this->n_compositional_fields(); i++)
           {
-            composition[i] = solution[this->introspection().component_indices.compositional_fields[i]];
+            material_inputs.composition[0][i] = solution[this->introspection().component_indices.compositional_fields[i]];
           }
 
         // Find out plastic yielding by calling function in material model.
-        const MaterialModel::ViscoPlastic<dim> *viscoplastic
-          = dynamic_cast<const MaterialModel::ViscoPlastic<dim> *>(&this->get_material_model());
+        const MaterialModel::ViscoPlastic<dim> &viscoplastic
+          = Plugins::get_plugin_as_type<const MaterialModel::ViscoPlastic<dim>>(this->get_material_model());
 
-        bool plastic_yielding = false;
-        plastic_yielding = viscoplastic->is_yielding(solution[this->introspection().component_indices.pressure],
-                                                     solution[this->introspection().component_indices.temperature],
-                                                     composition,
-                                                     strain_rate);
+        const bool plastic_yielding = viscoplastic.is_yielding(material_inputs);
 
 
         /* Next take the integrated strain invariant from the prior time step. When
@@ -119,13 +130,14 @@ namespace aspect
          * In this case old_strain will first be given the plastic strain, and then,
          * if there is no plastic yielding it will update to the viscous strain instead.
          */
+        auto &data = particle->get_properties();
         double old_strain = data[data_position];
         if (n_components == 2 && plastic_yielding == false)
           old_strain = data[data_position+(n_components-1)];
 
 
         // Calculate strain rate second invariant
-        const double edot_ii = std::sqrt(std::fabs(second_invariant(deviator(strain_rate))));
+        const double edot_ii = std::sqrt(std::fabs(second_invariant(deviator(material_inputs.strain_rate[0]))));
 
         // New strain is the old strain plus dt*edot_ii
         const double new_strain = old_strain + dt*edot_ii;
@@ -144,8 +156,8 @@ namespace aspect
 
         if (this->introspection().compositional_name_exists("total_strain"))
           data[data_position] = new_strain;
-
       }
+
 
 
       template <int dim>
@@ -154,6 +166,8 @@ namespace aspect
       {
         return update_time_step;
       }
+
+
 
       template <int dim>
       UpdateFlags
@@ -167,22 +181,19 @@ namespace aspect
       std::vector<std::pair<std::string, unsigned int> >
       ViscoPlasticStrainInvariant<dim>::get_property_information() const
       {
-
         std::vector<std::pair<std::string,unsigned int> > property_information;
 
         //Check which fields are used in model and make an output for each.
         if (this->introspection().compositional_name_exists("plastic_strain"))
-          property_information.emplace_back("plastic_strain",1);
+          property_information.emplace_back("plastic_strain", 1);
 
         if (this->introspection().compositional_name_exists("viscous_strain"))
-          property_information.emplace_back("viscous_strain",1);
+          property_information.emplace_back("viscous_strain", 1);
 
         if (this->introspection().compositional_name_exists("total_strain"))
-          property_information.emplace_back("total_strain",1);
+          property_information.emplace_back("total_strain", 1);
 
         return property_information;
-
-
       }
     }
   }

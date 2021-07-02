@@ -18,14 +18,16 @@
 $infilename = shift;
 $aspect_src_dir = shift;
 
-open my $in,  '<', $infilename or die "Can't read file: $!";
+open my $in,  '<', $infilename or die "Can't read file: $infilename!";
 
 while (<$in>)
 {
-    # remove lines starting and ending with |
-    s/^\|.*\|\n//;
     # remove lines starting with --
     s/^--.*\n//;
+    # remove lines starting and ending with | (from TimerOutput)
+    s/^\|.*\|\n//;
+    # replace lines starting with +-- and ending with --+ (from TimerOutput)
+    s/^\+--.*--\+\n//;
 
     # remove time/date from gnuplot files:
     s/\# Time =.*//;

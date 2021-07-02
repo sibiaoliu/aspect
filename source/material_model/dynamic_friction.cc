@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -58,13 +58,15 @@ namespace aspect
           const double phi = std::atan (mu);
 
           // Compute the viscosity according to the Drucker-Prager yield criterion.
-          const MaterialUtilities::DruckerPragerInputs plastic_in(cohesions[i], phi, std::max(pressure,0.0), std::sqrt(strain_rate_dev_inv2));
-          MaterialUtilities::DruckerPragerOutputs plastic_out;
-          MaterialUtilities::compute_drucker_prager_yielding<dim> (plastic_in, plastic_out);
+          const double plastic_viscosity = drucker_prager_plasticity.compute_viscosity(cohesions[i],
+                                                                                       phi,
+                                                                                       std::max(pressure,0.0),
+                                                                                       std::sqrt(strain_rate_dev_inv2),
+                                                                                       std::numeric_limits<double>::infinity());
 
           // Cut off the viscosity between a minimum and maximum value to avoid
           // a numerically unfavourable large viscosity range.
-          viscosities[i] = 1.0 / ( ( 1.0 / (plastic_out.plastic_viscosity + minimum_viscosity) ) + (1.0 / maximum_viscosity) );
+          viscosities[i] = 1.0 / ( ( 1.0 / (plastic_viscosity + minimum_viscosity) ) + (1.0 / maximum_viscosity) );
 
         }
       return viscosities;
@@ -80,11 +82,11 @@ namespace aspect
     {
       EquationOfStateOutputs<dim> eos_outputs (this->n_compositional_fields()+1);
 
-      for (unsigned int i=0; i < in.position.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
-          const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(in.composition[i]);
+          const std::vector<double> volume_fractions = MaterialUtilities::compute_composition_fractions(in.composition[i]);
 
-          if (in.strain_rate.size() > 0)
+          if (in.requests_property(MaterialProperties::viscosity))
             {
               const std::vector<double> viscosities = compute_viscosities(in.pressure[i], in.strain_rate[i]);
               out.viscosities[i] = MaterialUtilities::average_value (volume_fractions, viscosities, viscosity_averaging);
@@ -139,14 +141,14 @@ namespace aspect
         {
           EquationOfState::MulticomponentIncompressible<dim>::declare_parameters (prm, 4.e-5);
 
-          prm.declare_entry ("Reference temperature", "293",
-                             Patterns::Double (0),
-                             "The reference temperature $T_0$. Units: $\\si{K}$.");
+          prm.declare_entry ("Reference temperature", "293.",
+                             Patterns::Double (0.),
+                             "The reference temperature $T_0$. Units: \\si{\\kelvin}.");
           prm.declare_entry ("Thermal conductivities", "4.7",
-                             Patterns::List(Patterns::Double(0)),
+                             Patterns::List(Patterns::Double (0.)),
                              "List of thermal conductivities for background mantle and compositional fields,"
                              "for a total of N+1 values, where N is the number of compositional fields."
-                             "If only one value is given, then all use the same value. Units: $W/m/K$.");
+                             "If only one value is given, then all use the same value. Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
           prm.declare_entry ("Viscosity averaging scheme", "harmonic",
                              Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
                              "When more than one compositional field is present at a point "
@@ -156,35 +158,38 @@ namespace aspect
           prm.enter_subsection("Viscosities");
           {
             prm.declare_entry ("Minimum viscosity", "1e19",
-                               Patterns::Double (0),
-                               "The value of the minimum viscosity cutoff $\\eta_min$. Units: $Pa\\;s$.");
+                               Patterns::Double (0.),
+                               "The value of the minimum viscosity cutoff $\\eta_min$. "
+                               "Units: \\si{\\pascal\\second}.");
             prm.declare_entry ("Maximum viscosity", "1e24",
-                               Patterns::Double (0),
-                               "The value of the maximum viscosity cutoff $\\eta_max$. Units: $Pa\\;s$.");
+                               Patterns::Double (0.),
+                               "The value of the maximum viscosity cutoff $\\eta_max$. "
+                               "Units: \\si{\\pascal\\second}.");
             prm.declare_entry ("Reference strain rate", "1e-15",
-                               Patterns::Double (0),
+                               Patterns::Double (0.),
                                "The value of the initial strain rate prescribed during the "
-                               "first nonlinear iteration $\\dot{\\epsilon}_ref$. Units: $1/s$.");
+                               "first nonlinear iteration $\\dot{\\epsilon}_ref$. Units: \\si{\\per\\second}.");
             prm.declare_entry ("Coefficients of static friction", "0.5",
-                               Patterns::List(Patterns::Double(0)),
+                               Patterns::List(Patterns::Double (0.)),
                                "List of coefficients of static friction for background mantle and compositional fields,"
                                "for a total of N+1 values, where N is the number of compositional fields."
-                               "If only one value is given, then all use the same value. Units: $dimensionless$");
+                               "If only one value is given, then all use the same value. Units: dimensionless.");
             prm.declare_entry ("Coefficients of dynamic friction", "0.4",
-                               Patterns::List(Patterns::Double(0)),
+                               Patterns::List(Patterns::Double (0.)),
                                "List of coefficients of dynamic friction for background mantle and compositional fields,"
                                "for a total of N+1 values, where N is the number of compositional fields."
-                               "If only one value is given, then all use the same value. Units: $dimensionless$");
+                               "If only one value is given, then all use the same value. Units: dimensionless.");
             prm.declare_entry ("Cohesions", "4.e6",
-                               Patterns::List(Patterns::Double(0)),
+                               Patterns::List(Patterns::Double (0.)),
                                "List of cohesions for background mantle and compositional fields,"
                                "for a total of N+1 values, where N is the number of compositional fields."
-                               "If only one value is given, then all use the same value. Units: $Pa$");
+                               "If only one value is given, then all use the same value. Units: \\si{\\pascal}.");
             prm.declare_entry ("Background Viscosities", "1.e20",
-                               Patterns::List(Patterns::Double(0)),
+                               Patterns::List(Patterns::Double (0.)),
                                "List of background viscosities for mantle and compositional fields,"
                                "for a total of N+1 values, where N is the number of compositional fields."
-                               "If only one value is given, then all use the same value. Units: $Pa \\, s $");
+                               "If only one value is given, then all use the same value. "
+                               "Units: \\si{\\pascal\\second}.");
           }
           prm.leave_subsection();
         }

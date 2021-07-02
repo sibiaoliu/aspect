@@ -1,26 +1,27 @@
 /*
-   Copyright (C) 2016 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
-   This file is part of ASPECT.
+  This file is part of ASPECT.
 
-   ASPECT is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2, or (at your option)
-   any later version.
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
 
-   ASPECT is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with ASPECT; see the file LICENSE.  If not see
-   <http://www.gnu.org/licenses/>.
- */
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
 
+#ifndef _aspect_initial_temperature_adiabatic_boundary_h
+#define _aspect_initial_temperature_adiabatic_boundary_h
 
 #include <aspect/initial_temperature/interface.h>
-#include <aspect/geometry_model/ellipsoidal_chunk.h>
 #include <aspect/simulator_access.h>
 #include <aspect/utilities.h>
 
@@ -33,25 +34,32 @@ namespace aspect
 
     /**
      * A class that computes an initial temperature field based
-     * on a user-defined adiabatic boundary for the 3D ellipsoid
-     * chunk geometry model. It discretizes the model domain into
+     * on a user-defined adiabatic boundary. It discretizes the model domain into
      * two regions separated by an isotherm boundary below which
      * the temperature increases adiabatically. Above the
      * user-defined isotherm boundary the temperature linearly
      * increases from a surface temperature (273.15 K or 0 degree C)
-     * to the isotherm (1673.15 K or 1600 degree C). The user
+     * to the isotherm (1673.15 K or 1400 degree C). The user
      * defines the location of the isotherm boundary with an ascii
-     * data file with the format defined in the ASPECT manual. Note
-     * that the latitudinal and longitudinal bounds of the ascii input
-     * data file need to be at least 1 degree wider than the bounds
-     * you use to define the region of your ellipsoid chunk geometry.
+     * data file with the format defined in the ASPECT manual.
      *
-     * This plugin is developed by Tahiry Rajaonarison and D. Sarah Stamps.
+     * This plugin is developed by Tahiry Rajaonarison, Emmanuel Njinju, and D. Sarah Stamps.
      */
     template <int dim>
-    class AdiabaticBoundary : public Interface<dim>, public SimulatorAccess<dim>
+    class AdiabaticBoundary : public Interface<dim>, public Utilities::AsciiDataBoundary<dim>
     {
       public:
+
+        /**
+         * Constructor.
+         */
+        AdiabaticBoundary ();
+
+        void initialize () override;
+
+        // avoid -Woverloaded-virtual:
+        using Utilities::AsciiDataBoundary<dim>::initialize;
+
         /**
          * Return the initial temperature as a function of position.
          */
@@ -69,23 +77,13 @@ namespace aspect
         void parse_parameters (ParameterHandler &prm) override;
 
       private:
-        std::vector<double>  latitudes_iso;
-        std::vector<double>  longitudes_iso;
-        std::vector<double>  depths_iso;
-        std::string isotherm_file_name;
-        std::string data_directory;
+
         double isotherm_temperature;
         double surface_temperature;
         double temperature_gradient;
-        double delta;
+        types::boundary_id surface_boundary_id;
 
-        /**
-         * A function that returns the isotherm depth for a given position.
-         */
-        double
-        get_isotherm_depth (const double latitude,
-                            const double longitude) const;
     };
   }
 }
-
+#endif

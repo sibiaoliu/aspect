@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,6 +25,7 @@
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_tools.h>
 #include <aspect/utilities.h>
+#include <deal.II/dofs/dof_tools.h>
 
 namespace aspect
 {
@@ -165,25 +166,7 @@ namespace aspect
 
                       this_cell.material_id = cell->material_id();
 
-#if !DEAL_II_VERSION_GTE(9,1,0)
-                      // In deal.II prior to version 9.1, the hyper_ball mesh generated above
-                      // had cells that were inconsistently oriented: Some cells had a normal
-                      // vector that pointed to the inside of the ball, some that pointed
-                      // to the outside. This leads to cells with either negative or
-                      // positive volume if we extrude them in the radial direction. We need
-                      // to fix this up.
 
-                      if (GridTools::cell_measure (points, this_cell.vertices) < 0)
-                        {
-                          if (dim == 2)
-                            std::swap (this_cell.vertices[1], this_cell.vertices[2]);
-                          if (dim == 3)
-                            {
-                              std::swap (this_cell.vertices[1], this_cell.vertices[2]);
-                              std::swap (this_cell.vertices[5], this_cell.vertices[6]);
-                            }
-                        }
-#endif
                       Assert(GridTools::cell_measure (points, this_cell.vertices) > 0, ExcInternalError());
 
                       cells.push_back(this_cell);
@@ -234,6 +217,23 @@ namespace aspect
                                               R1,
                                               0,
                                               true);
+
+          if (periodic)
+            {
+              // Tell p4est about the periodicity of the mesh.
+              std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator> >
+              matched_pairs;
+              FullMatrix<double> rotation_matrix(dim);
+              rotation_matrix[0][1] = 1.;
+              rotation_matrix[1][0] = -1.;
+
+              GridTools::collect_periodic_faces(coarse_grid, /*b_id1*/ 2, /*b_id2*/ 3,
+                                                /*direction*/ 1, matched_pairs,
+                                                Tensor<1, dim>(), rotation_matrix);
+
+              if (matched_pairs.size() > 0)
+                coarse_grid.add_periodicity (matched_pairs);
+            }
         }
       else if (phi == 180)
         {
@@ -356,6 +356,22 @@ namespace aspect
     }
 
 
+
+    template <int dim>
+    std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >
+    SphericalShell<dim>::
+    get_periodic_boundary_pairs () const
+    {
+      std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundaries;
+      if (periodic)
+        {
+          periodic_boundaries.insert( std::make_pair( std::pair<types::boundary_id, types::boundary_id>(2, 3), 1) );
+        }
+      return periodic_boundaries;
+    }
+
+
+
     template <int dim>
     double
     SphericalShell<dim>::
@@ -445,7 +461,7 @@ namespace aspect
                   this->get_timestep_number() == 0,
                   ExcMessage("After displacement of the mesh, this function can no longer be used to determine whether a point lies in the domain or not."));
 
-      AssertThrow(dynamic_cast<const InitialTopographyModel::ZeroTopography<dim>*>(&this->get_initial_topography_model()) != nullptr,
+      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
                   ExcMessage("After adding topography, this function can no longer be used to determine whether a point lies in the domain or not."));
 
       const std::array<double, dim> spherical_point = Utilities::Coordinates::cartesian_to_spherical_coordinates(point);
@@ -506,6 +522,41 @@ namespace aspect
 
     template <int dim>
     void
+    SphericalShell<dim>::make_periodicity_constraints(const DoFHandler<dim> &dof_handler,
+                                                      AffineConstraints<double> &constraints) const
+    {
+      if (periodic)
+        {
+          std::vector<GridTools::PeriodicFacePair<typename DoFHandler<dim>::cell_iterator> >
+          matched_pairs;
+          FullMatrix<double> rotation_matrix(dim);
+          rotation_matrix[0][1] = 1.;
+          rotation_matrix[1][0] = -1.;
+
+          GridTools::collect_periodic_faces(dof_handler, /*b_id1*/ 2, /*b_id2*/ 3,
+                                            /*direction*/ 1, matched_pairs,
+                                            Tensor<1, dim>(), rotation_matrix);
+
+#if DEAL_II_VERSION_GTE(9,3,0)
+          DoFTools::make_periodicity_constraints<dim,dim,double>(matched_pairs,
+                                                                 constraints,
+                                                                 ComponentMask(),
+          {0},
+          1.);
+#else
+          DoFTools::make_periodicity_constraints<DoFHandler<dim>,double>(matched_pairs,
+                                                                         constraints,
+                                                                         ComponentMask(),
+          {0},
+          1.);
+#endif
+        }
+    }
+
+
+
+    template <int dim>
+    void
     SphericalShell<dim>::declare_parameters (ParameterHandler &prm)
     {
       prm.enter_subsection("Geometry model");
@@ -543,24 +594,24 @@ namespace aspect
                              "radially. This parameter allows the user more control "
                              "over the ratio between radial and lateral refinement of "
                              "the mesh.");
-          prm.declare_entry ("Inner radius", "3481000",  // 6371-2890 in km
-                             Patterns::Double (0),
-                             "Inner radius of the spherical shell. Units: $\\si{m}$. "
+          prm.declare_entry ("Inner radius", "3481000.",  // 6371-2890 in km
+                             Patterns::Double (0.),
+                             "Inner radius of the spherical shell. Units: \\si{\\meter}."
                              "\n\n"
                              "\\note{The default value of 3,481,000 m equals the "
                              "radius of a sphere with equal volume as Earth (i.e., "
                              "6371 km) minus the average depth of the core-mantle "
                              "boundary (i.e., 2890 km).}");
-          prm.declare_entry ("Outer radius", "6336000",  // 6371-35 in km
-                             Patterns::Double (0),
-                             "Outer radius of the spherical shell. Units: $\\si{m}$. "
+          prm.declare_entry ("Outer radius", "6336000.",  // 6371-35 in km
+                             Patterns::Double (0.),
+                             "Outer radius of the spherical shell. Units: \\si{\\meter}."
                              "\n\n"
                              "\\note{The default value of 6,336,000 m equals the "
                              "radius of a sphere with equal volume as Earth (i.e., "
                              "6371 km) minus the average depth of the mantle-crust "
                              "interface (i.e., 35 km).}");
-          prm.declare_entry ("Opening angle", "360",
-                             Patterns::Double (0, 360),
+          prm.declare_entry ("Opening angle", "360.",
+                             Patterns::Double (0., 360.),
                              "Opening angle in degrees of the section of the shell "
                              "that we want to build. "
                              "The only opening angles that are allowed for "
@@ -589,6 +640,10 @@ namespace aspect
                              "In either case, this parameter is ignored unless the opening "
                              "angle of the domain is 360 degrees. This parameter is also "
                              "ignored when using a custom mesh subdivision scheme.");
+          prm.declare_entry ("Phi periodic", "false",
+                             Patterns::Bool (),
+                             "Whether the shell should be periodic in the phi direction.");
+
         }
         prm.leave_subsection();
       }
@@ -647,6 +702,14 @@ namespace aspect
             {
               AssertThrow (n_slices > 0, ExcMessage("You must set a positive number of slices for extrusion"));
             }
+
+          periodic = prm.get_bool ("Phi periodic");
+          if (periodic)
+            {
+              AssertThrow (dim == 2,  ExcMessage("Periodic boundaries in the spherical shell are only supported for 2D models."));
+              AssertThrow (phi == 90, ExcMessage("Periodic boundaries in the spherical shell are only supported for an opening angle of 90 degrees."));
+            }
+
 
         }
         prm.leave_subsection();

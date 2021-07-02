@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -89,7 +89,7 @@ namespace aspect
         {
           prm.declare_entry("Compositional field scaling factors",
                             "",
-                            Patterns::List (Patterns::Double(0)),
+                            Patterns::List (Patterns::Double (0.)),
                             "A list of scaling factors by which every individual compositional "
                             "field gradient will be multiplied. If only a single compositional "
                             "field exists, then this parameter has no particular meaning. "

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -44,18 +44,19 @@ namespace aspect
     Topography<dim>::execute (TableHandler &statistics)
     {
       //Disallow use of the plugin with sphere geometry model
-      if (GeometryModel::Sphere<dim> *gm = dynamic_cast<GeometryModel::Sphere<dim> *>
-                                           (const_cast<GeometryModel::Interface<dim> *>(&this->get_geometry_model())))
-        {
-          AssertThrow(false, ExcMessage("Topography postprocessor is not yet implemented "
-                                        "for the sphere geometry model. "
-                                        "Consider using a box, spherical shell, or chunk.") );
-        }
+      AssertThrow(!Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>>(this->get_geometry_model()),
+                  ExcMessage("Topography postprocessor is not yet implemented "
+                             "for the sphere geometry model. "
+                             "Consider using a box, spherical shell, or chunk.") );
 
       const types::boundary_id relevant_boundary = this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top");
 
       // Get a quadrature rule that exists only on the corners
-      QTrapez<dim-1> face_corners;
+#if DEAL_II_VERSION_GTE(9,3,0)
+      const QTrapezoid<dim-1> face_corners;
+#else
+      const QTrapez<dim-1> face_corners;
+#endif
       FEFaceValues<dim> face_vals (this->get_mapping(), this->get_fe(), face_corners, update_quadrature_points);
 
       // have a stream into which we write the data. the text stream is then
@@ -166,8 +167,9 @@ namespace aspect
               // determined the maximal message length, we use this feature here
               // rather than trying to find out the exact message length with
               // a call to MPI_Probe.
-              MPI_Recv (&tmp[0], max_data_length, MPI_CHAR, p, mpi_tag,
-                        this->get_mpi_communicator(), &status);
+              const int ierr = MPI_Recv (&tmp[0], max_data_length, MPI_CHAR, p, mpi_tag,
+                                         this->get_mpi_communicator(), &status);
+              AssertThrowMPI(ierr);
 
               // output the string. note that 'tmp' has length max_data_length,
               // but we only wrote a certain piece of it in the MPI_Recv, ended
@@ -181,8 +183,9 @@ namespace aspect
         // character at the end of the string
         {
           output_file << "\0";
-          MPI_Send (&output_file.str()[0], output_file.str().size()+1, MPI_CHAR, 0, mpi_tag,
-                    this->get_mpi_communicator());
+          const int ierr = MPI_Send (&output_file.str()[0], output_file.str().size()+1, MPI_CHAR, 0, mpi_tag,
+                                     this->get_mpi_communicator());
+          AssertThrowMPI(ierr);
         }
 
       // if output_interval is positive, then update the last supposed output
@@ -217,7 +220,7 @@ namespace aspect
                              "'topography.NNNNN' in the output directory");
 
           prm.declare_entry ("Time between text output", "0.",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The time interval between each generation of "
                              "text output files. A value of zero indicates "
                              "that output should be generated in each time step. "

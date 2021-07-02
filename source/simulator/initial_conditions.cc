@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -270,11 +270,39 @@ namespace aspect
           ComponentMask property_mask  (particle_property_manager->get_data_info().n_components(),false);
           property_mask.set(particle_property,true);
 
-          const std::vector<std::vector<double> > particle_properties =
-            particle_interpolator->properties_at_points(particle_postprocessor.get_particle_world().get_particle_handler(),
-                                                        quadrature_points,
-                                                        property_mask,
-                                                        cell);
+          std::vector<std::vector<double> > particle_properties;
+
+          try
+            {
+              particle_properties =
+                particle_interpolator->properties_at_points(particle_postprocessor.get_particle_world().get_particle_handler(),
+                                                            quadrature_points,
+                                                            property_mask,
+                                                            cell);
+            }
+          // interpolators that throw exceptions usually do not result in
+          // anything good, because they result in an unwinding of the stack
+          // and, if only one processor triggers an exception, the
+          // destruction of objects often causes a deadlock or completely
+          // unrelated MPI error messages. Thus, if an exception is
+          // generated, catch it, print an error message, and abort the program.
+          catch (std::exception &exc)
+            {
+              std::cerr << std::endl << std::endl
+                        << "----------------------------------------------------"
+                        << std::endl;
+              std::cerr << "Exception on MPI process <"
+                        << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
+                        << "> while interpolating particle properties: "
+                        << std::endl
+                        << exc.what() << std::endl
+                        << "Aborting!" << std::endl
+                        << "----------------------------------------------------"
+                        << std::endl;
+
+              // terminate the program!
+              MPI_Abort (MPI_COMM_WORLD, 1);
+            }
 
           // go through the composition dofs and set their global values
           // to the particle field interpolated at these points
@@ -375,9 +403,9 @@ namespace aspect
       }
     else
       {
-        // implement the local projection for the discontinuous pressure
-        // element. this is only going to work if, indeed, the element
-        // is discontinuous
+        // Find the local projection for the discontinuous pressure
+        // element. This is only going to work if, indeed, the element
+        // is discontinuous.
         Assert (finite_element.base_element(introspection.base_elements.pressure).dofs_per_face == 0,
                 ExcNotImplemented());
 
@@ -385,74 +413,20 @@ namespace aspect
         system_tmp.reinit (system_rhs);
 
         QGauss<dim> quadrature(parameters.stokes_velocity_degree+1);
-        UpdateFlags update_flags = UpdateFlags(update_values   |
-                                               update_quadrature_points |
-                                               update_JxW_values);
 
-        FEValues<dim> fe_values (*mapping, finite_element, quadrature, update_flags);
-
-        const unsigned int
-        dofs_per_cell = fe_values.dofs_per_cell,
-        n_q_points    = fe_values.n_quadrature_points;
-
-        std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
-        Vector<double> cell_vector (dofs_per_cell);
-        Vector<double> local_projection (dofs_per_cell);
-        FullMatrix<double> local_mass_matrix (dofs_per_cell, dofs_per_cell);
-
-        std::vector<double> rhs_values(n_q_points);
-
-        ScalarFunctionFromFunctionObject<dim>
-        adiabatic_pressure (
-          [&](const Point<dim> &p) -> double
+        Utilities::project_cellwise<dim,LinearAlgebra::BlockVector>(*mapping,
+                                                                    dof_handler,
+                                                                    introspection.component_indices.pressure,
+                                                                    quadrature,
+                                                                    [&](const typename DoFHandler<dim>::active_cell_iterator & /*cell*/,
+                                                                        const std::vector<Point<dim> > &q_points,
+                                                                        std::vector<double> &values) -> void
         {
-          return adiabatic_conditions->pressure(p);
-        });
-
-
-        for (const auto &cell : dof_handler.active_cell_iterators())
-          if (cell->is_locally_owned())
-            {
-              cell->get_dof_indices (local_dof_indices);
-              fe_values.reinit(cell);
-
-              adiabatic_pressure.value_list (fe_values.get_quadrature_points(),
-                                             rhs_values);
-
-              cell_vector = 0;
-              local_mass_matrix = 0;
-              for (unsigned int point=0; point<n_q_points; ++point)
-                for (unsigned int i=0; i<dofs_per_cell; ++i)
-                  {
-                    if (finite_element.system_to_component_index(i).first == dim)
-                      cell_vector(i)
-                      +=
-                        rhs_values[point] *
-                        fe_values[introspection.extractors.pressure].value(i,point) *
-                        fe_values.JxW(point);
-
-                    // populate the local matrix; create the pressure mass matrix
-                    // in the pressure pressure block and the identity matrix
-                    // for all other variables so that the whole thing remains
-                    // invertible
-                    for (unsigned int j=0; j<dofs_per_cell; ++j)
-                      if ((finite_element.system_to_component_index(i).first == introspection.component_indices.pressure)
-                          &&
-                          (finite_element.system_to_component_index(j).first == introspection.component_indices.pressure))
-                        local_mass_matrix(j,i) += (fe_values[introspection.extractors.pressure].value(i,point) *
-                                                   fe_values[introspection.extractors.pressure].value(j,point) *
-                                                   fe_values.JxW(point));
-                      else if (i == j)
-                        local_mass_matrix(i,j) = 1;
-                  }
-
-              // now invert the local mass matrix and multiply it with the rhs
-              local_mass_matrix.gauss_jordan();
-              local_mass_matrix.vmult (local_projection, cell_vector);
-
-              // then set the global solution vector to the values just computed
-              cell->set_dof_values (local_projection, system_tmp);
-            }
+          for (unsigned int i=0; i<values.size(); ++i)
+            values[i] = adiabatic_conditions->pressure(q_points[i]);
+          return;
+        },
+        system_tmp);
 
         old_solution.block(introspection.block_indices.pressure) = system_tmp.block(introspection.block_indices.pressure);
       }
@@ -479,4 +453,6 @@ namespace aspect
 
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

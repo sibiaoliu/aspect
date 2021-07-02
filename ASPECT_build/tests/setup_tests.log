@@ -1,0 +1,16 @@
+-- Found Perl: /usr/bin/perl (found version "5.30.2") 
+-- Setting up tests with CMAKE_BUILD_TYPE Debug
+-- The CXX compiler identification is AppleClang 12.0.5.12050022
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /Applications/deal.II.app/Contents/Resources/spack/opt/spack/openmpi-4.0.5-yh6r/bin/mpic++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- ** processing test quick_mpi:
+-- Setting up plugin:
+--   name <quick_mpi>
+--   using ASPECT_DIR /Users/sliu/GoogleDrive/1_Research/Aspect/aspect_July21/ASPECT_build
+--   in Debug mode
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /Users/sliu/GoogleDrive/1_Research/Aspect/aspect_July21/ASPECT_build/tests

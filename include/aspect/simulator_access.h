@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -49,22 +49,11 @@ namespace aspect
 {
   using namespace dealii;
 
-#if DEAL_II_VERSION_GTE(9,1,0)
-  /**
-   * The ConstraintMatrix class was deprecated in deal.II 9.1 in favor
-   * of AffineConstraints. To make the name available for ASPECT
-   * nonetheless, use a `using` declaration. This injects the name
-   * into the `aspect` namespace, where it is visible before the
-   * deprecated name in the `dealii` namespace, thereby suppressing
-   * the deprecation message.
-   */
-  using ConstraintMatrix = class dealii::AffineConstraints<double>;
-#endif
-
   // forward declarations:
   template <int dim> class Simulator;
   template <int dim> struct SimulatorSignals;
   template <int dim> class LateralAveraging;
+  template <int dim> struct RotationProperties;
 
   namespace GravityModel
   {
@@ -150,6 +139,13 @@ namespace aspect
   }
 
   template <int dim> class NewtonHandler;
+
+  template <int dim> class StokesMatrixFreeHandler;
+
+  namespace Particle
+  {
+    template <int dim> class World;
+  }
 
   /**
    * SimulatorAccess is a base class for different plugins like postprocessors.
@@ -752,7 +748,7 @@ namespace aspect
        */
       const NewtonHandler<dim> &
       get_newton_handler () const;
-
+#ifdef ASPECT_WITH_WORLD_BUILDER
       /**
        * Return a reference to the world builder that controls the setup of
        * initial conditions.
@@ -762,7 +758,7 @@ namespace aspect
        */
       const WorldBuilder::World &
       get_world_builder () const;
-
+#endif
       /**
        * Return a reference to the mesh deformation handler. This function will
        * throw an exception if mesh deformation is not activated.
@@ -782,7 +778,7 @@ namespace aspect
        * Return a pointer to the object that describes the DoF
        * constraints for the time step we are currently solving.
        */
-      const ConstraintMatrix &
+      const AffineConstraints<double> &
       get_current_constraints () const;
 
       /**
@@ -889,6 +885,50 @@ namespace aspect
        */
       const Postprocess::Manager<dim> &
       get_postprocess_manager () const;
+
+      /**
+       * Returns a const reference to the particle world, in case anyone
+       * wants to query something about particles.
+       */
+      const Particle::World<dim> &
+      get_particle_world() const;
+
+      /**
+       * Returns a reference to the particle world, in case anyone wants to
+       * change something within the particle world. Use with care, usually
+       * you want to only let the functions within the particle subsystem
+       * change member variables of the particle world.
+       */
+      Particle::World<dim> &
+      get_particle_world();
+
+      /**
+       *  Return true if using the block GMG Stokes solver.
+       */
+      bool is_stokes_matrix_free();
+
+      /**
+       * Return a reference to the StokesMatrixFreeHandler that controls the
+       * matrix-free Stokes solver.
+       */
+      const StokesMatrixFreeHandler<dim> &
+      get_stokes_matrix_free () const;
+
+      /**
+       * Compute the angular momentum and other rotation properties
+       * of the velocities in the given solution vector.
+       *
+       * @param use_constant_density determines whether to use a constant
+       * density (which corresponds to computing a net rotation instead of net
+       * angular momentum).
+       * @param solution Solution vector to compute the properties for.
+       * @param limit_to_top_faces allows to only compute the net angular momentum
+       * (or net rotation) of the top surface.
+       */
+      RotationProperties<dim>
+      compute_net_angular_momentum(const bool use_constant_density,
+                                   const LinearAlgebra::BlockVector &solution,
+                                   const bool limit_to_top_faces = false) const;
 
       /** @} */
 

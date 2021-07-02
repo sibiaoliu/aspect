@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -21,10 +21,7 @@
 
 #include <aspect/gravity_model/vertical.h>
 
-#include <aspect/geometry_model/sphere.h>
-#include <aspect/geometry_model/spherical_shell.h>
-#include <aspect/geometry_model/chunk.h>
-#include <aspect/geometry_model/ellipsoidal_chunk.h>
+#include <aspect/geometry_model/interface.h>
 
 #include <deal.II/base/tensor.h>
 
@@ -48,7 +45,7 @@ namespace aspect
       {
         prm.enter_subsection("Vertical");
         {
-          prm.declare_entry ("Magnitude", "1",
+          prm.declare_entry ("Magnitude", "1.",
                              Patterns::Double (),
                              "Value of the gravity vector in $m/s^2$ directed "
                              "along negative y (2D) or z (3D) axis (if the magnitude "
@@ -74,14 +71,9 @@ namespace aspect
       }
       prm.leave_subsection ();
 
-      Assert (dynamic_cast<const GeometryModel::Sphere<dim>*> (&this->get_geometry_model()) == nullptr,
-              ExcMessage ("Gravity model 'vertical' should not be used with geometry model 'sphere'."));
-      Assert (dynamic_cast<const GeometryModel::SphericalShell<dim>*> (&this->get_geometry_model()) == nullptr,
-              ExcMessage ("Gravity model 'vertical' should not be used with geometry model 'spherical shell'."));
-      Assert (dynamic_cast<const GeometryModel::Chunk<dim>*> (&this->get_geometry_model()) == nullptr,
-              ExcMessage ("Gravity model 'vertical' should not be used with geometry model 'chunk'."));
-      Assert (dynamic_cast<const GeometryModel::EllipsoidalChunk<dim>*> (&this->get_geometry_model()) == nullptr,
-              ExcMessage ("Gravity model 'vertical' should not be used with geometry model 'ellipsoidal chunk'."));
+      AssertThrow (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::cartesian,
+                   ExcMessage ("Gravity model 'vertical' should not be used with geometry models that "
+                               "do not have a cartesian natural coordinate system."));
     }
   }
 }

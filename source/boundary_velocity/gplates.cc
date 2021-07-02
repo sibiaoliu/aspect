@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,9 +30,6 @@
 
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
-
-#include <aspect/geometry_model/spherical_shell.h>
-#include <aspect/geometry_model/chunk.h>
 
 
 namespace aspect
@@ -103,6 +100,8 @@ namespace aspect
           }
       }
 
+
+
       template <int dim>
       std::string
       GPlatesLookup<dim>::screen_output(const Tensor<1,2> &surface_point_one,
@@ -141,6 +140,8 @@ namespace aspect
 
         return output.str();
       }
+
+
 
       template <int dim>
       void
@@ -244,6 +245,8 @@ namespace aspect
                     ExcMessage (std::string("Number of read in points does not match number of points in file. File corrupted?")));
       }
 
+
+
       template <int dim>
       Tensor<1,dim>
       GPlatesLookup<dim>::surface_velocity(const Point<dim> &position) const
@@ -302,6 +305,8 @@ namespace aspect
         return output_boundary_velocity;
       }
 
+
+
       template <int dim>
       Tensor<1,dim>
       GPlatesLookup<dim>::cartesian_velocity_at_surface_point(const std::array<double,3> &spherical_point) const
@@ -329,6 +334,8 @@ namespace aspect
         return output_boundary_velocity;
       }
 
+
+
       template <int dim>
       Tensor<1,3>
       GPlatesLookup<dim>::cartesian_surface_coordinates(const Tensor<1,3> &sposition) const
@@ -340,6 +347,8 @@ namespace aspect
         ccoord[2] = std::cos(sposition[0]); // Z
         return ccoord;
       }
+
+
 
       template <int dim>
       Tensor<1,3>
@@ -355,6 +364,8 @@ namespace aspect
 
         return velocity;
       }
+
+
 
       template <int dim>
       Tensor<2,3>
@@ -373,6 +384,8 @@ namespace aspect
         rotation_matrix[2][2] = (1-std::cos(rotation_angle)) * rotation_axis[2]*rotation_axis[2] + std::cos(rotation_angle);
         return rotation_matrix;
       }
+
+
 
       template <int dim>
       double
@@ -396,6 +409,8 @@ namespace aspect
 
         return rotation_angle;
       }
+
+
 
       template <int dim>
       std::array<double,3>
@@ -497,6 +512,8 @@ namespace aspect
         return orientation;
       }
 
+
+
       template <int dim>
       template <int in, int out>
       Tensor<1,out>
@@ -509,6 +526,7 @@ namespace aspect
 
         return new_tensor;
       }
+
 
 
       template <int dim>
@@ -533,6 +551,8 @@ namespace aspect
       }
     }
 
+
+
     template <int dim>
     GPlates<dim>::GPlates ()
       :
@@ -549,6 +569,7 @@ namespace aspect
       lookup(),
       old_lookup()
     {}
+
 
 
     template <int dim>
@@ -568,15 +589,13 @@ namespace aspect
                 ExcMessage ("To define a plane for the 2D model the two assigned points "
                             "may not be equal."));
 
-      if (((dynamic_cast<const GeometryModel::SphericalShell<dim>*> (&this->get_geometry_model())) != nullptr)
-          || ((dynamic_cast<const GeometryModel::Chunk<dim>*> (&this->get_geometry_model())) != nullptr))
-        {
-          lookup = std_cxx14::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
-          old_lookup = std_cxx14::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
-        }
-      else
-        AssertThrow (false,ExcMessage ("This gplates plugin can only be used when using "
-                                       "a spherical shell or chunk geometry."));
+      AssertThrow (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::spherical,
+                   ExcMessage ("This gplates plugin can only be used when the "
+                               "preferred coordinate system of the geometry model is spherical "
+                               "(e.g. spherical shell, chunk, sphere)."));
+
+      lookup = std_cxx14::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
+      old_lookup = std_cxx14::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
 
       // display the GPlates module information at model start.
       this->get_pcout() << lookup->screen_output(pointone, pointtwo);
@@ -629,6 +648,7 @@ namespace aspect
     }
 
 
+
     template <int dim>
     std::string
     GPlates<dim>::create_filename (const int timestep) const
@@ -640,6 +660,7 @@ namespace aspect
       std::string str_filename (buffer.data());
       return str_filename;
     }
+
 
 
     template <int dim>
@@ -692,6 +713,8 @@ namespace aspect
         }
     }
 
+
+
     template <int dim>
     void
     GPlates<dim>::update_data (const bool load_both_files)
@@ -736,6 +759,8 @@ namespace aspect
         end_time_dependence ();
     }
 
+
+
     template <int dim>
     void
     GPlates<dim>::end_time_dependence ()
@@ -745,10 +770,12 @@ namespace aspect
       time_dependent = false;
       // Give warning if first processor
       this->get_pcout() << std::endl
-                        << "   Loading new velocity file did not succeed." << std::endl
+                        << "   Loading new gplates velocity file did not succeed." << std::endl
                         << "   Assuming constant boundary conditions for rest of model run."
                         << std::endl << std::endl;
     }
+
+
 
     template <int dim>
     Tensor<1,dim>
@@ -783,6 +810,7 @@ namespace aspect
     }
 
 
+
     template <int dim>
     void
     GPlates<dim>::declare_parameters (ParameterHandler &prm)
@@ -806,8 +834,8 @@ namespace aspect
                              "The file name of the material data. Provide file in format: "
                              "(Velocity file name).\\%d.gpml where \\%d is any sprintf integer "
                              "qualifier, specifying the format of the current file number.");
-          prm.declare_entry ("First data file model time", "0",
-                             Patterns::Double (0),
+          prm.declare_entry ("First data file model time", "0.",
+                             Patterns::Double (0.),
                              "Time from which on the velocity file with number 'First velocity "
                              "file number' is used as boundary condition. Previous to this "
                              "time, a no-slip boundary condition is assumed. Depending on the setting "
@@ -825,12 +853,12 @@ namespace aspect
                              "'First velocity file number' and decrease the file number during "
                              "the model run.");
           prm.declare_entry ("Data file time step", "1e6",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Time step between following velocity files. "
                              "Depending on the setting of the global 'Use years in output instead of seconds' flag "
                              "in the input file, this number is either interpreted as seconds or as years. "
                              "The default is one million, i.e., either one million seconds or one million years.");
-          prm.declare_entry ("Scale factor", "1",
+          prm.declare_entry ("Scale factor", "1.",
                              Patterns::Double (),
                              "Scalar factor, which is applied to the boundary velocity. "
                              "You might want to use this to scale the velocities to a "
@@ -838,12 +866,14 @@ namespace aspect
                              "plate reconstruction.");
           prm.declare_entry ("Point one", "1.570796,0.0",
                              Patterns::Anything (),
-                             "Point that determines the plane in which a 2D model lies in. Has to be in the format `a,b' where a and b are theta (polar angle)  and phi in radians.");
+                             "Point that determines the plane in which a 2D model lies in. Has to be in the format `a,b' where a and b are theta (polar angle) and "
+                             "phi in radians. This value is not utilized in 3D geometries, and can therefore be set to the default or any user-defined quantity.");
           prm.declare_entry ("Point two", "1.570796,1.570796",
                              Patterns::Anything (),
-                             "Point that determines the plane in which a 2D model lies in. Has to be in the format `a,b' where a and b are theta (polar angle)  and phi in radians.");
-          prm.declare_entry ("Lithosphere thickness", "100000",
-                             Patterns::Double (0),
+                             "Point that determines the plane in which a 2D model lies in. Has to be in the format `a,b' where a and b are theta (polar angle) and "
+                             "phi in radians. This value is not utilized in 3D geometries, and can therefore be set to the default or any user-defined quantity.");
+          prm.declare_entry ("Lithosphere thickness", "100000.",
+                             Patterns::Double (0.),
                              "Determines the depth of the lithosphere, so that the GPlates velocities can be applied at the sides of the model "
                              "as well as at the surface.");
         }
@@ -851,6 +881,7 @@ namespace aspect
       }
       prm.leave_subsection();
     }
+
 
 
     template <int dim>
@@ -891,6 +922,16 @@ namespace aspect
 {
   namespace BoundaryVelocity
   {
+    namespace internal
+    {
+#define INSTANTIATE(dim) \
+  template class GPlatesLookup<dim>;
+
+      ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
+    }
+
     ASPECT_REGISTER_BOUNDARY_VELOCITY_MODEL(GPlates,
                                             "gplates",
                                             "Implementation of a model in which the boundary "

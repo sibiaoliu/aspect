@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -247,6 +247,13 @@ namespace aspect
         void
         execute (internal::Assembly::Scratch::ScratchBase<dim>  &scratch_base,
                  internal::Assembly::CopyData::CopyDataBase<dim> &data_base) const override;
+
+        /**
+         * Create additional material models outputs for assembly of derivatives or adding additional
+         * terms to the right hand side of the Stokes equations. The latter could include viscoelastic
+         * forces or other user-defined values calculated within the material model.
+         */
+        void create_additional_material_model_outputs(MaterialModel::MaterialModelOutputs<dim> &outputs) const override;
     };
 
     /**

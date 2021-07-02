@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -102,7 +102,7 @@ namespace aspect
       void set_initial_volume_fractions ();
 
       /**
-       * Initialize specified field based on a composition field initial conditon
+       * Initialize specified field based on a composition field initial condition
        */
       void initialize_from_composition_field (const VolumeOfFluidField<dim> &field);
 
@@ -144,7 +144,7 @@ namespace aspect
                                             const bool update_from_old_solution);
 
       /**
-       * Solve the diagnonal matrix assembled in assemble_volume_of_fluid_system for the
+       * Solve the diagonal matrix assembled in assemble_volume_of_fluid_system for the
        * specified field.
        */
       void solve_volume_of_fluid_system (const VolumeOfFluidField<dim> &field);
@@ -216,7 +216,7 @@ namespace aspect
        * held here as all access to the actual methods for composition
        * initialization is handled by the manager.
        */
-      std::vector<typename VolumeOfFluid::VolumeOfFluidInputType::Kind> initialization_data_type;
+      std::vector<VolumeOfFluid::VolumeOfFluidInputType::Kind> initialization_data_type;
 
       friend class Simulator<dim>;
   };

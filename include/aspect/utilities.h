@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,6 +33,7 @@
 #include <deal.II/fe/component_mask.h>
 
 #include <aspect/coordinate_systems.h>
+#include <aspect/structured_data.h>
 
 
 
@@ -73,8 +74,6 @@ namespace aspect
                                  const unsigned int N,
                                  const std::string &id_text);
 
-
-
     /**
      * This function takes a string argument that is interpreted as a map
      * of the form "key1 : value1, key2 : value2, etc", and then parses
@@ -96,21 +95,22 @@ namespace aspect
      *   assigned to the first element of the output vector. This form only
      *   allows a single value per key.
      * - Whether or not a background field is required depends on
-     *   the parameter being parsed. Requiring a background field
-     *   increases the size of the output vector by 1. For example,
-     *   some Material models require background fields, but input
-     *   files may not.
+     *   @p expects_background_field. Requiring a background field
+     *   inserts "background" into the @p list_of_keys as the first entry
+     *   in the list. Some calling functions (like some material models)
+     *   require values for background fields, while others may not
+     *   need background values.
      * - Two special keys are recognized:
      *      all --> Assign the associated value to all fields.
-     *              Only one value is allowed in this case.
+     *              Only one key is allowed in this case.
      *      background --> Assign associated value to the background.
      *
      * @param[in] key_value_map The string representation of the map
      *   to be parsed.
-     * @param[in] list_of_keys A list of valid key names that are allowed
+     * @param[in] list_of_keys A list of N valid key names that are allowed
      *   to appear in the map. The order of these keys determines the order
      *   of values that are returned by this function.
-     * @param[in] has_background_field If true, expect N+1 values and allow
+     * @param[in] expects_background_field If true, expect N+1 values and allow
      *   setting of the background using the key "background".
      * @param[in] property_name A name that identifies the type of property
      *   that is being parsed by this function and that is used in generating
@@ -129,22 +129,28 @@ namespace aspect
      *   handed over (e.g. a n_values_per_key vector created by a
      *   previous call to this function) then this vector is used as
      *   expected structure of the input parameter, and it is checked that
-     *   @p key_value_map fulfills this structure.
+     *   @p key_value_map fulfills this structure. This can be used to assert
+     *   that several input parameters prescribe the same number of values
+     *   to each key.
+     * @param [in] allow_missing_keys Whether to allow that some keys are
+     *   not set to any values, i.e. they do not appear at all in the
+     *   @p key_value_map. This also allows a completely empty map.
      *
      * @return A vector of values that are parsed from the map, provided
      *   in the order in which the keys appear in the @p list_of_keys argument.
      *   If multiple values per key are allowed, the vector contains first all
      *   values for key 1, then all values for key 2 and so forth. Using the
-     *   @p n_values_per_key vector allows the caller to sort entries in the
-     *   returned vector to specific keys.
+     *   @p n_values_per_key vector allows the caller to associate entries in the
+     *   returned vector with specific keys.
      */
     std::vector<double>
     parse_map_to_double_array (const std::string &key_value_map,
                                const std::vector<std::string> &list_of_keys,
-                               const bool has_background_field,
+                               const bool expects_background_field,
                                const std::string &property_name,
                                const bool allow_multiple_values_per_key = false,
-                               std::shared_ptr<std::vector<unsigned int> > n_values_per_key = nullptr);
+                               const std::shared_ptr<std::vector<unsigned int> > &n_values_per_key = nullptr,
+                               const bool allow_missing_keys = false);
 
     /**
      * This function takes a string argument that is assumed to represent
@@ -183,6 +189,7 @@ namespace aspect
     expand_dimensional_variable_names (const std::vector<std::string> &var_declarations);
 
 
+#if !DEAL_II_VERSION_GTE(9,2,0)
     /**
      * Split the set of DoFs (typically locally owned or relevant) in @p whole_set into blocks
      * given by the @p dofs_per_block structure.
@@ -193,7 +200,7 @@ namespace aspect
     void split_by_block (const std::vector<types::global_dof_index> &dofs_per_block,
                          const IndexSet &whole_set,
                          std::vector<IndexSet> &partitioned);
-
+#endif
 
     /**
      * Returns an IndexSet that contains all locally active DoFs that belong to
@@ -217,7 +224,7 @@ namespace aspect
        */
       template <int dim>
       std::array<double,dim>
-      WGS84_coordinates(const Point<dim> &position);
+      WGS84_coordinates(const dealii::Point<dim> &position);
 
       /**
        * Returns spherical coordinates of a Cartesian point. The returned array
@@ -227,7 +234,7 @@ namespace aspect
        */
       template <int dim>
       std::array<double,dim>
-      cartesian_to_spherical_coordinates(const Point<dim> &position);
+      cartesian_to_spherical_coordinates(const dealii::Point<dim> &position);
 
       /**
        * Return the Cartesian point of a spherical position defined by radius,
@@ -235,7 +242,7 @@ namespace aspect
        * omitted.
        */
       template <int dim>
-      Point<dim>
+      dealii::Point<dim>
       spherical_to_cartesian_coordinates(const std::array<double,dim> &scoord);
 
       /**
@@ -246,7 +253,7 @@ namespace aspect
       template <int dim>
       Tensor<1,dim>
       spherical_to_cartesian_vector(const Tensor<1,dim> &spherical_vector,
-                                    const Point<dim> &position);
+                                    const dealii::Point<dim> &position);
 
 
       /**
@@ -256,7 +263,7 @@ namespace aspect
        */
       template <int dim>
       std::array<double,3>
-      cartesian_to_ellipsoidal_coordinates(const Point<3> &position,
+      cartesian_to_ellipsoidal_coordinates(const dealii::Point<3> &position,
                                            const double semi_major_axis_a,
                                            const double eccentricity);
 
@@ -265,7 +272,7 @@ namespace aspect
        * theta and radius.
        */
       template <int dim>
-      Point<3>
+      dealii::Point<3>
       ellipsoidal_to_cartesian_coordinates(const std::array<double,3> &phi_theta_d,
                                            const double semi_major_axis_a,
                                            const double eccentricity);
@@ -387,6 +394,13 @@ namespace aspect
      * @param filename File to check existence
      */
     bool fexists(const std::string &filename);
+
+    /**
+     * Checks to see if the user is trying to use data from a url.
+     *
+     * @param filename File to check
+     */
+    bool filename_is_url(const std::string &filename);
 
     /**
      * Reads the content of the ascii file @p filename on process 0 and
@@ -551,570 +565,6 @@ namespace aspect
      */
     bool has_unique_entries (const std::vector<std::string> &strings);
 
-    /**
-     * AsciiDataLookup reads in files containing input data in ascii format.
-     * Note the required format of the input data: The first lines may contain
-     * any number of comments if they begin with '#', but one of these lines
-     * needs to contain the number of grid points in each dimension as for
-     * example '# POINTS: 3 3'. The comments can optionally be followed by a
-     * single line, which does not start with '#', containing the names of
-     * the data columns.
-     * The order of the following data columns has to be
-     * 'coordinates data' with @p dim coordinate columns and @p components
-     * data columns. Note that the data in the input files need to be sorted
-     * in a specific order: the first coordinate needs to ascend first,
-     * followed by the second and so on in order to assign the correct data to
-     * the prescribed coordinates. The coordinates do not need to be
-     * equidistant.
-     */
-    template <int dim>
-    class AsciiDataLookup
-    {
-      public:
-        /**
-         * Constructor that explicitly prescribes the number of data columns
-         * in the data file. If a list of data components is provided in the
-         * data file it is checked that the length of this list is consistent
-         * with this number of components. This constructor is mostly provided
-         * for backwards compatibility. Not prescribing the number of components
-         * and instead reading them from the input file allows for more
-         * flexible files.
-         */
-        AsciiDataLookup(const unsigned int components,
-                        const double scale_factor);
-
-        /**
-         * This constructor relies on the list of column names at the beginning
-         * of the model file to determine the number of data components,
-         * therefore when using this constructor it is necessary to provide
-         * this list in the first uncommented line of the data file.
-         */
-        explicit AsciiDataLookup(const double scale_factor);
-
-        /**
-         * Loads a data text file. Throws an exception if the file does not
-         * exist, if the data file format is incorrect or if the file grid
-         * changes over model runtime.
-         */
-        void
-        load_file(const std::string &filename,
-                  const MPI_Comm &communicator);
-
-        /**
-         * Returns the computed data (velocity, temperature, etc. - according
-         * to the used plugin) in Cartesian coordinates.
-         *
-         * @param position The current position to compute the data (velocity,
-         * temperature, etc.)
-         * @param component The index (starting at 0) of the data column to be
-         * returned. The index is therefore less than the number of data
-         * columns in the data file (or specified in the constructor).
-         */
-        double
-        get_data(const Point<dim> &position,
-                 const unsigned int component) const;
-
-        /**
-         * Returns a vector that contains the names of all data columns in the
-         * order of their appearance in the data file (and their order in the
-         * memory data table). Returns an empty vector if no names are provided
-         * or the file is not read in yet.
-         */
-        std::vector<std::string>
-        get_column_names() const;
-
-        /**
-         * Returns whether the stored coordinates are equidistant. If
-         * coordinates are equidistant the lookup is more efficient. Returns
-         * false if no coordinates are loaded at the moment.
-         */
-        bool
-        has_equidistant_coordinates() const;
-
-        /**
-         * Returns the column index of a column with the given name
-         * @p column_name. Throws an exception if no such
-         * column exists or no names were provided in the file.
-         */
-        unsigned int
-        get_column_index_from_name(const std::string &column_name) const;
-
-        /**
-         * Returns a string that contains the name of the column with index
-         * @p column_index. Throws an exception if no such
-         * column exists or no name was provided in the file.
-         */
-        std::string
-        get_column_name_from_index(const unsigned int column_index) const;
-
-        /**
-         * Return the maximum value of the component values.
-         */
-        double get_maximum_component_value(const unsigned int component) const;
-
-      private:
-        /**
-         * The number of data components read in (=columns in the data file).
-         */
-        unsigned int components;
-
-        /**
-         * The names of the data components in the columns of the read file.
-         * Does not contain any strings if none are provided in the first
-         * uncommented line of the file.
-         */
-        std::vector<std::string> data_component_names;
-
-        /**
-         * Interpolation functions to access the data.
-         * Either InterpolatedUniformGridData or InterpolatedTensorProductGridData;
-         * the type is determined from the grid specified in the data file.
-         */
-        std::vector<std::unique_ptr<Function<dim>>> data;
-
-        /**
-         * The coordinate values in each direction as specified in the data file.
-         */
-        std::array<std::vector<double>,dim> coordinate_values;
-
-        /**
-         * The maximum value of each component
-         */
-        std::vector<double> maximum_component_value;
-
-        /**
-         * The min and max of the coordinates in the data file.
-         */
-        std::array<std::pair<double,double>,dim> grid_extent;
-
-        /**
-         * Number of points in the data grid as specified in the data file.
-         */
-        TableIndices<dim> table_points;
-
-        /**
-         * Scales the data boundary condition by a scalar factor. Can be used
-         * to transform the unit of the data.
-         */
-        const double scale_factor;
-
-        /**
-         * Stores whether the coordinate values are equidistant or not,
-         * this determines the type of data function stored.
-         */
-        bool coordinate_values_are_equidistant;
-
-        /**
-         * Computes the table indices of each entry in the input data file.
-         * The index depends on dim, grid_dim and the number of components.
-         */
-        TableIndices<dim>
-        compute_table_indices(const unsigned int i) const;
-
-    };
-
-    /**
-     * AsciDataBase is a generic plugin used for declaring and reading the
-     * parameters from the parameter file.
-     */
-    template <int dim>
-    class AsciiDataBase
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataBase();
-
-        /**
-         * Declare the parameters all derived classes take from input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler  &prm,
-                            const std::string &default_directory,
-                            const std::string &default_filename,
-                            const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Read the parameters from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm,
-                          const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Directory in which the data files are present.
-         */
-        std::string data_directory;
-
-        /**
-         * Filename of data file. The file names can contain the specifiers %s
-         * and/or %c (in this order), meaning the name of the boundary and the
-         * number of the data file time step.
-         */
-        std::string data_file_name;
-
-        /**
-         * Scale the data by a scalar factor. Can be used to transform the
-         * unit of the data (if they are not specified in SI units (m/s or
-         * m/yr depending on the "Use years in output instead of seconds"
-         * parameter).
-         */
-        double scale_factor;
-    };
-
-    /**
-     * A base class that implements boundary conditions determined from a
-     * AsciiData input file.
-     */
-    template <int dim>
-    class AsciiDataBoundary : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataBoundary();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const std::set<types::boundary_id> &boundary_ids,
-                    const unsigned int components);
-
-        /**
-         * A function that is called at the beginning of each time step. For
-         * the current plugin, this function loads the next data files if
-         * necessary and outputs a warning if the end of the set of data files
-         * is reached.
-         */
-        void
-        update();
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const types::boundary_id             boundary_indicator,
-                            const Point<dim>                    &position,
-                            const unsigned int                   component) const;
-
-        /**
-         * Returns the maximum value of the given data component.
-         */
-        double
-        get_maximum_component_value (const types::boundary_id boundary_indicator,
-                                     const unsigned int       component) const;
-
-        /**
-         * Declare the parameters all derived classes take from input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler  &prm,
-                            const std::string &default_directory,
-                            const std::string &default_filename,
-                            const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Read the parameters from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm,
-                          const std::string &subsection_name = "Ascii data model");
-
-      protected:
-
-        /**
-         * Determines which of the dimensions of the position is used to find
-         * the data point in the data grid. E.g. the left boundary of a box
-         * model extents in the y and z direction (position[1] and
-         * position[2]), therefore the function would return [1,2] for dim==3
-         * or [1] for dim==2. We are lucky that these indices are identical
-         * for the box and the spherical shell (if we use spherical
-         * coordinates for the spherical shell), therefore we do not need to
-         * distinguish between them. For the initial condition this function
-         * is trivial, because the position in the data grid is the same as
-         * the actual position (the function returns [0,1,2] or [0,1]), but
-         * for the boundary conditions it matters.
-         */
-        std::array<unsigned int,dim-1>
-        get_boundary_dimensions (const types::boundary_id boundary_id) const;
-
-        /**
-         * A variable that stores the currently used data file of a series. It
-         * gets updated if necessary by update().
-         */
-        int current_file_number;
-
-        /**
-         * Time from which on the data file with number 'First data file
-         * number' is used as boundary condition. Previous to this time, 0 is
-         * returned for every field. Depending on the setting of the global
-         * 'Use years in output instead of seconds' flag in the input file,
-         * this number is either interpreted as seconds or as years."
-         */
-        double first_data_file_model_time;
-
-        /**
-         * Number of the first data file to be loaded when the model time is
-         * larger than 'First data file model time'.
-         */
-        int first_data_file_number;
-
-        /**
-         * In some cases the boundary files are not numbered in increasing but
-         * in decreasing order (e.g. 'Ma BP'). If this flag is set to 'True'
-         * the plugin will first load the file with the number 'First data
-         * file number' and decrease the file number during the model run.
-         */
-        bool decreasing_file_order;
-
-        /**
-         * Time in model units (depends on other model inputs) between two
-         * data files.
-         */
-        double data_file_time_step;
-
-        /**
-         * Weight between data file n and n+1 while the current time is
-         * between the two values t(n) and t(n+1).
-         */
-        double time_weight;
-
-        /**
-         * State whether we have time_dependent boundary conditions. Switched
-         * off after finding no more data files to suppress attempts to read
-         * in new files.
-         */
-        bool time_dependent;
-
-        /**
-         * Map between the boundary id and an object that reads and processes
-         * data we get from text files.
-         */
-        std::map<types::boundary_id,
-            std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim-1> > > lookups;
-
-        /**
-         * Map between the boundary id and the old data objects.
-         */
-        std::map<types::boundary_id,
-            std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim-1> > > old_lookups;
-
-        /**
-         * Handles the update of the data in lookup.
-         */
-        void
-        update_data (const types::boundary_id boundary_id,
-                     const bool reload_both_files);
-
-        /**
-         * Handles settings and user notification in case the time-dependent
-         * part of the boundary condition is over.
-         */
-        void
-        end_time_dependence ();
-
-        /**
-         * Create a filename out of the name template.
-         */
-        std::string
-        create_filename (const int filenumber,
-                         const types::boundary_id boundary_id) const;
-    };
-
-
-
-    /**
-     * A base class that implements initial conditions determined from a
-     * AsciiData input file.
-     */
-    template <int dim>
-    class AsciiDataInitial : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataInitial();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const unsigned int components);
-
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const Point<dim>                    &position,
-                            const unsigned int                   component) const;
-
-      protected:
-        /**
-         * Pointer to an object that reads and processes data we get from text
-         * files.
-         */
-        std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim> > lookup;
-    };
-
-
-    /**
-     * A base class that implements conditions determined from a
-     * layered AsciiData input file.
-     */
-    template <int dim>
-    class AsciiDataLayered : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataLayered();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const unsigned int components);
-
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const Point<dim> &position,
-                            const unsigned int component) const;
-
-
-        /**
-         * Declare the parameters all derived classes take from input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler  &prm,
-                            const std::string &default_directory,
-                            const std::string &default_filename,
-                            const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Read the parameters from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm,
-                          const std::string &subsection_name = "Ascii data model");
-
-      protected:
-        /**
-         * Pointer to an object that reads and processes data we get from text
-         * files.
-         */
-        std::vector<std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim-1> >> lookups;
-
-      private:
-
-        /**
-         * Directory in which the data files are present.
-         */
-        std::string data_directory;
-
-        /**
-         * Filenames of data files.
-         */
-        std::vector<std::string> data_file_names;
-
-        /**
-         * Number of layer boundaries in the model.
-         */
-        unsigned int number_of_layer_boundaries;
-
-        /**
-         * Interpolation scheme for profile averaging.
-         */
-        std::string interpolation_scheme;
-
-
-    };
-
-
-    /**
-     * A base class that reads in a data profile and provides its values.
-     */
-    template <int dim>
-    class AsciiDataProfile : public Utilities::AsciiDataBase<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataProfile();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const MPI_Comm &communicator);
-
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const Point<1>                      &position,
-                            const unsigned int                   component) const;
-
-        /**
-         * Returns a vector that contains the names of all data columns in the
-         * order of their appearance in the data file (and their order in the
-         * memory data table). Returns an empty vector if no names are provided
-         * or the file is not read in yet.
-         */
-        std::vector<std::string>
-        get_column_names() const;
-
-        /**
-         * Returns the column index of a column with the given name
-         * @p column_name. Throws an exception if no such
-         * column exists or no names were provided in the file.
-         */
-        unsigned int
-        get_column_index_from_name(const std::string &column_name) const;
-
-        /**
-         * Returns the column index of a column with the given name
-         * @p column_name. Returns an invalid unsigned int if no such
-         * column exists or no names were provided in the file.
-         */
-        unsigned int
-        maybe_get_column_index_from_name(const std::string &column_name) const;
-
-        /**
-         * Returns a string that contains the name of the column with index
-         * @p column_index. Returns an empty string if no such
-         * column exists or no name was provided in the file.
-         */
-        std::string
-        get_column_name_from_index(const unsigned int column_index) const;
-      protected:
-        /**
-         * Pointer to an object that reads and processes data we get from text
-         * files.
-         */
-        std::unique_ptr<aspect::Utilities::AsciiDataLookup<1> > lookup;
-    };
 
 
     /**
@@ -1282,9 +732,9 @@ namespace aspect
     template <int dim>
     SymmetricTensor<2,dim> nth_basis_for_symmetric_tensors (const unsigned int k);
 
-    /*
-    * A class that represents a point in a chosen coordinate system.
-    */
+    /**
+     * A class that represents a point in a chosen coordinate system.
+     */
     template <int dim>
     class NaturalCoordinate
     {
@@ -1331,6 +781,90 @@ namespace aspect
          * An array which stores the coordinates in the coordinates system
          */
         std::array<double,dim> coordinates;
+    };
+
+
+    /**
+     * Compute the cellwise projection of component @p component_index of @p function to the finite element space
+     * described by @p dof_handler.
+     *
+     * @param[in] mapping The mapping object to use.
+     * @param[in] dof_handler The DoFHandler the describes the finite element space to
+     * project into and that corresponds to @p vec_result.
+     * @param[in] component_index The component index of the @p dof_handler for which
+     * the projection is being performed. This component should be described by
+     * a DG finite element.
+     * @param[in] quadrature  The quadrature formula to use to evaluate @p function on each cell.
+     * @param[in] function The function to project into the finite element space.
+     * This function should store the value of the function at the points described
+     * by the 2nd argument into the 3rd argument as an std::vector<double>
+     * of size quadrature.size().
+     * @param[out] vec_result The output vector where the projected function will be
+     * stored in.
+     */
+    template <int dim, typename VectorType>
+    void
+    project_cellwise(const Mapping<dim>                                        &mapping,
+                     const DoFHandler<dim>                                     &dof_handler,
+                     const unsigned int                                         component_index,
+                     const Quadrature<dim>                                     &quadrature,
+                     const std::function<void(
+                       const typename DoFHandler<dim>::active_cell_iterator &,
+                       const std::vector<Point<dim> > &,
+                       std::vector<double> &)>                                 &function,
+                     VectorType                                                &vec_result);
+
+    /**
+    * Conversion object where one can provide a function that returns
+    * a tensor for the velocity at a given point and it returns something
+    * that matches the dealii::Function interface with a number of output
+    * components equal to the number of components of the finite element
+    * in use.
+    */
+    template <int dim>
+    class VectorFunctionFromVelocityFunctionObject : public Function<dim>
+    {
+      public:
+        /**
+         * Given a function object that takes a Point and returns a Tensor<1,dim>,
+         * convert this into an object that matches the Function@<dim@>
+         * interface.
+         *
+         * @param n_components total number of components of the finite element system.
+         * @param function_object The function that will form one component
+         *     of the resulting Function object.
+         */
+        VectorFunctionFromVelocityFunctionObject (const unsigned int n_components,
+                                                  const std::function<Tensor<1,dim> (const Point<dim> &)> &function_object);
+
+        /**
+         * Return the value of the
+         * function at the given
+         * point. Returns the value the
+         * function given to the constructor
+         * produces for this point.
+         */
+        double value (const Point<dim>   &p,
+                      const unsigned int  component = 0) const override;
+
+        /**
+         * Return all components of a
+         * vector-valued function at a
+         * given point.
+         *
+         * <tt>values</tt> shall have the right
+         * size beforehand,
+         * i.e. #n_components.
+         */
+        void vector_value (const Point<dim>   &p,
+                           Vector<double>     &values) const override;
+
+      private:
+        /**
+         * The function object which we call when this class's value() or
+         * value_list() functions are called.
+         */
+        const std::function<Tensor<1,dim> (const Point<dim> &)> function_object;
     };
   }
 }

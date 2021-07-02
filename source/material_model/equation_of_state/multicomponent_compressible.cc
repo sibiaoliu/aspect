@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -76,37 +76,39 @@ namespace aspect
       MulticomponentCompressible<dim>::declare_parameters (ParameterHandler &prm)
       {
         prm.declare_entry ("Reference temperatures", "298.15",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of reference temperatures $T_0$ for background mantle and compositional fields,"
                            "for a total of N+1 values, where N is the number of compositional fields."
-                           "If only one value is given, then all use the same value. Units: $K$.");
+                           "If only one value is given, then all use the same value. Units: \\si{\\kelvin}.");
         prm.declare_entry ("Reference densities", "3300.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of densities for background mantle and compositional fields,"
                            "for a total of N+1 values, where N is the number of compositional fields."
-                           "If only one value is given, then all use the same value.  Units: $kg / m^3$");
+                           "If only one value is given, then all use the same value. "
+                           "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
         prm.declare_entry ("Reference isothermal compressibilities", "4e-12",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of isothermal compressibilities for background mantle and compositional fields,"
                            "for a total of N+1 values, where N is the number of compositional fields."
                            "If only one value is given, then all use the same value. "
-                           "Units: $1/Pa$.");
+                           "Units: \\si{\\per\\pascal}.");
         prm.declare_entry ("Isothermal bulk modulus pressure derivatives", "4.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of isothermal pressure derivatives of the bulk moduli for background mantle and compositional fields,"
                            "for a total of N+1 values, where N is the number of compositional fields."
                            "If only one value is given, then all use the same value. "
                            "Units: [].");
         prm.declare_entry ("Reference thermal expansivities", "4.e-5",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of thermal expansivities for background mantle and compositional fields,"
                            "for a total of N+1 values, where N is the number of compositional fields."
-                           "If only one value is given, then all use the same value. Units: $1/K$");
+                           "If only one value is given, then all use the same value. Units: \\si{\\per\\kelvin}.");
         prm.declare_entry ("Isochoric specific heats", "1250.",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of isochoric specific heats $C_v$ for background mantle and compositional fields,"
                            "for a total of N+1 values, where N is the number of compositional fields."
-                           "If only one value is given, then all use the same value. Units: $J /kg /K$");
+                           "If only one value is given, then all use the same value. "
+                           "Units: \\si{\\joule\\per\\kelvin\\per\\kilogram}.");
       }
 
 
@@ -166,7 +168,10 @@ namespace aspect
     {
 #define INSTANTIATE(dim) \
   template class MulticomponentCompressible<dim>;
+
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
   }
 }

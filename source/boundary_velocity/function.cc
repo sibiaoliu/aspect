@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -20,7 +20,6 @@
 
 
 #include <aspect/boundary_velocity/function.h>
-#include <aspect/geometry_model/box.h>
 #include <aspect/utilities.h>
 #include <aspect/global.h>
 #include <deal.II/base/signaling_nan.h>
@@ -54,12 +53,12 @@ namespace aspect
       if (use_spherical_unit_vectors)
         velocity = Utilities::Coordinates::spherical_to_cartesian_vector(velocity, position);
 
-      // Aspect always wants things in MKS system. however, as described
+      // ASPECT always wants things in MKS system. however, as described
       // in the documentation of this class, we interpret the formulas
       // given to this plugin as meters per year if the global flag
       // for using years instead of seconds is given. so if someone
       // write "5" in their parameter file and sets the flag, then this
-      // means "5 meters/year" and we need to convert it to the Aspect
+      // means "5 meters/year" and we need to convert it to the ASPECT
       // time system by dividing by the number of seconds per year
       // to get MKS units
       if (this->convert_output_to_years())
@@ -102,11 +101,10 @@ namespace aspect
                              "be the depth of the point.");
           prm.declare_entry ("Use spherical unit vectors", "false",
                              Patterns::Bool (),
-                             "Specify velocity as r, phi, and theta components "
-                             "instead of x, y, and z. Positive velocities point up, east, "
+                             "Specify velocity as $r$, $\\phi$, and $\\theta$ components "
+                             "instead of $x$, $y$, and $z$. Positive velocities point up, east, "
                              "and north (in 3D) or out and clockwise (in 2D). "
-                             "This setting only makes sense for spherical geometries."
-                            );
+                             "This setting only makes sense for spherical geometries.");
 
           Functions::ParsedFunction<dim>::declare_parameters (prm, dim);
         }
@@ -114,6 +112,7 @@ namespace aspect
       }
       prm.leave_subsection();
     }
+
 
 
     template <int dim>
@@ -127,7 +126,7 @@ namespace aspect
           coordinate_system = Utilities::Coordinates::string_to_coordinate_system(prm.get("Coordinate system"));
           use_spherical_unit_vectors = prm.get_bool("Use spherical unit vectors");
           if (use_spherical_unit_vectors)
-            AssertThrow ((dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model())) == nullptr,
+            AssertThrow (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::spherical,
                          ExcMessage ("Spherical unit vectors should not be used "
                                      "when geometry model is not spherical."));
         }

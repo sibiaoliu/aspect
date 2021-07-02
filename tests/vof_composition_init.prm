@@ -47,7 +47,7 @@ end
 
 subsection Initial composition model
   set List of model names = function
-  set Volume of fluid intialization type = F_1:composition
+  set Volume of fluid initialization type = F_1:composition
 
   subsection Function
     set Variable names = x,y,t
@@ -65,7 +65,7 @@ subsection Prescribed Stokes solution
   end
 end
 
-set Nonlinear solver scheme                   = Advection only
+set Nonlinear solver scheme                   = single Advection, no Stokes
 
 subsection Postprocess
   set List of postprocessors = volume of fluid statistics, composition statistics

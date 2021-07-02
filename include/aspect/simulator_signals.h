@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -103,12 +103,12 @@ namespace aspect
      * argument that indicates the constraints to be computed.
      */
     boost::signals2::signal<void (const SimulatorAccess<dim> &,
-                                  ConstraintMatrix &)>  post_constraints_creation;
+                                  AffineConstraints<double> &)>  post_constraints_creation;
 
     /**
      * A signal that is called at the start of setup_dofs(). This allows for
      * editing of the parameters struct on the fly (such as changing boundary
-     * conditions) to give Aspect different behavior in mid-run than it
+     * conditions) to give ASPECT different behavior in mid-run than it
      * otherwise would have.
      *
      * The functions that connect to this signal must take two arguments, a
@@ -251,6 +251,23 @@ namespace aspect
                                   const SolverControl &solver_control)> post_advection_solver;
 
     /**
+     * A signal that is fired when the nonlinear solver scheme is done.
+     * The signal parameter is an object that contains information
+     * about the final state (failure/success), number of
+     * iterations and history of residuals of the nonlinear solver.
+     * If there is no nonlinear solver (only a single solve), the
+     * SolverControl object will report a successful state, a single iteration
+     * and a remaining residual of zero.
+     */
+    boost::signals2::signal<void (const SolverControl &)> post_nonlinear_solver;
+
+    /**
+     * A signal that is fired when mesh deformation has occurred.
+     * Parameters are a reference to the SimulatorAccess.
+     */
+    boost::signals2::signal<void (const SimulatorAccess<dim> &)> post_mesh_deformation;
+
+    /**
      * A signal that is fired at the end of the set_assemblers() function that
      * allows modification of the assembly objects active in this simulation.
      */
@@ -302,14 +319,14 @@ namespace aspect
 #define ASPECT_REGISTER_SIGNALS_CONNECTOR(connector_function_2d,connector_function_3d) \
   namespace ASPECT_REGISTER_SIGNALS_CONNECTOR \
   { \
-    int dummy_do_register () \
-    { \
-      aspect::internals::SimulatorSignals::register_connector_function_2d (connector_function_2d); \
-      aspect::internals::SimulatorSignals::register_connector_function_3d (connector_function_3d); \
-      return /* anything will do = */42; \
-    } \
-    \
-    const int dummy_variable = dummy_do_register (); \
+    struct dummy_do_register \
+    {          \
+      dummy_do_register () \
+      { \
+        aspect::internals::SimulatorSignals::register_connector_function_2d (connector_function_2d); \
+        aspect::internals::SimulatorSignals::register_connector_function_3d (connector_function_3d); \
+      } \
+    } dummy_variable; \
   }
 
 
@@ -324,13 +341,13 @@ namespace aspect
 #define ASPECT_REGISTER_SIGNALS_PARAMETER_CONNECTOR(connector_function) \
   namespace ASPECT_REGISTER_SIGNALS_PARAMETER_CONNECTOR_ ## connector_function \
   { \
-    int dummy_do_register_ ## connector_function () \
+    struct dummy_do_register_ ## connector_function \
     { \
-      connector_function (); \
-      return /* anything will do = */42; \
-    } \
-    \
-    const int dummy_variable_ ## classname = dummy_do_register_ ## connector_function (); \
+      dummy_do_register_ ## connector_function () \
+      {                \
+        connector_function (); \
+      }          \
+    } dummy_variable_ ## classname; \
   }
 
 }

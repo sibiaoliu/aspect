@@ -10,7 +10,7 @@ namespace aspect
 
   template <int dim>
   void modify_constraints (const SimulatorAccess<dim> &simulator_access,
-                           ConstraintMatrix &current_constraints)
+                           AffineConstraints<double> &current_constraints)
   {
     // Hack: the first pressure dof is only this easy to compute if we don't
     // use a direct solver or reorganize the blocks of the linear system in
@@ -35,6 +35,6 @@ namespace aspect
     signals.post_constraints_creation.connect (&modify_constraints<dim>);
   }
 
-  // Tell Aspect to send signals to the connector functions
+  // Tell ASPECT to send signals to the connector functions
   ASPECT_REGISTER_SIGNALS_CONNECTOR(signal_connector<2>, signal_connector<3>)
 }

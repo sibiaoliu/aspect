@@ -1,4 +1,4 @@
-# Copyright (C) 2013 - 2019 by the authors of the ASPECT code.
+# Copyright (C) 2013 - 2021 by the authors of the ASPECT code.
 #
 # This file is part of ASPECT.
 #
@@ -28,6 +28,25 @@ SET(TARGET "aspect")
 FILE(GLOB_RECURSE TARGET_SRC
      "source/*.cc" "unit_tests/*.cc" "include/*.h" "contrib/catch/catch.hpp")
 
+# Special treatment of some files for unity builds. We move the following
+# files to the end of the list of all .cc files (TARGET_SRC). This ordering is
+# required to not have specializations (for example helper_functions.cc)
+# appear after explicit class instantiation (for example core.cc) of the same
+# class that happen to be included in the same unity cxx file.
+SET(UNITY_LAST_FILES
+  "source/simulator/core.cc;source/volume_of_fluid/handler.cc")
+
+FOREACH(_source_file ${UNITY_LAST_FILES})
+  SET(_full_name "${CMAKE_SOURCE_DIR}/${_source_file}")
+  LIST(FIND TARGET_SRC ${_full_name} _index)
+  IF(_index EQUAL -1)
+    MESSAGE(FATAL_ERROR "could not find ${_full_name}.")
+  ENDIF()
+
+  LIST(REMOVE_ITEM TARGET_SRC ${_full_name})
+  LIST(APPEND TARGET_SRC ${_full_name})
+ENDFOREACH()
+
 # Set up include directories. Put the ASPECT header files
 # to the front of the list, whereas the 'catch' headers can
 # be preempted by the system
@@ -38,9 +57,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 LIST(APPEND CMAKE_MODULE_PATH
   ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/cmake/modules
   )
 
-FIND_PACKAGE(deal.II 9.0.0 QUIET
+FIND_PACKAGE(deal.II 9.2.0 QUIET
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )
 IF(NOT ${deal.II_FOUND})
@@ -61,6 +81,9 @@ ENDIF()
 
 
 SET(ASPECT_USE_PETSC OFF CACHE BOOL "Use PETSc instead of Trilinos if set to 'on'.")
+IF(ASPECT_USE_PETSC)
+    MESSAGE(FATAL_ERROR "Using PETSc by setting ASPECT_USE_PETSC to ON is currently not supported, see https://github.com/geodynamics/aspect/issues/3338 for details.")
+ENDIF()
 
 MESSAGE(STATUS "Using ASPECT_USE_PETSC = '${ASPECT_USE_PETSC}'")
 
@@ -96,21 +119,59 @@ ENDIF()
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 PROJECT(${TARGET} CXX)
 
-IF (ASPECT_USE_PETSC)
-FOREACH(_source_file ${TARGET_SRC})
-  SET_PROPERTY(SOURCE ${_source_file}
-    APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_USE_PETSC="1")
-ENDFOREACH()
+SET(ASPECT_WITH_WORLD_BUILDER ON CACHE BOOL "Whether to enable compiling aspect with the Geodynamic World Builder.")
+MESSAGE(STATUS "ASPECT_WITH_WORLD_BUILDER = '${ASPECT_WITH_WORLD_BUILDER}'")
+if(ASPECT_WITH_WORLD_BUILDER)
+  # Check whether we can find the WorldBuilder.
+  SET(WORLD_BUILDER_SOURCE_DIR "" CACHE PATH "Provide an external World Builder directory to be compiled with ASPECT. If the path is not provided or the World Builder is not found in the provided location, the version in the contrib folder is used.")
+  IF (NOT EXISTS ${WORLD_BUILDER_SOURCE_DIR}/VERSION)
+    MESSAGE(STATUS "World Builder not found. Using internal version.")
+    SET(WORLD_BUILDER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/contrib/world_builder/" CACHE PATH "" FORCE)
+  ENDIF()
+
+  # Always include the header files.
+  INCLUDE_DIRECTORIES("${WORLD_BUILDER_SOURCE_DIR}/include/")
+
+  INCLUDE("${WORLD_BUILDER_SOURCE_DIR}/cmake/version.cmake")
+  MESSAGE(STATUS "Using World Builder version ${WORLD_BUILDER_VERSION} found at ${WORLD_BUILDER_SOURCE_DIR}.")
+
+  # add source and include dirs:
+  FILE(GLOB_RECURSE wb_files "${WORLD_BUILDER_SOURCE_DIR}/source/*.cc")
+  LIST(APPEND TARGET_SRC ${wb_files})
+
+  # generate config.cc and include it:
+  CONFIGURE_FILE("${WORLD_BUILDER_SOURCE_DIR}/source/config.cc.in" "${CMAKE_BINARY_DIR}/world_builder_config.cc" @ONLY)
+  LIST(INSERT TARGET_SRC 0 "${CMAKE_BINARY_DIR}/world_builder_config.cc")
+
+  # Move some file to the end for unity builds to make sure other file come
+  # "before". Note: The current design keeps all ASPECT files (including
+  # ASPECT_UNITY_LAST files) before all GWB files. Mixing them will causes
+  # many issues with non-unique namespace names like Utilities.
+  SET(UNITY_WB_LAST_FILES
+  "${WORLD_BUILDER_SOURCE_DIR}/source/parameters.cc")
+
+  FOREACH(_source_file ${UNITY_WB_LAST_FILES})
+    LIST(FIND TARGET_SRC ${_source_file} _index)
+    IF(_index EQUAL -1)
+      MESSAGE(FATAL_ERROR "could not find ${_source_file}.")
+    ENDIF()
+
+    LIST(REMOVE_ITEM TARGET_SRC ${_source_file})
+    LIST(APPEND TARGET_SRC ${_source_file})
+  ENDFOREACH()
+
+  FOREACH(_source_file ${wb_files})
+    # exclude the world builder files from including precompiled headers, they
+    # do not include ASPECT's dependencies at all.
+    SET_PROPERTY(SOURCE ${_source_file} PROPERTY COTIRE_EXCLUDED TRUE )
+    SET_PROPERTY(SOURCE ${_source_file} PROPERTY SKIP_PRECOMPILE_HEADERS TRUE )
+    # Temporarily disable world builder unity builds:
+    SET_PROPERTY(SOURCE ${_source_file} PROPERTY SKIP_UNITY_BUILD_INCLUSION TRUE )
+  ENDFOREACH()
+
+  SET_PROPERTY(SOURCE "${CMAKE_BINARY_DIR}/world_builder_config.cc" PROPERTY COTIRE_EXCLUDED TRUE )
+  SET_PROPERTY(SOURCE "${CMAKE_BINARY_DIR}/world_builder_config.cc" PROPERTY SKIP_PRECOMPILE_HEADERS TRUE )
 ENDIF()
-
-
-# Pass down the source directory to the sources. This can be used
-# to hard-code the location of data files, such as in
-# $ASPECT_SOURCE_DIR/data/velocity-boundary-conditions/gplates/*
-FOREACH(_source_file ${TARGET_SRC})
-  SET_PROPERTY(SOURCE ${_source_file}
-    APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-ENDFOREACH()
 
 
 
@@ -130,9 +191,9 @@ WRITE_BASIC_PACKAGE_VERSION_FILE(
 
 # Configure a cmake fragment that plugins can use to
 # set up compiler flags, include paths, etc to compile an
-# Aspect plugin.
+# ASPECT plugin.
 # Config for the build dir:
-SET(CONFIG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/include")
+SET(CONFIG_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/include" "${CMAKE_SOURCE_DIR}/include")
 SET(CONFIG_DIR "${CMAKE_BINARY_DIR}")
 CONFIGURE_FILE(
   ${CMAKE_SOURCE_DIR}/cmake/AspectConfig.cmake.in
@@ -147,7 +208,6 @@ CONFIGURE_FILE(
   ${CMAKE_BINARY_DIR}/forinstall/AspectConfig.cmake
   @ONLY
 )
-
 
 # Next, set up the testsuite
 
@@ -179,7 +239,7 @@ IF (("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}") AND ASPECT_RUN_ALL_TE
 ENDIF()
 
 
-SET(ASPECT_TEST_GENERATOR "Unix Makefiles" CACHE STRING 
+SET(ASPECT_TEST_GENERATOR "Unix Makefiles" CACHE STRING
   "Generator to use for the test cmake project. Using ninja instead of make is not recommended.")
 
 
@@ -378,16 +438,8 @@ ENDIF()
 
 IF (ASPECT_USE_SHARED_LIBS)
   MESSAGE(STATUS "Enabling dynamic loading of plugins from the input file")
-  FOREACH(_source_file ${TARGET_SRC})
-    SET_PROPERTY(SOURCE ${_source_file}
-      APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_USE_SHARED_LIBS=1)
-  ENDFOREACH()
 ELSE()
   MESSAGE(STATUS "Disabling dynamic loading of plugins from the input file")
-  FOREACH(_source_file ${TARGET_SRC})
-    SET_PROPERTY(SOURCE ${_source_file}
-      APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_USE_SHARED_LIBS=0)
-  ENDFOREACH()
 ENDIF()
 
 # See whether we can verify that every plugin we load is compiled against
@@ -400,74 +452,75 @@ IF (NOT _HAVE_LINK_H)
 ENDIF()
 IF (ASPECT_HAVE_LINK_H)
   MESSAGE(STATUS "Enabling checking of compatible deal.II library when loading plugins")
-  FOREACH(_source_file ${TARGET_SRC})
-    SET_PROPERTY(SOURCE ${_source_file}
-      APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_HAVE_LINK_H=1)
-  ENDFOREACH()
 ENDIF()
 
-# Check if we want to use cotire to precompile header files and prepare a
-# unity build target. This speeds up compile time, but can fail on some
-# machines, therefore it is disabled by default. Also cotire currently
-# has issues with cmake generator expressions used in deal.II for cmake
-# version 3.9 and above. Disable cotire for cmake >= 3.9.
-SET(ASPECT_PRECOMPILE_HEADERS OFF CACHE BOOL "Precompile external header files using cotire to speedup compile time. Currently only supported for cmake versions older than 3.9.")
-IF (ASPECT_PRECOMPILE_HEADERS)
-  IF(CMAKE_VERSION VERSION_LESS 3.9)
-    # For the unity build we need to compile helper_functions.cc before core.cc
-    # ensure this by reordering the files
-    FIND_FILE(HELPER_PATH helper_functions.cc HINTS "${CMAKE_SOURCE_DIR}/source/simulator")
-    LIST(REMOVE_ITEM TARGET_SRC ${HELPER_PATH})
-    LIST(INSERT TARGET_SRC 0 ${HELPER_PATH})
-  ELSE()
-    MESSAGE(FATAL_ERROR "ASPECT_PRECOMPILE_HEADERS is currently only supported for CMake version 3.8 or less.")
-  ENDIF()
-ENDIF()
+SET(ASPECT_ADDITIONAL_CXX_FLAGS "" CACHE STRING "Additional CMAKE_CXX_FLAGS applied after the deal.II options.")
 
-# Check whether we can find the WorldBuilder and enable it.
-SET(ASPECT_WITH_WORLD_BUILDER ON CACHE BOOL "If ON the World Builder is compiled togheter with ASPECT.")
-IF (NOT EXISTS ${CMAKE_SOURCE_DIR}/contrib/WorldBuilder/VERSION)
-  MESSAGE(STATUS "World Builder not found.")
-  SET(ASPECT_WITH_WORLD_BUILDER OFF CACHE BOOL "" FORCE)
-ENDIF()
-IF (ASPECT_WITH_WORLD_BUILDER)
-  SET(WORLD_BUILDER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/contrib/WorldBuilder")
-  INCLUDE("${WORLD_BUILDER_SOURCE_DIR}/cmake/version.cmake")
-  MESSAGE(STATUS "World Builder version ${WORLD_BUILDER_VERSION} found.")
-
-  # add source and include dirs:
-  FILE(GLOB_RECURSE _files "contrib/WorldBuilder/source/*.cc")
-  LIST(APPEND TARGET_SRC ${_files})
-  INCLUDE_DIRECTORIES("${WORLD_BUILDER_SOURCE_DIR}/include/")
-
-  # generate config.cc and include it:
-  CONFIGURE_FILE("${WORLD_BUILDER_SOURCE_DIR}/source/config.cc.in" "${CMAKE_BINARY_DIR}/world_builder_config.cc" @ONLY)
-  LIST(INSERT TARGET_SRC 0 "${CMAKE_BINARY_DIR}/world_builder_config.cc")
-
-  # set ASPECT_USE_WORLD_BUILDER define for all source files:
-  FOREACH(_source_file ${TARGET_SRC})
-    SET_PROPERTY(SOURCE ${_source_file}
-                 APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_USE_WORLD_BUILDER=1)
-  ENDFOREACH()
+IF(NOT ASPECT_ADDITIONAL_CXX_FLAGS STREQUAL "")
+  MESSAGE(STATUS "Appending ASPECT_ADDITIONAL_CXX_FLAGS: '${ASPECT_ADDITIONAL_CXX_FLAGS}':")
+  STRING(APPEND DEAL_II_CXX_FLAGS_DEBUG " ${ASPECT_ADDITIONAL_CXX_FLAGS}")
+  STRING(APPEND DEAL_II_CXX_FLAGS_RELEASE " ${ASPECT_ADDITIONAL_CXX_FLAGS}")
+  MESSAGE(STATUS "  DEAL_II_CXX_FLAGS_DEBUG: ${DEAL_II_CXX_FLAGS_DEBUG}")
+  MESSAGE(STATUS "  DEAL_II_CXX_FLAGS_RELEASE: ${DEAL_II_CXX_FLAGS_RELEASE}")
 ENDIF()
 
 ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
 DEAL_II_SETUP_TARGET(${TARGET})
 
-FIND_PACKAGE(PerpleX QUIET HINTS ./contrib/perplex/install/ ../ ../../ $ENV{PERPLEX_DIR})
+# deal.II does not define NDEBUG, but the world builder relies on it to disable
+# its asserts in release mode. Set it manually for anything but debug mode.
+# Note: If deal.II decides in the future to define this, this can be removed.
+IF (NOT CMAKE_BUILD_TYPE MATCHES Debug)
+    ADD_DEFINITIONS("-DNDEBUG")
+ENDIF()
+
+FIND_PACKAGE(PerpleX QUIET
+  HINTS ./contrib/perplex/install/ ../ ../../ ${PERPLEX_DIR} $ENV{PERPLEX_DIR})
 IF(${PerpleX_FOUND})
   MESSAGE(STATUS "PerpleX found at ${PerpleX_INCLUDE_DIR}")
   INCLUDE_DIRECTORIES(${PerpleX_INCLUDE_DIR})
   TARGET_LINK_LIBRARIES(${TARGET} ${PerpleX_LIBRARIES})
   SET(ASPECT_WITH_PERPLEX ON)
-  FOREACH(_source_file ${TARGET_SRC})
-    SET_PROPERTY(SOURCE ${_source_file}
-      APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_WITH_PERPLEX="1")
-  ENDFOREACH()
 ELSE()
   SET(ASPECT_WITH_PERPLEX OFF)
 ENDIF()
 
+
+# Find the libdap package so that ASPECT can connect to the OPeNDAP servers
+# Author: Kodi Neumiller
+SET(ASPECT_WITH_LIBDAP OFF CACHE BOOL "Check if the user wants to compile ASPECT with the libdap libraries.")
+MESSAGE(STATUS "Using ASPECT_WITH_LIBDAP = '${ASPECT_WITH_LIBDAP}'")
+IF(ASPECT_WITH_LIBDAP)
+  FIND_PACKAGE(LIBDAP)
+  IF(${LIBDAP_FOUND})
+    INCLUDE_DIRECTORIES(${LIBDAP_INCLUDE_DIRS})
+    TARGET_LINK_LIBRARIES(${TARGET} ${LIBDAP_LIBRARIES})
+    MESSAGE(STATUS "LIBDAP found at ${LIBDAP_LIBRARY}\n")
+  ELSE()
+    MESSAGE(FATAL_ERROR "LIBDAP not found. Disable ASPECT_WITH_LIBDAP or specify a hint to your installation directory with LIBDAP_DIR.")
+  ENDIF()
+ENDIF()
+
+#
+# NETCDF (c including parallel)
+#
+SET(ASPECT_WITH_NETCDF OFF CACHE BOOL "Check if the user wants to compile ASPECT with the NETCDF libraries.")
+
+MESSAGE(STATUS "Using ASPECT_WITH_NETCDF = '${ASPECT_WITH_NETCDF}'")
+
+IF(ASPECT_WITH_NETCDF)
+  FIND_PACKAGE(NETCDF)
+  IF(${NETCDF_FOUND})
+    MESSAGE(STATUS "  NETCDF_INCLUDE_DIR: ${NETCDF_INCLUDE_DIR}")
+    MESSAGE(STATUS "  NETCDF_LIBRARY: ${NETCDF_LIBRARY}")
+    MESSAGE(STATUS "  NETCDF_VERSION: ${NETCDF_VERSION}")
+
+    INCLUDE_DIRECTORIES(${NETCDF_INCLUDE_DIRS})
+    TARGET_LINK_LIBRARIES(${TARGET} ${NETCDF_LIBRARIES})
+  ELSE()
+    MESSAGE(FATAL_ERROR "NETCDF not found. Disable ASPECT_WITH_NETCDF or specify a hint to your installation directory with NETCDF_DIR.")
+  ENDIF()
+ENDIF()
 
 
 IF (ASPECT_USE_SHARED_LIBS)
@@ -496,36 +549,99 @@ IF (ASPECT_USE_FP_EXCEPTIONS)
 
   IF (HAVE_FP_EXCEPTIONS)
     MESSAGE(STATUS "Runtime floating point checks enabled.")
-    FOREACH(_source_file ${TARGET_SRC})
-      SET_PROPERTY(SOURCE ${_source_file}
-        APPEND PROPERTY COMPILE_DEFINITIONS ASPECT_USE_FP_EXCEPTIONS=1)
-    ENDFOREACH()
   ELSE()
     SET(ASPECT_USE_FP_EXCEPTIONS OFF CACHE BOOL "" FORCE)
     MESSAGE(STATUS "No support for feenableexcept(), disabling runtime floating point exception checks.")
   ENDIF()
 ENDIF()
 
-IF (ASPECT_PRECOMPILE_HEADERS)
-  MESSAGE(STATUS "Enabling cotire to precompile external header files.")
-  INCLUDE(cmake/cotire)
 
-  # Set some properties that are necessary for the header precompilations 
-  # and unity build to pass. We need to exclude some headers that
-  # frequently cause problems, and undefine some macros between source 
-  # files that would otherwise interfere with each other.
-  SET_TARGET_PROPERTIES (aspect PROPERTIES
-      COTIRE_PREFIX_HEADER_IGNORE_PATH
-      "/usr/include/;${CMAKE_SOURCE_DIR};${CMAKE_BINARY_DIR}")
-  SET_SOURCE_FILES_PROPERTIES (${TARGET_SRC} PROPERTIES
-      COTIRE_UNITY_SOURCE_POST_UNDEFS "INSTANTIATE")
+#
+# generate config.h
+#
 
-  # This line activates the cotire module for the aspect target, 
-  # and therefore the whole precompilation
-  cotire(aspect)
+# Define macro with the source directory that will be exported in
+# config.h. This can be used to hard-code the location of data files, such as
+# in $ASPECT_SOURCE_DIR/data/velocity-boundary-conditions/gplates/*
+SET(ASPECT_SOURCE_DIR ${CMAKE_SOURCE_DIR})
+
+# And finally generate the file
+CONFIGURE_FILE(
+  ${CMAKE_SOURCE_DIR}/include/aspect/config.h.in
+  ${CMAKE_BINARY_DIR}/include/aspect/config.h
+  )
+
+
+# Check if we want to precompile header files. This speeds up compile time,
+# but can fail on some machines with old cmake, therefore it is disabled by
+# default. Also cotire currently has issues with cmake generator expressions
+# used in deal.II for cmake version 3.9 and above. Disable cotire for cmake >=
+# 3.9. Starting with cmake 3.16 there is native support inside cmake and we can
+# use that.
+IF(CMAKE_VERSION VERSION_LESS 3.9)
+  SET(ASPECT_PRECOMPILE_HEADERS OFF CACHE BOOL "Precompile external header files using cotire to speedup compile time. Currently only supported for cmake 3.8 and older versions, or 3.16 and newer versions.")
+  SET(ASPECT_UNITY_BUILD OFF CACHE BOOL "Combine source files into less compile targets to speedup compile time. Currently only supported for cmake 3.16 and newer versions." FORCE)
+ELSEIF(NOT CMAKE_VERSION VERSION_LESS 3.16)
+  SET(ASPECT_PRECOMPILE_HEADERS ON CACHE BOOL "Precompile external header files to speedup compile time. Currently only supported for cmake 3.8 and older versions or 3.16 and newer versions.")
+  SET(ASPECT_UNITY_BUILD ON CACHE BOOL "Combine source files into less compile targets to speedup compile time. Currently only supported for cmake 3.16 and newer versions.")
 ELSE()
-  MESSAGE(STATUS "Disabling cotire.")
+  SET(ASPECT_PRECOMPILE_HEADERS OFF CACHE BOOL "Precompile external header files to speedup compile time. Currently only supported for cmake 3.8 and older versions or 3.16 and newer versions." FORCE)
+  SET(ASPECT_UNITY_BUILD OFF CACHE BOOL "Combine source files into less compile targets to speedup compile time. Currently only supported for cmake 3.16 and newer versions." FORCE)
 ENDIF()
+
+IF (ASPECT_PRECOMPILE_HEADERS)
+  IF (CMAKE_VERSION VERSION_LESS 3.9)
+    MESSAGE(STATUS "Enabling cotire to precompile external header files.")
+    INCLUDE(cmake/cotire)
+
+    # Set some properties that are necessary for the header precompilations
+    # and unity build to pass. We need to exclude some headers that
+    # frequently cause problems, and undefine some macros between source
+    # files that would otherwise interfere with each other.
+    SET_TARGET_PROPERTIES (aspect PROPERTIES
+        COTIRE_PREFIX_HEADER_IGNORE_PATH
+        "/usr/include/;${CMAKE_SOURCE_DIR};${CMAKE_BINARY_DIR}")
+
+    # This line activates the cotire module for the aspect target,
+    # and therefore the whole precompilation
+    cotire(aspect)
+
+  ELSEIF (NOT CMAKE_VERSION VERSION_LESS 3.16)
+    MESSAGE(STATUS "Precompiling common header files.")
+    # Use the native cmake support to precompile some common headers
+    # from ASPECT and deal.II that are frequently included, but rarely changed.
+    TARGET_PRECOMPILE_HEADERS(aspect PRIVATE
+      <aspect/global.h> <aspect/plugins.h> <aspect/introspection.h> <aspect/parameters.h>)
+    TARGET_PRECOMPILE_HEADERS(aspect PRIVATE
+      <deal.II/base/table_handler.h> <deal.II/base/timer.h>
+      <deal.II/base/conditional_ostream.h> <deal.II/distributed/tria.h>
+      <deal.II/dofs/dof_handler.h> <deal.II/fe/fe.h> <deal.II/fe/mapping_q.h>
+      <deal.II/particles/particle_handler.h>)
+
+  ELSE()
+    MESSAGE(FATAL_ERROR "ASPECT_PRECOMPILE_HEADERS is currently only supported for CMake 3.8 and older versions or 3.16 and newer versions.")
+  ENDIF()
+
+ELSE()
+  MESSAGE(STATUS "Disabling precompiling headers.")
+ENDIF()
+
+
+IF (ASPECT_UNITY_BUILD)
+  IF (NOT CMAKE_VERSION VERSION_LESS 3.16)
+    SET_PROPERTY(TARGET aspect PROPERTY UNITY_BUILD TRUE)
+    MESSAGE(STATUS "Combining source files into unity build.")
+  ELSEIF(CMAKE_VERSION VERSION_LESS 3.16)
+    MESSAGE(FATAL_ERROR "ASPECT_UNITY_BUILD is currently only supported for CMake 3.16 and newer versions.")
+  ENDIF()
+ELSE()
+  IF (NOT CMAKE_VERSION VERSION_LESS 3.16)
+    SET_PROPERTY(TARGET aspect PROPERTY UNITY_BUILD FALSE)
+  ENDIF()
+
+  MESSAGE(STATUS "Disabling unity build.")
+ENDIF()
+
 
 # Find the deal.II parameter GUI and install helper script
 FIND_PROGRAM(PARAMETER_GUI_EXECUTABLE
@@ -535,7 +651,7 @@ FIND_PROGRAM(PARAMETER_GUI_EXECUTABLE
 MARK_AS_ADVANCED(CLEAR PARAMETER_GUI_EXECUTABLE)
 
 # did the user specify something that doesn't exist?
-IF (PARAMETER_GUI_EXECUTABLE 
+IF (PARAMETER_GUI_EXECUTABLE
         AND
     (NOT EXISTS ${PARAMETER_GUI_EXECUTABLE} OR IS_DIRECTORY ${PARAMETER_GUI_EXECUTABLE}))
   MESSAGE(STATUS "Warning: PARAMETER_GUI_EXECUTABLE '${PARAMETER_GUI_EXECUTABLE}' does not exist")
@@ -570,7 +686,7 @@ INSTALL(TARGETS aspect
 SET_PROPERTY(TARGET aspect PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # headers:
-INSTALL(DIRECTORY include/ 
+INSTALL(DIRECTORY include/
   DESTINATION include
   COMPONENT includes
   FILES_MATCHING PATTERN "*.h")

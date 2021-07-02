@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,6 +22,7 @@
 #include <aspect/geometry_model/initial_topography_model/function.h>
 #include <aspect/geometry_model/interface.h>
 #include <aspect/geometry_model/box.h>
+#include <aspect/geometry_model/two_merged_boxes.h>
 #include <aspect/geometry_model/sphere.h>
 #include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/geometry_model/chunk.h>
@@ -46,7 +47,8 @@ namespace aspect
     value (const Point<dim-1> &surface_point) const
     {
       Point<dim> global_point;
-      if (Plugins::plugin_type_matches<GeometryModel::Box<dim> >(this->get_geometry_model()))
+      if (Plugins::plugin_type_matches<GeometryModel::Box<dim> >(this->get_geometry_model()) ||
+          Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
         {
           // No need to set the vertical coordinate correctly,
           // because it will be thrown away in get_data_component anyway
@@ -94,8 +96,8 @@ namespace aspect
         {
           prm.enter_subsection("Function");
           {
-            prm.declare_entry ("Maximum topography value", "2000",
-                               Patterns::Double (0),
+            prm.declare_entry ("Maximum topography value", "2000.",
+                               Patterns::Double (0.),
                                "The maximum value the topography given by "
                                "the function can take. ");
             prm.declare_entry ("Coordinate system", "cartesian",

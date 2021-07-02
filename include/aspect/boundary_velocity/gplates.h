@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -24,7 +24,6 @@
 
 #include <aspect/boundary_velocity/interface.h>
 #include <aspect/simulator_access.h>
-#include <aspect/compat.h>
 
 #include <array>
 #include <deal.II/base/function_lib.h>
@@ -81,7 +80,7 @@ namespace aspect
           /**
            * Interpolation functions to access the velocities.
            */
-          std::array<std::unique_ptr<typename Functions::InterpolatedUniformGridData<2> >, 2> velocities;
+          std::array<std::unique_ptr<Functions::InterpolatedUniformGridData<2>>, 2> velocities;
 
           /**
            * Distances between adjacent point in the Lat/Long grid

@@ -1,0 +1,74 @@
+name: linux
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.actor }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-nounity:
+    #linux build with unity/precomiled headers disabled
+    name: no-unity
+    runs-on: [ubuntu-18.04]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: setup
+      run: |
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository ppa:ginggs/deal.ii-9.2.0-backports
+        sudo apt-get update
+        sudo apt-get install -yq --no-install-recommends libdeal.ii-dev
+    - name: compile
+      run: |
+        mkdir build-no-unity
+        cd build-no-unity
+        cmake -D ASPECT_PRECOMPILE_HEADERS=OFF -D ASPECT_UNITY_BUILD=OFF -D CMAKE_CXX_FLAGS='-Werror' ..
+        make -j 2
+        ./aspect --test
+
+  linux:
+    #linux build including indent and documentation
+    name: indent+documentation
+    runs-on: [ubuntu-18.04]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: setup
+      run: |
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository ppa:ginggs/deal.ii-9.2.0-backports
+        sudo apt-get update
+        sudo apt-get install -yq --no-install-recommends texlive-generic-extra texlive-base texlive-latex-recommended texlive-latex-base texlive-fonts-recommended texlive-bibtex-extra lmodern texlive-latex-extra texlive-science graphviz python-pip python-setuptools libdeal.ii-dev doxygen
+        doxygen --version
+
+        wget https://github.com/tjhei/astyle/releases/download/v2.04/astyle_2.04_linux.tar.gz
+        tar xf astyle_2.04_linux.tar.gz
+        cd astyle/build/gcc && make
+        sudo USER=root make install
+        cd
+        rm -rf astyle*
+        astyle --version
+    - name: indent
+      run: |
+        ./contrib/utilities/indent
+        git diff --exit-code
+    - name: compile
+      run: |
+        mkdir build
+        cd build
+        cmake -D ASPECT_PRECOMPILE_HEADERS=ON -D ASPECT_UNITY_BUILD=ON -D CMAKE_CXX_FLAGS='-Werror' ..
+        make -j 2
+        ./aspect --test
+    - name: doc
+      run: |
+        cd doc
+        export OMPI_MCA_btl="self,vader"
+        ./update_parameters.sh $GITHUB_WORKSPACE/build/aspect
+        make manual.pdf
+    - name: archive
+      uses: actions/upload-artifact@v1
+      with:
+        name: manual.log
+        path: doc/manual/manual.log

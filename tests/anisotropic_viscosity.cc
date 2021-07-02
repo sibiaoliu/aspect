@@ -546,7 +546,7 @@ namespace aspect
              :
              directed_strain_rate);
 
-          const SymmetricTensor<2,dim> compressible_strain_rate =
+          const SymmetricTensor<2,dim> deviatoric_strain_rate =
             (this->get_material_model().is_compressible()
              ?
              material_model_inputs.strain_rate[q]
@@ -554,7 +554,7 @@ namespace aspect
              :
              material_model_inputs.strain_rate[q]);
 
-          heating_model_outputs.heating_source_terms[q] = stress * compressible_strain_rate;
+          heating_model_outputs.heating_source_terms[q] = stress * deviatoric_strain_rate;
 
           // If dislocation viscosities and boundary area work fractions are provided, reduce the
           // overall heating by this amount (which is assumed to increase surface energy)
@@ -670,7 +670,7 @@ namespace aspect
       center[1] = 0.5;
       if (dim == 3)
         center[2] = 0.5;
-      for (unsigned int i=0; i < in.position.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const double pressure = in.pressure[i];
           out.densities[i] = 1.0 + pressure;

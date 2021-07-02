@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -80,7 +80,7 @@ namespace aspect
 
       private:
 
-        unsigned int order;  //Order of the perturbation
+        double order;  //Order of the perturbation
         double amplitude;  //amplitude of the perturbation
 
     };

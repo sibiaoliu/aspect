@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -37,9 +37,12 @@ namespace aspect
     {
       EquationOfStateOutputs<dim> eos_outputs (this->n_compositional_fields()+1);
 
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
-          const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(in.composition[i]);
+          // The (incompressible) Boussinesq approximation treats the
+          // buoyancy term as Delta rho[i] * C[i], which implies that
+          // compositional fields are given as volume fractions.
+          const std::vector<double> volume_fractions = MaterialUtilities::compute_composition_fractions(in.composition[i]);
 
           equation_of_state.evaluate(in, i, eos_outputs);
 
@@ -91,19 +94,20 @@ namespace aspect
         {
           EquationOfState::MulticomponentIncompressible<dim>::declare_parameters (prm, 4.e-5);
 
-          prm.declare_entry ("Reference temperature", "293",
-                             Patterns::Double (0),
-                             "The reference temperature $T_0$. Units: $\\si{K}$.");
+          prm.declare_entry ("Reference temperature", "293.",
+                             Patterns::Double (0.),
+                             "The reference temperature $T_0$. Units: \\si{\\kelvin}.");
           prm.declare_entry ("Viscosities", "1.e21",
                              Patterns::Anything(),
                              "List of viscosities for background mantle and compositional fields,"
                              "for a total of N+1 values, where N is the number of compositional fields."
-                             "If only one value is given, then all use the same value. Units: $Pa \\, s$");
+                             "If only one value is given, then all use the same value. Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Thermal conductivities", "4.7",
                              Patterns::Anything(),
                              "List of thermal conductivities for background mantle and compositional fields,"
                              "for a total of N+1 values, where N is the number of compositional fields."
-                             "If only one value is given, then all use the same value. Units: $W/m/K$.");
+                             "If only one value is given, then all use the same value. "
+                             "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
           prm.declare_entry ("Viscosity averaging scheme", "harmonic",
                              Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
                              "When more than one compositional field is present at a point "
@@ -169,8 +173,9 @@ namespace aspect
   {
     ASPECT_REGISTER_MATERIAL_MODEL(Multicomponent,
                                    "multicomponent",
-                                   "This model is for use with an arbitrary number of compositional fields, where each field"
-                                   " represents a rock type which can have completely different properties from the others."
+                                   "This incompressible model is for use with an arbitrary number of"
+                                   " compositional fields, where each field represents a rock type which"
+                                   " can have completely different properties from the others."
                                    " However, each rock type itself has constant material properties.  The value of the "
                                    " compositional field is interpreted as a volume fraction. If the sum of the fields is"
                                    " greater than one, they are renormalized.  If it is less than one, material properties "

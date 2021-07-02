@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -255,11 +255,16 @@ namespace aspect
                                                                    advection_field);
     const double global_max_velocity = get_maximal_velocity(old_solution);
 
-    const UpdateFlags update_flags = update_values |
-                                     update_gradients |
-                                     (advection_field.is_temperature() ? update_hessians : update_default) |
-                                     update_quadrature_points |
-                                     update_JxW_values;
+    UpdateFlags update_flags = update_values |
+                               update_gradients |
+                               update_quadrature_points |
+                               update_JxW_values;
+
+    if (advection_field.is_temperature())
+      update_flags = update_flags | update_hessians;
+
+    for (unsigned int i = 0; i < assemblers->advection_system_assembler_properties.size(); ++i)
+      update_flags = update_flags | assemblers->advection_system_assembler_properties[i].needed_update_flags;
 
     // We need the face integrals to determine if a Dirichlet boundary
     // is conduction dominated in which case we disable stabilization
@@ -482,7 +487,7 @@ namespace aspect
         scratch.finite_element_values[solution_field].get_function_gradients (old_old_solution,
                                                                               scratch.old_old_field_grads);
 
-        if (advection_field.is_temperature())
+        if (update_flags & update_hessians)
           {
             scratch.finite_element_values[solution_field].get_function_laplacians (old_solution,
                                                                                    scratch.old_field_laplacians);
@@ -643,12 +648,12 @@ namespace aspect
               for (unsigned int face_no=0; face_no<GeometryInfo<dim>::faces_per_cell; ++face_no)
                 if (cell->at_boundary(face_no) == false)
                   {
-                    if (cell->neighbor(face_no)->active())
+                    if (cell->neighbor(face_no)->is_active())
                       viscosity_per_cell[cell->active_cell_index()] = std::max(viscosity_per_cell[cell->active_cell_index()],
                                                                                viscosity_per_cell_temp[cell->neighbor(face_no)->active_cell_index()]);
                     else
                       for (unsigned int l=0; l<cell->neighbor(face_no)->n_children(); ++l)
-                        if (cell->neighbor(face_no)->child(l)->active())
+                        if (cell->neighbor(face_no)->child(l)->is_active())
                           viscosity_per_cell[cell->active_cell_index()] = std::max(viscosity_per_cell[cell->active_cell_index()],
                                                                                    viscosity_per_cell_temp[cell->neighbor(face_no)->child(l)->active_cell_index()]);
                   }
@@ -668,7 +673,9 @@ namespace aspect
   template void Simulator<dim>::get_artificial_viscosity (Vector<float> &viscosity_per_cell,  \
                                                           const AdvectionField &advection_field, \
                                                           const bool skip_interior_cells) const; \
-   
+
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

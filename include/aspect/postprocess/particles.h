@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -22,13 +22,16 @@
 #define _aspect_postprocess_particle_h
 
 #include <aspect/postprocess/interface.h>
-#include <aspect/particle/world.h>
 
 #include <aspect/simulator_access.h>
+#include <aspect/particle/property/interface.h>
 
 #include <deal.II/particles/particle_handler.h>
 #include <deal.II/base/data_out_base.h>
+
+#include <thread>
 #include <tuple>
+
 
 namespace aspect
 {
@@ -48,7 +51,7 @@ namespace aspect
       {
         public:
           /**
-           * This function prepares the data for writing. It reads the data from @p particle_hander and their
+           * This function prepares the data for writing. It reads the data from @p particle_handler and their
            * property information from @p property_information, and builds a list of patches that is stored
            * internally until the destructor is called. This function needs to be called before one of the
            * write function of the base class can be called to write the output data.
@@ -138,40 +141,6 @@ namespace aspect
         ~Particles() override;
 
         /**
-         * Generate the particles. This can not be done in another
-         * place, because we want to generate the particles
-         * before the first timestep, but after the initial conditions have
-         * been set.
-         */
-        void
-        generate_particles();
-
-        /**
-         * Initialize particle properties. This can not be done in another
-         * place, because we want to initialize the particle properties
-         * before the first timestep, but after the initial conditions have
-         * been set.
-         */
-        void
-        initialize_particles();
-
-        /**
-         * Returns a const reference to the particle world, in case anyone
-         * wants to query something about particles.
-         */
-        const Particle::World<dim> &
-        get_particle_world() const;
-
-        /**
-         * Returns a reference to the particle world, in case anyone wants to
-         * change something within the particle world. Use with care, usually
-         * you want to only let the functions within the particle subsystem
-         * change member variables of the particle world.
-         */
-        Particle::World<dim> &
-        get_particle_world();
-
-        /**
          * Execute this postprocessor. Derived classes will implement this
          * function to do whatever they want to do to evaluate the solution at
          * the current time step.
@@ -221,11 +190,6 @@ namespace aspect
         parse_parameters (ParameterHandler &prm) override;
 
       private:
-        /**
-         * The world holding the particles
-         */
-        Particle::World<dim> world;
-
         /**
          * Interval between output (in years if appropriate simulation
          * parameter is set, otherwise seconds)
@@ -319,7 +283,7 @@ namespace aspect
          * Handle to a thread that is used to write data in the background.
          * The writer() function runs on this background thread.
          */
-        Threads::Thread<void> background_thread;
+        std::thread background_thread;
 
         /**
          * Stores the particle property fields which are excluded from output

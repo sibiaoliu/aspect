@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -82,21 +82,20 @@ namespace aspect
         }
 
       // Check that the representative point lies in the domain.
-      AssertThrow((dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model()) != nullptr) ?
-                  (this->get_geometry_model().point_is_in_domain(representative_point)) :
-                  (this->get_geometry_model().point_is_in_domain(Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point))),
+      AssertThrow(((this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::CoordinateSystem::cartesian) ?
+                   (this->get_geometry_model().point_is_in_domain(representative_point)) :
+                   (this->get_geometry_model().point_is_in_domain(Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point)))),
                   ExcMessage("The reference point does not lie with the domain."));
 
       // Set the radius of the representative point to the surface radius for spherical domains
       // or set the vertical coordinate to the surface value for box domains.
-      if (const GeometryModel::SphericalShell<dim> *gm = dynamic_cast<const GeometryModel::SphericalShell<dim>*> (&this->get_geometry_model()))
-        // set outer radius
-        spherical_representative_point[0] = gm->outer_radius();
-      else if (const GeometryModel::Chunk<dim> *gm = dynamic_cast<const GeometryModel::Chunk<dim>*> (&this->get_geometry_model()))
-        // set outer radius
-        spherical_representative_point[0] = gm->outer_radius();
-      else if (const GeometryModel::EllipsoidalChunk<dim> *gm = dynamic_cast<const GeometryModel::EllipsoidalChunk<dim>*> (&this->get_geometry_model()))
+      if (Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>> (this->get_geometry_model()))
+        spherical_representative_point[0] = Plugins::get_plugin_as_type<const GeometryModel::SphericalShell<dim>>(this->get_geometry_model()).outer_radius();
+      else if (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (this->get_geometry_model()))
+        spherical_representative_point[0] =  Plugins::get_plugin_as_type<const GeometryModel::Chunk<dim>>(this->get_geometry_model()).outer_radius();
+      else if (Plugins::plugin_type_matches<const GeometryModel::EllipsoidalChunk<dim>> (this->get_geometry_model()))
         {
+          const GeometryModel::EllipsoidalChunk<dim> &gm = Plugins::get_plugin_as_type<const GeometryModel::EllipsoidalChunk<dim>> (this->get_geometry_model());
           // TODO
           // If the eccentricity of the EllipsoidalChunk is non-zero, the radius can vary along a boundary,
           // but the maximal depth is the same everywhere and we could calculate a representative pressure
@@ -104,15 +103,16 @@ namespace aspect
           // coordinates, so for now we only allow eccentricity zero.
           // Using the EllipsoidalChunk with eccentricity zero can still be useful,
           // because the domain can be non-coordinate parallel.
-          AssertThrow(gm->get_eccentricity() == 0.0, ExcMessage("This initial lithospheric pressure plugin cannot be used with a non-zero eccentricity. "));
+          AssertThrow(gm.get_eccentricity() == 0.0, ExcMessage("This initial lithospheric pressure plugin cannot be used with a non-zero eccentricity. "));
 
-          spherical_representative_point[0] = gm->get_semi_major_axis_a();
+          spherical_representative_point[0] = gm.get_semi_major_axis_a();
         }
-      else if (const GeometryModel::Sphere<dim> *gm = dynamic_cast<const GeometryModel::Sphere<dim>*> (&this->get_geometry_model()))
-        spherical_representative_point[0] = gm->radius();
-      else if (const GeometryModel::Box<dim> *gm = dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model()))
-        // set z of surface
-        representative_point[dim-1] = gm->get_extents()[dim-1];
+      else if (Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>> (this->get_geometry_model()))
+        spherical_representative_point[0] =  Plugins::get_plugin_as_type<const GeometryModel::Sphere<dim>>(this->get_geometry_model()).radius();
+      else if (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()))
+        representative_point[dim-1]=  Plugins::get_plugin_as_type<const GeometryModel::Box<dim>>(this->get_geometry_model()).get_extents()[dim-1];
+      else if (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
+        representative_point[dim-1]=  Plugins::get_plugin_as_type<const GeometryModel::TwoMergedBoxes<dim>>(this->get_geometry_model()).get_extents()[dim-1];
       else
         AssertThrow(false, ExcNotImplemented());
 
@@ -121,13 +121,13 @@ namespace aspect
       typename MaterialModel::Interface<dim>::MaterialModelOutputs out0(1, n_compositional_fields);
 
       // Where to calculate the density
-      // for spherical domains
-      if (dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model()) == nullptr &&
-          dynamic_cast<const GeometryModel::TwoMergedBoxes<dim>*> (&this->get_geometry_model()) == nullptr)
-        in0.position[0] = Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point);
-      // and for cartesian domains
-      else
+      // for cartesian domains
+      if (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()) ||
+          Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
         in0.position[0] = representative_point;
+      // and for spherical domains
+      else
+        in0.position[0] = Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point);
 
       // We need the initial temperature at this point
       in0.temperature[0] = this->get_initial_temperature_manager().initial_temperature(in0.position[0]);
@@ -168,19 +168,20 @@ namespace aspect
           typename MaterialModel::Interface<dim>::MaterialModelOutputs out(1, n_compositional_fields);
 
           // Where to calculate the density:
-          // for spherical domains
-          if (dynamic_cast<const GeometryModel::Box<dim>*> (&this->get_geometry_model()) == nullptr)
-            {
-              // decrease radius with depth increment
-              spherical_representative_point[0] -= delta_z;
-              in.position[0] = Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point);
-            }
-          // and for cartesian domains
-          else
+          // for cartesian domains
+          if (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()) ||
+              Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
             {
               // decrease z coordinate with depth increment
               representative_point[dim-1] -= delta_z;
               in.position[0] = representative_point;
+            }
+          // and for spherical domains
+          else
+            {
+              // decrease radius with depth increment
+              spherical_representative_point[0] -= delta_z;
+              in.position[0] = Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(spherical_representative_point);
             }
 
           // Retrieve the initial temperature at this point.
@@ -269,13 +270,15 @@ namespace aspect
           prm.declare_entry ("Representative point", "",
                              Patterns::List(Patterns::Double()),
                              "The point where the pressure profile will be calculated. "
-                             "Cartesian coordinates when geometry is a box, otherwise enter radius, longitude, "
-                             "and in 3D latitude."
-                             "Units: $\\si{m}$ or degrees.");
+                             "Cartesian coordinates $(x,y,z)$ when geometry is a box, otherwise enter radius, "
+                             "longitude, and in 3D latitude. Note that the coordinate related to the depth "
+                             "($y$ in 2D cartesian, $z$ in 3D cartesian and radius in spherical coordinates) is "
+                             "not used. "
+                             "Units: \\si{\\meter} or degrees.");
           prm.declare_entry("Number of integration points", "1000",
                             Patterns::Integer(0),
                             "The number of integration points over which we integrate the lithostatic pressure "
-                            "downwards. ");
+                            "downwards.");
         }
         prm.leave_subsection();
       }
@@ -341,7 +344,8 @@ namespace aspect
                                             "other geometries (radius, longitude, latitude), and "
                                             "the number of integration points. "
                                             "The lateral coordinates of the point are used to calculate "
-                                            "the lithostatic pressure profile with depth. "
+                                            "the lithostatic pressure profile with depth. This means that "
+                                            "the depth coordinate is not used."
                                             "\n\n"
                                             "Gravity is expected to point along the depth direction. ")
   }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -100,7 +100,7 @@ namespace aspect
 
       /**
        * Left hand side contribution of latent heat; this is added to the
-       * $\\rho C_p$ term on the left hand side of the energy equation.
+       * $\rho C_p$ term on the left hand side of the energy equation.
        */
       std::vector<double> lhs_latent_heat_terms;
 
@@ -109,7 +109,6 @@ namespace aspect
        * outputs to their uninitialized values (NaN for the source and latent
        * heat terms, 0 for the rates of temperature change).
        */
-      virtual
       void
       reset ();
     };

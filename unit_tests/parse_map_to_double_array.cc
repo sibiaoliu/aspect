@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the ASPECT code.
+  Copyright (C) 2018 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -158,6 +158,84 @@ TEST_CASE("Utilities::parse_map_to_double_array")
     {100.0,200.0,100.0,200.0});
   }
 
+  INFO("check 13: ");
+  compare_vectors_approx(aspect::Utilities::parse_map_to_double_array ("background:0, C1:100, C4:400, C5:500, C3:300",
+  {"C1","C2","C3","C4","C5"},
+  true,
+  "TestField",
+  false,
+  nullptr,
+  true),
+  {0.0,100.0,300.0,400.0,500.0});
+
+  INFO("check 14: ");
+  compare_vectors_approx(aspect::Utilities::parse_map_to_double_array ("C1:100, C4:400, C5:500, C3:300",
+  {"C1","C2","C3","C4","C5"},
+  true,
+  "TestField",
+  false,
+  nullptr,
+  true),
+  {100.0,300.0,400.0,500.0});
+
+  INFO("check 16: ");
+  compare_vectors_approx(aspect::Utilities::parse_map_to_double_array ("",
+  {"C1","C2","C3","C4","C5"},
+  true,
+  "TestField",
+  false,
+  nullptr,
+  true),
+  std::vector<double>());
+
+  {
+    INFO("check 17: ");
+    auto n_values_per_key = std::make_shared<std::vector<unsigned int>>();
+
+    compare_vectors_approx(aspect::Utilities::parse_map_to_double_array ("C1:100, C2:200|300, C3:300, C5:500",
+    {"C1","C2","C3","C4","C5"},
+    false,
+    "TestField",
+    true,
+    n_values_per_key,
+    true),
+    {100.0,200.0,300.0,300.0,500.0});
+
+    REQUIRE(*n_values_per_key == std::vector<unsigned int>({1,2,1,0,1}));
+
+    compare_vectors_approx(aspect::Utilities::parse_map_to_double_array ("C1:100, C2:200|300, C3:300, C5:500",
+    {"C1","C2","C3","C4","C5"},
+    false,
+    "TestField",
+    true,
+    n_values_per_key,
+    true),
+    {100.0,200.0,300.0,300.0,500.0});
+  }
+
+  {
+    INFO("check 18: ");
+    auto n_values_per_key = std::make_shared<std::vector<unsigned int>>(std::vector<unsigned int>({2,2}));
+
+    compare_vectors_approx(aspect::Utilities::parse_map_to_double_array ("C1:300|400, C2:200",
+    {"C1","C2"},
+    false,
+    "TestField",
+    true,
+    n_values_per_key),
+    {300.0,400.0,200.0,200.0});
+
+    INFO("check 19: ");
+
+    // still using the compare_vectors_approx defined before
+    compare_vectors_approx(aspect::Utilities::parse_map_to_double_array ("200",
+    {"C1","C2"},
+    false,
+    "TestField",
+    true,
+    n_values_per_key),
+    {200.0,200.0,200.0,200.0});
+  }
   INFO("check complete");
 
 }
@@ -180,7 +258,7 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
     aspect::Utilities::parse_map_to_double_array ("C1:100, C2:200, C3:300, C4:400, C5:500",
   {"C1","C2","C3","C4","C5"},
   true,
-  "TestField"), Contains("list must equal one of the following values:"));
+  "TestField"), Contains("The keyword <background> in TestField is not listed"));
 
 
   INFO("check fail 3: ");
@@ -188,7 +266,7 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
     aspect::Utilities::parse_map_to_double_array ("C1:100, C1:200, C3:300, C4;400, C5:500, bg:3",
   {"C1","C2","C3","C4","C5"},
   true,
-  "TestField"), Contains("The required format for field"));
+  "TestField"), Contains("The required format for property"));
 
 
   INFO("check fail 4: ");
@@ -203,14 +281,14 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
     aspect::Utilities::parse_map_to_double_array ("C1:100, C2:200, C3:300, all:400, C5:500, bg:3",
   {"C1","C2","C3","C4","C5"},
   true,
-  "TestField"), Contains("values found, the keyword `all' is not"));
+  "TestField"), Contains("The keyword `all' in the property TestField is only allowed if"));
 
   INFO("check fail 6: ");
   REQUIRE_THROWS_WITH(
     aspect::Utilities::parse_map_to_double_array ("C1:100",
   {"C1","C2","C3","C4","C5"},
   true,
-  "TestField"), Contains("The keyword `all' is expected but is not found"));
+  "TestField"), Contains("The keyword <background> in TestField is not listed"));
 
   // Subentries not allowed
   INFO("check fail 7: ");
@@ -218,7 +296,7 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
     aspect::Utilities::parse_map_to_double_array ("C1:100, C2:100|200, C3:300, C4:400, C5:500",
   {"C1","C2","C3","C4","C5"},
   false,
-  "TestField"), Contains("The required format for field"));
+  "TestField"), Contains("The keyword <C2> in TestField has multiple values"));
 
   // Wrong subentry format
   INFO("check fail 8: ");
@@ -227,7 +305,7 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
   {"C1","C2","C3","C4","C5"},
   false,
   "TestField",
-  true), Contains("The required format for field"));
+  true), Contains("The required format for property"));
 
   // No subentries
   INFO("check fail 9: ");
@@ -236,7 +314,7 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
   {"C1","C2","C3","C4","C5"},
   false,
   "TestField",
-  true), Contains("The required format for field"));
+  true), Contains("The required format for property"));
 
   // Wrong input structure
   {
@@ -259,7 +337,7 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
     "TestField",
     true,
     n_values_per_key),
-    Contains("the expected number of values"));
+    Contains("The key <C1> in <TestField> does not have the expected number"));
   }
 
   {
@@ -282,7 +360,7 @@ TEST_CASE("Utilities::parse_map_to_double_array FAIL ON PURPOSE")
     "TestField",
     true,
     n_values_per_key),
-    Contains("the expected number of values"));
+    Contains("The key <C1> in <TestField> does not have the expected number"));
   }
 }
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -53,21 +53,18 @@ namespace aspect
 
         for (unsigned int q=0; q<n_quadrature_points; ++q)
           {
-            // extract the primal variables
             Tensor<2,dim> grad_u;
             for (unsigned int d=0; d<dim; ++d)
               grad_u[d] = input_data.solution_gradients[q][d];
 
             const SymmetricTensor<2,dim> strain_rate = symmetrize (grad_u);
-            const SymmetricTensor<2,dim> compressible_strain_rate
-              = (this->get_material_model().is_compressible()
-                 ?
-                 strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>()
-                 :
-                 strain_rate);
-            computed_quantities[q](0) = std::sqrt(compressible_strain_rate *
-                                                  compressible_strain_rate);
+            computed_quantities[q](0) = std::sqrt(std::fabs(second_invariant(deviator(strain_rate))));
           }
+
+        // average the values if requested
+        const auto &viz = this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Visualization<dim> >();
+        if (!viz.output_pointwise_stress_and_strain())
+          average_quantities(computed_quantities);
       }
     }
   }

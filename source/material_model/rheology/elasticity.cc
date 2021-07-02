@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -70,7 +70,7 @@ namespace aspect
       Elasticity<dim>::declare_parameters (ParameterHandler &prm)
       {
         prm.declare_entry ("Elastic shear moduli", "75.0e9",
-                           Patterns::List(Patterns::Double(0)),
+                           Patterns::List(Patterns::Double (0.)),
                            "List of elastic shear moduli, $G$, "
                            "for background material and compositional fields, "
                            "for a total of N+1 values, where N is the number of compositional fields. "
@@ -88,7 +88,7 @@ namespace aspect
                            "'unspecified', which throws an exception during runtime. In order for "
                            "the model to run the user must select 'true' or 'false'.");
         prm.declare_entry ("Fixed elastic time step", "1.e3",
-                           Patterns::Double (0),
+                           Patterns::Double (0.),
                            "The fixed elastic time step $dte$. Units: years if the "
                            "'Use years in output instead of seconds' parameter is set; "
                            "seconds otherwise.");
@@ -96,6 +96,16 @@ namespace aspect
                            Patterns::Bool (),
                            "Whether to apply a stress averaging scheme to account for differences "
                            "between the fixed elastic time step and numerical time step. ");
+        prm.declare_entry ("Stabilization time scale factor", "1.",
+                           Patterns::Double (1.),
+                           "A stabilization factor for the elastic stresses that influence how fast "
+                           "elastic stresses adjust to deformation. 1.0 is equivalent to no stabilization "
+                           "and may lead to oscillatory motion. Setting the factor to 2 "
+                           "avoids oscillations, but still enables an immediate elastic response. "
+                           "However, in complex models this can lead to problems of convergence, in which "
+                           "case the factor needs to be increased slightly. Setting the factor to "
+                           "infinity is equivalent to not applying elastic stresses at all. The "
+                           "factor is multiplied with the computational time step to create a time scale. ");
       }
 
 
@@ -119,9 +129,8 @@ namespace aspect
           AssertThrow(false, ExcMessage("'Use fixed elastic time step' must be set to 'true' or 'false'"));
 
         use_stress_averaging = prm.get_bool ("Use stress averaging");
-        if (use_stress_averaging)
-          AssertThrow(use_fixed_elastic_time_step == true,
-                      ExcMessage("Stress averaging can only be used if 'Use fixed elastic time step' is set to true'"));
+
+        stabilization_time_scale_factor = prm.get_double ("Stabilization time scale factor");
 
         fixed_elastic_time_step = prm.get_double ("Fixed elastic time step");
         AssertThrow(fixed_elastic_time_step > 0,
@@ -135,32 +144,32 @@ namespace aspect
 
         // Check whether the compositional fields representing the viscoelastic
         // stress tensor are both named correctly and listed in the right order.
-        AssertThrow(this->introspection().compositional_index_for_name("stress_xx") == 0,
+        AssertThrow(this->introspection().compositional_index_for_name("ve_stress_xx") == 0,
                     ExcMessage("Rheology model Elasticity only works if the first "
-                               "compositional field is called stress_xx."));
-        AssertThrow(this->introspection().compositional_index_for_name("stress_yy") == 1,
+                               "compositional field is called ve_stress_xx."));
+        AssertThrow(this->introspection().compositional_index_for_name("ve_stress_yy") == 1,
                     ExcMessage("Rheology model Elasticity only works if the second "
-                               "compositional field is called stress_yy."));
+                               "compositional field is called ve_stress_yy."));
         if (dim == 2)
           {
-            AssertThrow(this->introspection().compositional_index_for_name("stress_xy") == 2,
+            AssertThrow(this->introspection().compositional_index_for_name("ve_stress_xy") == 2,
                         ExcMessage("Rheology model Elasticity only works if the third "
-                                   "compositional field is called stress_xy."));
+                                   "compositional field is called ve_stress_xy."));
           }
         else if (dim == 3)
           {
-            AssertThrow(this->introspection().compositional_index_for_name("stress_zz") == 2,
+            AssertThrow(this->introspection().compositional_index_for_name("ve_stress_zz") == 2,
                         ExcMessage("Rheology model Elasticity only works if the third "
-                                   "compositional field is called stress_zz."));
-            AssertThrow(this->introspection().compositional_index_for_name("stress_xy") == 3,
+                                   "compositional field is called ve_stress_zz."));
+            AssertThrow(this->introspection().compositional_index_for_name("ve_stress_xy") == 3,
                         ExcMessage("Rheology model Elasticity only works if the fourth "
-                                   "compositional field is called stress_xy."));
-            AssertThrow(this->introspection().compositional_index_for_name("stress_xz") == 4,
+                                   "compositional field is called ve_stress_xy."));
+            AssertThrow(this->introspection().compositional_index_for_name("ve_stress_xz") == 4,
                         ExcMessage("Rheology model Elasticity only works if the fifth "
-                                   "compositional field is called stress_xz."));
-            AssertThrow(this->introspection().compositional_index_for_name("stress_yz") == 5,
+                                   "compositional field is called ve_stress_xz."));
+            AssertThrow(this->introspection().compositional_index_for_name("ve_stress_yz") == 5,
                         ExcMessage("Rheology model Elasticity only works if the sixth "
-                                   "compositional field is called stress_yz."));
+                                   "compositional field is called ve_stress_yz."));
           }
         else
           AssertThrow(false, ExcNotImplemented());
@@ -173,17 +182,31 @@ namespace aspect
                      Parameters<dim>::NonlinearSolver::single_Advection_single_Stokes
                      ||
                      this->get_parameters().nonlinear_solver ==
-                     Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes),
+                     Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes
+                     ||
+                     this->get_parameters().nonlinear_solver ==
+                     Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes
+                     ||
+                     this->get_parameters().nonlinear_solver ==
+                     Parameters<dim>::NonlinearSolver::single_Advection_iterated_defect_correction_Stokes),
                     ExcMessage("The material model will only work with the nonlinear "
-                               "solver schemes 'single Advection, single Stokes' and "
-                               "'single Advection, iterated Stokes'"));
+                               "solver schemes 'single Advection, single Stokes', "
+                               "'single Advection, iterated Stokes', "
+                               "'single Advection, iterated Newton Stokes', and "
+                               "'single Advection, iterated defect correction Stokes' "));
 
         // Functionality to average the additional RHS terms over the cell is not implemented.
-        // This enforces that the variable 'Material averaging' is set to 'none'.
-        AssertThrow(this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::none,
-                    ExcMessage("Material models with elasticity cannot be used with "
-                               "material averaging. The variable 'Material averaging' "
-                               "in the 'Material model' subsection must be set to 'none'."));
+        // Consequently, it is only possible to use elasticity with the Material averaging schemes
+        // 'none', 'harmonic average only viscosity', 'project to Q1 only viscosity'.
+        AssertThrow((this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::none
+                     ||
+                     this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::harmonic_average_only_viscosity
+                     ||
+                     this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::project_to_Q1_only_viscosity),
+                    ExcMessage("Material models with elasticity can only be used with the material "
+                               "averaging schemes 'none', 'harmonic average only viscosity', and "
+                               "project to Q1 only viscosity'. This parameter ('Material averaging') "
+                               "is located within the 'Material model' subsection."));
       }
 
 
@@ -194,7 +217,7 @@ namespace aspect
       {
         if (out.template get_additional_output<ElasticAdditionalOutputs<dim> >() == nullptr)
           {
-            const unsigned int n_points = out.viscosities.size();
+            const unsigned int n_points = out.n_evaluation_points();
             out.additional_outputs.push_back(
               std_cxx14::make_unique<ElasticAdditionalOutputs<dim>> (n_points));
           }
@@ -216,11 +239,11 @@ namespace aspect
         if (force_out == nullptr)
           return;
 
-        if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.strain_rate.size() > 0)
+        if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
           {
             const double dte = elastic_timestep();
 
-            for (unsigned int i=0; i < in.position.size(); ++i)
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
               {
                 // Get old stresses from compositional fields
                 SymmetricTensor<2,dim> stress_old;
@@ -247,11 +270,11 @@ namespace aspect
                                               const std::vector<double> &average_elastic_shear_moduli,
                                               MaterialModel::MaterialModelOutputs<dim> &out) const
       {
-        if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.strain_rate.size() > 0)
+        if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
           {
             // Get old (previous time step) velocity gradients
-            std::vector<Point<dim> > quadrature_positions(in.position.size());
-            for (unsigned int i=0; i < in.position.size(); ++i)
+            std::vector<Point<dim> > quadrature_positions(in.n_evaluation_points());
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
               quadrature_positions[i] = this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]);
 
             // FEValues requires a quadrature and we provide the default quadrature
@@ -269,7 +292,7 @@ namespace aspect
             const double dte = elastic_timestep();
             const double dt = this->get_timestep();
 
-            for (unsigned int i=0; i < in.position.size(); ++i)
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
               {
                 // Get old stresses from compositional fields
                 SymmetricTensor<2,dim> stress_old;
@@ -292,9 +315,9 @@ namespace aspect
                                                     ( ( average_viscoelastic_viscosity / average_elastic_shear_moduli[i] ) *
                                                       ( symmetrize(rotation * Tensor<2,dim>(stress_old) ) - symmetrize(Tensor<2,dim>(stress_old) * rotation) ) );
 
-                // Stress averaging scheme to account for difference betweed fixed elastic time step
+                // Stress averaging scheme to account for difference between fixed elastic time step
                 // and numerical time step (see equation 32 in Moresi et al., 2003, J. Comp. Phys.)
-                if (use_fixed_elastic_time_step == true && use_stress_averaging == true)
+                if (use_stress_averaging == true)
                   {
                     stress_new = ( ( 1. - ( dt / dte ) ) * stress_old ) + ( ( dt / dte ) * stress_new ) ;
                   }
@@ -326,7 +349,7 @@ namespace aspect
                                this->simulator_is_past_initialization() &&
                                use_fixed_elastic_time_step == false )
                              ?
-                             this->get_timestep()
+                             this->get_timestep() * stabilization_time_scale_factor
                              :
                              fixed_elastic_time_step);
         return dte;
@@ -335,7 +358,7 @@ namespace aspect
 
 
       template <int dim>
-      std::vector<double>
+      const std::vector<double> &
       Elasticity<dim>::get_elastic_shear_moduli () const
       {
         return elastic_shear_moduli;
@@ -349,8 +372,27 @@ namespace aspect
       calculate_viscoelastic_viscosity (const double viscosity,
                                         const double elastic_shear_modulus) const
       {
-        const double dte = elastic_timestep();
-        return ( viscosity * dte ) / ( dte + ( viscosity / elastic_shear_modulus ) );
+        const double elastic_viscosity = elastic_shear_modulus*elastic_timestep();
+        return 1. / (1./elastic_viscosity + 1./viscosity);
+      }
+
+
+
+      template <int dim>
+      double
+      Elasticity<dim>::
+      calculate_viscoelastic_strain_rate(const SymmetricTensor<2,dim> &strain_rate,
+                                         const SymmetricTensor<2,dim> &stress,
+                                         const double shear_modulus) const
+      {
+        // The second term in the following expression corresponds to the
+        // elastic part of the strain rate deviator. Note the parallels with the
+        // viscous part of the strain rate deviator,
+        // which is equal to 0.5 * stress / viscosity.
+        const SymmetricTensor<2,dim> edot_deviator = deviator(strain_rate) + 0.5*stress /
+                                                     (shear_modulus * elastic_timestep());
+
+        return std::sqrt(std::fabs(second_invariant(edot_deviator)));
       }
     }
   }
@@ -370,5 +412,7 @@ namespace aspect
   }
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -128,9 +128,17 @@ namespace aspect
                             ||
                             (face->at_boundary() && cell->periodic_neighbor_is_coarser(f))
                             ||
+#if DEAL_II_VERSION_GTE(9,2,0)
+                            (face->at_boundary() && neighbor->level() == cell->level() && neighbor->is_active()))
+#else
                             (face->at_boundary() && neighbor->level() == cell->level() && neighbor->active()))
+#endif
                           {
+#if DEAL_II_VERSION_GTE(9,2,0)
+                            if (neighbor->is_active() && !neighbor->is_artificial())
+#else
                             if (neighbor->active() && !neighbor->is_artificial())
+#endif
                               {
                                 fe_values.reinit(neighbor);
                                 fe_values[volume_of_fluid_field].get_function_values(this->get_solution(),
@@ -149,7 +157,7 @@ namespace aspect
                           }
                         else
                           {
-                            for (unsigned int subface=0; subface < face->number_of_children(); ++subface)
+                            for (unsigned int subface=0; subface < face->n_children(); ++subface)
                               {
                                 const typename DoFHandler<dim>::active_cell_iterator neighbor_sub =
                                   (cell_has_periodic_neighbor
@@ -245,7 +253,11 @@ namespace aspect
               for (; neighbor_cell!=end_neighbor_cell_index; ++neighbor_cell)
                 {
                   typename Triangulation<dim>::active_cell_iterator itr_tmp = *neighbor_cell;
+#if DEAL_II_VERSION_GTE(9,2,0)
+                  if (itr_tmp->is_active() && itr_tmp->is_locally_owned())
+#else
                   if (itr_tmp->active() && itr_tmp->is_locally_owned())
+#endif
                     {
                       itr_tmp->clear_coarsen_flag ();
                       itr_tmp->set_refine_flag ();
@@ -260,7 +272,12 @@ namespace aspect
               if (mcell->has_periodic_neighbor(f))
                 {
                   typename Triangulation<dim>::cell_iterator itr_tmp = mcell->periodic_neighbor(f);
+
+#if DEAL_II_VERSION_GTE(9,2,0)
+                  if (itr_tmp->is_active() && itr_tmp->is_locally_owned())
+#else
                   if (itr_tmp->active() && itr_tmp->is_locally_owned())
+#endif
                     {
                       itr_tmp->clear_coarsen_flag ();
                       itr_tmp->set_refine_flag ();
@@ -281,7 +298,11 @@ namespace aspect
                   }
                 else
                   {
+#if DEAL_II_VERSION_GTE(9,2,0)
+                    if (cell->is_active())
+#else
                     if (cell->active())
+#endif
                       {
                         cell->set_coarsen_flag();
                         cell->clear_refine_flag();

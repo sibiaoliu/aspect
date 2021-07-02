@@ -43,7 +43,7 @@ namespace aspect
         KellyErrorEstimator<dim>::estimate (this->get_mapping(),
                                             this->get_dof_handler(),
                                             QGauss<dim-1>(this->introspection().polynomial_degree.velocities +1),
-                                            typename FunctionMap<dim>::type(),
+                                            std::map<types::boundary_id,const Function<dim>*>(),
                                             this->get_solution(),
                                             indicators,
                                             this->introspection().variable("fluid velocity").component_mask,
@@ -198,7 +198,7 @@ namespace aspect
                             typename MaterialModel::Interface<dim>::MaterialModelOutputs &out) const
       {
         const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
-        for (unsigned int i=0; i<in.position.size(); ++i)
+        for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
           {
             const double x = in.position[i](0);
             const double z = in.position[i](1);
@@ -224,7 +224,7 @@ namespace aspect
           {
             const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
 
-            for (unsigned int i=0; i<in.position.size(); ++i)
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
               {
                 double porosity = in.composition[i][porosity_idx];
 

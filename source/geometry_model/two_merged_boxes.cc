@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,7 +33,6 @@ namespace aspect
 {
   namespace GeometryModel
   {
-
     template <int dim>
     void
     TwoMergedBoxes<dim>::
@@ -201,7 +200,10 @@ namespace aspect
       std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundaries;
       for ( unsigned int i=0; i<dim+dim-1; ++i)
         if (periodic[i])
-          periodic_boundaries.insert( std::make_pair( std::pair<types::boundary_id, types::boundary_id>(2*i, 2*i+1), i) );
+          {
+            const unsigned int direction = i>=dim ? i-dim : i;
+            periodic_boundaries.insert( std::make_pair( std::pair<types::boundary_id, types::boundary_id>(2*i, 2*i+1), direction) );
+          }
       return periodic_boundaries;
     }
 
@@ -235,6 +237,15 @@ namespace aspect
       const double d = maximal_depth()-(position(dim-1)-lower_box_origin[dim-1]);
       return std::min (std::max (d, 0.), maximal_depth());
     }
+
+
+    template <int dim>
+    double
+    TwoMergedBoxes<dim>::height_above_reference_surface(const Point<dim> &position) const
+    {
+      return (position(dim-1)-lower_box_origin[dim-1]) - extents[dim-1];
+    }
+
 
 
     template <int dim>
@@ -278,7 +289,7 @@ namespace aspect
                   this->simulator_is_past_initialization() == false,
                   ExcMessage("After displacement of the mesh, this function can no longer be used to determine whether a point lies in the domain or not."));
 
-      AssertThrow(dynamic_cast<const InitialTopographyModel::ZeroTopography<dim>*>(&this->get_initial_topography_model()) != nullptr,
+      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
                   ExcMessage("After adding topography, this function can no longer be used to determine whether a point lies in the domain or not."));
 
       for (unsigned int d = 0; d < dim; d++)
@@ -334,34 +345,34 @@ namespace aspect
         prm.enter_subsection("Box with lithosphere boundary indicators");
         {
           prm.declare_entry ("Lithospheric thickness", "0.2",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The thickness of the lithosphere used to create "
                              "additional boundary indicators to set specific "
                              "boundary conditions for the lithosphere. ");
 
           // Total box extents
-          prm.declare_entry ("X extent", "1",
-                             Patterns::Double (0),
-                             "Extent of the box in x-direction. Units: $\\si{m}$.");
-          prm.declare_entry ("Y extent", "1",
-                             Patterns::Double (0),
-                             "Extent of the box in y-direction. Units: $\\si{m}$.");
-          prm.declare_entry ("Z extent", "1",
-                             Patterns::Double (0),
+          prm.declare_entry ("X extent", "1.",
+                             Patterns::Double (0.),
+                             "Extent of the box in x-direction. Units: \\si{\\meter}.");
+          prm.declare_entry ("Y extent", "1.",
+                             Patterns::Double (0.),
+                             "Extent of the box in y-direction. Units: \\si{\\meter}.");
+          prm.declare_entry ("Z extent", "1.",
+                             Patterns::Double (0.),
                              "Extent of the box in z-direction. This value is ignored "
-                             "if the simulation is in 2d. Units: $\\si{m}$.");
+                             "if the simulation is in 2d. Units: \\si{\\meter}.");
 
           // Total box origin
-          prm.declare_entry ("Box origin X coordinate", "0",
+          prm.declare_entry ("Box origin X coordinate", "0.",
                              Patterns::Double (),
-                             "X coordinate of box origin. Units: $\\si{m}$.");
-          prm.declare_entry ("Box origin Y coordinate", "0",
+                             "X coordinate of box origin. Units: \\si{\\meter}.");
+          prm.declare_entry ("Box origin Y coordinate", "0.",
                              Patterns::Double (),
-                             "Y coordinate of box origin. Units: $\\si{m}$.");
-          prm.declare_entry ("Box origin Z coordinate", "0",
+                             "Y coordinate of box origin. Units: \\si{\\meter}.");
+          prm.declare_entry ("Box origin Z coordinate", "0.",
                              Patterns::Double (),
                              "Z coordinate of box origin. This value is ignored "
-                             "if the simulation is in 2d. Units: $\\si{m}$.");
+                             "if the simulation is in 2d. Units: \\si{\\meter}.");
 
           // Lower box repetitions
           prm.declare_entry ("X repetitions", "1",

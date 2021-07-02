@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -53,7 +53,14 @@ namespace aspect
                                const Mapping<dim>       &mapping,
                                const Quadrature<dim>    &quadrature,
                                const Quadrature<dim-1>  &face_quadrature);
+
           VolumeOfFluidSystem (const VolumeOfFluidSystem &scratch);
+
+          /**
+           * Add a defaulted assignment operator because relying on it
+           * implicitly is deprecated.
+           */
+          VolumeOfFluidSystem &operator=(const VolumeOfFluidSystem &) = default;
 
           FEValues<dim>          finite_element_values;
           FEValues<dim>          neighbor_finite_element_values;
@@ -111,6 +118,12 @@ namespace aspect
            */
           VolumeOfFluidSystem(const FiniteElement<dim> &finite_element);
           VolumeOfFluidSystem(const VolumeOfFluidSystem &data);
+
+          /**
+           * Add a defaulted assignment operator because relying on it
+           * implicitly is deprecated.
+           */
+          VolumeOfFluidSystem &operator=(const VolumeOfFluidSystem &) = default;
 
           /**
            * Local contributions to the global matrix and right hand side

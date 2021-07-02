@@ -2,7 +2,7 @@
 Number of active cells: 100 (on 1 levels)
 Number of degrees of freedom: 17,441 (3,969+242+1,323+1,323+1,323+1,323+1,323+1,323+1,323+1,323+1,323+1,323)
 
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
    Solving temperature system... 0 iterations.
    Solving s11 system ... 0 iterations.
    Skipping s12 composition solve because RHS is zero.
@@ -25,11 +25,8 @@ Number of degrees of freedom: 17,441 (3,969+242+1,323+1,323+1,323+1,323+1,323+1,
 
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 
-*** Timestep 1:  t=100 years
+*** Timestep 1:  t=100 years, dt=100 years
    Solving temperature system... 0 iterations.
    Solving s11 system ... 6 iterations.
    Solving s12 system ... 12 iterations.
@@ -41,8 +38,8 @@ Number of degrees of freedom: 17,441 (3,969+242+1,323+1,323+1,323+1,323+1,323+1,
    Solving s32 system ... 12 iterations.
    Solving s33 system ... 6 iterations.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 0+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 7.39749e-08
+   Solving Stokes system... 0+2 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1.06667e-07
 
 
    Postprocessing:
@@ -51,14 +48,8 @@ Number of degrees of freedom: 17,441 (3,969+242+1,323+1,323+1,323+1,323+1,323+1,
 
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

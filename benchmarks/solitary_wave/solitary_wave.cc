@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -284,7 +284,7 @@ namespace aspect
           virtual void vector_value (const Point< dim > &p,
                                      Vector< double >   &values) const
           {
-            double index = static_cast<int>((p[dim-1]-delta_)/max_z_ * (initial_pressure_.size()-1));
+            unsigned int index = static_cast<int>((p[dim-1]-delta_)/max_z_ * (initial_pressure_.size()-1));
             if (p[dim-1]-delta_ < 0)
               index = 0;
             else if (p[dim-1]-delta_ > max_z_)
@@ -427,7 +427,7 @@ namespace aspect
         {
           const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
 
-          for (unsigned int i=0; i<in.position.size(); ++i)
+          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
               double porosity = in.composition[i][porosity_idx];
 
@@ -445,7 +445,7 @@ namespace aspect
           aspect::MaterialModel::MeltOutputs<dim> *melt_out = out.template get_additional_output<aspect::MaterialModel::MeltOutputs<dim> >();
 
           if (melt_out != NULL)
-            for (unsigned int i=0; i<in.position.size(); ++i)
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
               {
                 double porosity = in.composition[i][porosity_idx];
 
@@ -477,26 +477,29 @@ namespace aspect
         {
           prm.declare_entry ("Reference solid density", "3000",
                              Patterns::Double (0),
-                             "Reference density of the solid $\\rho_{s,0}$. Units: $kg/m^3$.");
+                             "Reference density of the solid $\\rho_{s,0}$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Reference melt density", "2500",
                              Patterns::Double (0),
-                             "Reference density of the melt/fluid$\\rho_{f,0}$. Units: $kg/m^3$.");
+                             "Reference density of the melt/fluid$\\rho_{f,0}$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Reference shear viscosity", "1e20",
                              Patterns::Double (0),
                              "The value of the constant viscosity $\\eta_0$ of the solid matrix. "
-                             "Units: $Pa s$.");
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Reference compaction viscosity", "1e20",
                              Patterns::Double (0),
                              "The value of the constant volumetric viscosity $\\xi_0$ of the solid matrix. "
-                             "Units: $Pa s$.");
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Reference melt viscosity", "100.0",
                              Patterns::Double (0),
-                             "The value of the constant melt viscosity $\\eta_f$. Units: $Pa s$.");
+                             "The value of the constant melt viscosity $\\eta_f$. "
+                             "Units: \\si{\\pascal\\second}.");
 
           prm.declare_entry ("Reference permeability", "5e-9",
                              Patterns::Double(),
                              "Reference permeability of the solid host rock."
-                             "Units: $m^2$.");
+                             "Units: \\si{\\meter\\squared}.");
         }
         prm.leave_subsection();
       }
@@ -601,7 +604,7 @@ namespace aspect
                              Patterns::Double (0),
                              "Offset of the center of the solitary wave from the boundary"
                              "of the domain. "
-                             "Units: $m$.");
+                             "Units: \\si{\\meter}.");
           prm.declare_entry ("Read solution from file", "false",
                              Patterns::Bool (),
                              "Whether to read the porosity initial condition from "

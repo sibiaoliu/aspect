@@ -3,16 +3,16 @@ Number of active cells: 192 (on 2 levels)
 Number of degrees of freedom: 8,937 (6,435+357+2,145)
 
 Number of mesh deformation degrees of freedom: 1071
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
    Solving mesh velocity system... 0 iterations.
    Skipping temperature solve because RHS is zero.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 0+16 iterations.
+   Solving Stokes system... 0+20 iterations.
       Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1
 
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 0+62 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 2: 0.208101
+   Solving Stokes system... 0+78 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 2: 0.14736
 
 
    Postprocessing:
@@ -24,7 +24,4 @@ Number of mesh deformation degrees of freedom: 1071
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

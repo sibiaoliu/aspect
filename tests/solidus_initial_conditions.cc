@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -337,10 +337,10 @@ namespace aspect
                              "The difference from solidus, use this number to generate initial conditions "
                              "that close to solidus instead of exactly at solidus. Use small negative number"
                              " in this parameter to prevent large melting generation at the beginning. "
-                             "  Units: K ");
+                             "  Units: \\si{\\kelvin} ");
           prm.declare_entry ("Lithosphere thickness","0",
                              Patterns::Double (0),
-                             "The thickness of lithosphere thickness. Units: m");
+                             "The thickness of lithosphere thickness. Units: \\si{\\meter}");
           prm.enter_subsection("Perturbation");
           {
             prm.declare_entry ("Temperature amplitude", "0e0",

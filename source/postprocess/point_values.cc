@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -112,63 +112,65 @@ namespace aspect
         }
 
       // finally push these point values all onto the list we keep
-      point_values.push_back (std::make_pair (this->get_time(),
-                                              current_point_values));
+      point_values.emplace_back (this->get_time(), current_point_values);
 
       // now write all of the data to the file of choice. start with a pre-amble that
       // explains the meaning of the various fields
       const std::string filename = (this->get_output_directory() +
                                     "point_values.txt");
-      std::ofstream f (filename.c_str());
-      f << ("# <time> "
-            "<evaluation_point_x> "
-            "<evaluation_point_y> ")
-        << (dim == 3 ? "<evaluation_point_z> " : "")
-        << ("<velocity_x> "
-            "<velocity_y> ")
-        << (dim == 3 ? "<velocity_z> " : "")
-        << "<pressure> <temperature>";
-      for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-        f << " <" << this->introspection().name_for_compositional_index(c) << ">";
-      f << '\n';
 
-      for (std::vector<std::pair<double, std::vector<Vector<double> > > >::iterator
-           time_point = point_values.begin();
-           time_point != point_values.end();
-           ++time_point)
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
         {
-          Assert (time_point->second.size() == evaluation_points_cartesian.size(),
-                  ExcInternalError());
-          for (unsigned int i=0; i<evaluation_points_cartesian.size(); ++i)
+
+          std::ofstream f (filename.c_str());
+          f << ("# <time> "
+                "<evaluation_point_x> "
+                "<evaluation_point_y> ")
+            << (dim == 3 ? "<evaluation_point_z> " : "")
+            << ("<velocity_x> "
+                "<velocity_y> ")
+            << (dim == 3 ? "<velocity_z> " : "")
+            << "<pressure> <temperature>";
+          for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+            f << " <" << this->introspection().name_for_compositional_index(c) << ">";
+          f << '\n';
+
+          for (const auto &time_point : point_values)
             {
-              f << /* time = */ time_point->first / (this->convert_output_to_years() ? year_in_seconds : 1.)
-                << ' '
-                << /* location = */ evaluation_points_cartesian[i] << ' ';
-
-              for (unsigned int c=0; c<time_point->second[i].size(); ++c)
+              Assert (time_point.second.size() == evaluation_points_cartesian.size(),
+                      ExcInternalError());
+              for (unsigned int i=0; i<evaluation_points_cartesian.size(); ++i)
                 {
-                  // output a data element. internally, we store all point
-                  // values in the same format in which they were computed,
-                  // but we convert velocities to meters per year if so
-                  // requested
-                  if ((this->introspection().component_masks.velocities[c] == false)
-                      ||
-                      (this->convert_output_to_years() == false))
-                    f << time_point->second[i][c];
-                  else
-                    f << time_point->second[i][c] * year_in_seconds;
+                  f << /* time = */ time_point.first / (this->convert_output_to_years() ? year_in_seconds : 1.)
+                    << ' '
+                    << /* location = */ evaluation_points_cartesian[i] << ' ';
 
-                  f << (c != time_point->second[i].size()-1 ? ' ' : '\n');
+                  for (unsigned int c=0; c<time_point.second[i].size(); ++c)
+                    {
+                      // output a data element. internally, we store all point
+                      // values in the same format in which they were computed,
+                      // but we convert velocities to meters per year if so
+                      // requested
+                      if ((this->introspection().component_masks.velocities[c] == false)
+                          ||
+                          (this->convert_output_to_years() == false))
+                        f << time_point.second[i][c];
+                      else
+                        f << time_point.second[i][c] * year_in_seconds;
+
+                      f << (c != time_point.second[i].size()-1 ? ' ' : '\n');
+                    }
                 }
+
+              // have an empty line between time steps
+              f << '\n';
             }
 
-          // have an empty line between time steps
-          f << '\n';
+          AssertThrow (f, ExcMessage("Writing data to <" + filename +
+                                     "> did not succeed in the `point values' "
+                                     "postprocessor."));
         }
 
-      AssertThrow (f, ExcMessage("Writing data to <" + filename +
-                                 "> did not succeed in the `point values' "
-                                 "postprocessor."));
 
       // Update time
       set_last_output_time (this->get_time());
@@ -188,8 +190,8 @@ namespace aspect
       {
         prm.enter_subsection("Point values");
         {
-          prm.declare_entry ("Time between point values output", "0",
-                             Patterns::Double (0),
+          prm.declare_entry ("Time between point values output", "0.",
+                             Patterns::Double (0.),
                              "The time interval between each generation of "
                              "point values output. A value of zero indicates "
                              "that output should be generated in each time step. "
@@ -253,12 +255,6 @@ namespace aspect
             }
 
           use_natural_coordinates = prm.get_bool("Use natural coordinates");
-
-          if (use_natural_coordinates)
-            AssertThrow (dynamic_cast<const GeometryModel::SphericalShell<dim>*> (&this->get_geometry_model()) == nullptr &&
-                         dynamic_cast<const GeometryModel::Sphere<dim>*> (&this->get_geometry_model()) == nullptr,
-                         ExcMessage ("This postprocessor can not be used if the geometry "
-                                     "is a sphere or spherical shell, because these geometries have not implemented natural coordinates."));
 
           // Convert the vector of coordinate arrays in Cartesian or natural
           // coordinates to a vector of Point<dim> of Cartesian coordinates.

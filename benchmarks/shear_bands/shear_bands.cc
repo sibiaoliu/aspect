@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -120,11 +120,11 @@ namespace aspect
           const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
           const double strain_rate_dependence = (1.0 - dislocation_creep_exponent) / dislocation_creep_exponent;
 
-          for (unsigned int i=0; i<in.position.size(); ++i)
+          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
               double porosity = std::max(in.composition[i][porosity_idx],1e-4);
               out.viscosities[i] = eta_0 * std::exp(alpha*(porosity - background_porosity));
-              if (in.strain_rate.size())
+              if (in.requests_property(MaterialModel::MaterialProperties::viscosity))
                 {
                   const SymmetricTensor<2,dim> shear_strain_rate = in.strain_rate[i]
                                                                    - 1./dim * trace(in.strain_rate[i]) * unit_symmetric_tensor<dim>();
@@ -148,7 +148,7 @@ namespace aspect
           aspect::MaterialModel::MeltOutputs<dim> *melt_out = out.template get_additional_output<aspect::MaterialModel::MeltOutputs<dim> >();
 
           if (melt_out != NULL)
-            for (unsigned int i=0; i<in.position.size(); ++i)
+            for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
               {
                 double porosity = std::max(in.composition[i][porosity_idx],1e-4);
 
@@ -206,25 +206,27 @@ namespace aspect
         {
           prm.declare_entry ("Reference solid density", "3000",
                              Patterns::Double (0),
-                             "Reference density of the solid $\\rho_{s,0}$. Units: $kg/m^3$.");
+                             "Reference density of the solid $\\rho_{s,0}$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Reference melt density", "3000",
                              Patterns::Double (0),
-                             "Reference density of the melt/fluid$\\rho_{f,0}$. Units: $kg/m^3$.");
+                             "Reference density of the melt/fluid$\\rho_{f,0}$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Reference shear viscosity", "1.41176e7",
                              Patterns::Double (0),
                              "The value of the constant viscosity $\\eta_0$ of the solid matrix. "
-                             "Units: $Pa s$.");
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Reference compaction viscosity", "1.41176e8",
                              Patterns::Double (0),
                              "The value of the constant volumetric viscosity $\\xi_0$ of the solid matrix. "
-                             "Units: $Pa s$.");
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Reference melt viscosity", "100.0",
                              Patterns::Double (0),
-                             "The value of the constant melt viscosity $\\eta_f$. Units: $Pa s$.");
+                             "The value of the constant melt viscosity $\\eta_f$. Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Reference permeability", "5e-9",
                              Patterns::Double(),
                              "Reference permeability of the solid host rock."
-                             "Units: $m^2$.");
+                             "Units: \\si{\\meter\\squared}.");
           prm.declare_entry ("Dislocation creep exponent", "6.0",
                              Patterns::Double(0),
                              "Power-law exponent $n_{dis}$ for dislocation creep. "

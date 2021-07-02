@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -105,7 +105,7 @@ namespace aspect
              * the dHdT and dHdp functions. The third argument represents
              * the number of substeps taken to compute this average. A number
              * larger than one means the temperature-pressure range that is spanned
-             * by the first two input arguments is seperated into @p n_substeps
+             * by the first two input arguments is separated into @p n_substeps
              * equally spaced pressure-temperature steps, the derivatives are
              * computed for each substep and then averaged.
              */
@@ -117,6 +117,22 @@ namespace aspect
             double
             dRhodp (const double temperature,
                     const double pressure) const;
+
+            /**
+             * Returns a vector of all the column names in the lookup file
+             * that start with the character string vol_fraction_
+             */
+            std::vector<std::string>
+            phase_volume_column_names() const;
+
+            /**
+             * Returns the volume fraction of the phase_idth phase
+             * at a given temperature and pressure.
+             */
+            double
+            phase_volume_fraction(const int phase_id,
+                                  const double temperature,
+                                  const double pressure) const;
 
             /**
              * Returns the size of the data tables in pressure (first entry)
@@ -156,6 +172,15 @@ namespace aspect
             dealii::Table<2,double> vs_values;
             dealii::Table<2,double> enthalpy_values;
 
+            /**
+            * The vector of column names corresponding to each phase,
+            * and a vector of tables containing the volume fractions of
+            * each phase at a given temperature and pressure.
+            * The ordering of both vectors is the same.
+            */
+            std::vector<std::string> phase_column_names;
+            std::vector<dealii::Table<2,double>> phase_volume_fractions;
+
             double delta_press;
             double min_press;
             double max_press;
@@ -164,6 +189,8 @@ namespace aspect
             double max_temp;
             unsigned int n_temperature;
             unsigned int n_pressure;
+            unsigned int n_phases;
+            unsigned int n_columns;
             bool interpolation;
         };
 
@@ -196,25 +223,46 @@ namespace aspect
 
 
       /**
-       * For multicomponent material models: Given a vector of of compositional
-       * fields of length N, this function returns a vector of volume fractions
-       * of length N+1, corresponding to the volume fraction of a ``background
-       * material'' as the first entry, and volume fractions for each of the input
+       * For multicomponent material models: Given a vector of compositional
+       * field values of length N, this function returns a vector of fractions
+       * of length N+1, corresponding to the fraction of a ``background
+       * material'' as the first entry, and fractions for each of the input
        * fields as the following entries. The returned vector will sum to one.
        * If the sum of the compositional_fields is greater than
-       * one, we assume that there is no background mantle (i.e., that field value
+       * one, we assume that there is no background field (i.e., that field value
        * is zero). Otherwise, the difference between the sum of the compositional
-       * fields and 1.0 is assumed to be the amount of background mantle.
+       * fields and 1.0 is assumed to be the amount of the background field.
        * Optionally, one can input a component mask that determines which of the
        * compositional fields to use during the computation (e.g. because
-       * some fields contain non-volumetric quantities like strain,
+       * some fields contain unrelated quantities (like strain,
        * porosity, or trace elements). By default, all fields are included.
+       * This function makes no assumptions about the units of the
+       * compositional field values; for example, they could correspond to
+       * mass or volume fractions.
        */
+      std::vector<double>
+      compute_composition_fractions(const std::vector<double> &compositional_fields,
+                                    const ComponentMask &field_mask = ComponentMask());
+
+      /**
+       * See compute_composition_fractions() for the documentation of this function.
+       * @deprecated: This function is deprecated. Please use compute_composition_fractions() instead.
+       */
+      DEAL_II_DEPRECATED
       std::vector<double>
       compute_volume_fractions(const std::vector<double> &compositional_fields,
                                const ComponentMask &field_mask = ComponentMask());
 
-
+      /**
+       * Given a vector of component masses,
+       * and another of the corresponding densities, calculate the volumes
+       * of each component. If return_as_fraction is true, the returned vector
+       * will sum to one.
+       */
+      std::vector<double>
+      compute_volumes_from_masses(const std::vector<double> &masses,
+                                  const std::vector<double> &densities,
+                                  const bool return_as_fraction);
 
       /**
        * For multicomponent material models:
@@ -268,62 +316,46 @@ namespace aspect
                             const std::vector<double> &parameter_values,
                             const CompositionalAveragingOperation &average_type);
 
-
-
       /**
-       * A data structure with all inputs for the
-       * MaterialModel::Interface::compute_drucker_prager_yielding() method.
+       * Utilities for material models with multiple phases
        */
-      struct DruckerPragerInputs
+      namespace PhaseUtilities
       {
         /**
-         * Constructor. Initializes the various variables of this structure
-         * with the input values. By default, there is no maximum yield
-         * strength, so the parameter is set to infinity.
-         */
-        DruckerPragerInputs(const double cohesion,
-                            const double friction_angle,
-                            const double pressure,
-                            const double effective_strain_rate,
-                            const double max_yield_strength = std::numeric_limits<double>::infinity());
-
-        const double cohesion;
-        const double friction_angle;
-        const double pressure;
-        const double effective_strain_rate;
-        const double max_yield_strength;
-      };
-
-
+         * Enumeration for selecting which averaging scheme to use when
+         * averaging the properties of different phases.
+         * Select between arithmetic and logarithmic.
+        */
+        enum PhaseAveragingOperation
+        {
+          arithmetic,
+          logarithmic
+        };
+      }
 
       /**
-       * A data structure with all outputs computed by the
-       * MaterialModel::Interface::compute_drucker_prager_yielding() method.
-       */
-      struct DruckerPragerOutputs
-      {
-        /**
-         * Constructor. Initializes the various variables of this structure to
-         * NaNs.
-         */
-        DruckerPragerOutputs();
+      * Material models compute output quantities such as the viscosity, the
+      * density, etc. For some models, these values may depend on the phase in
+      * addition to the composition, and more than one phase field might have
+      * nonzero values at a given quadrature point. This means that properties
+      * for each composition have to be averaged based on the fractions of each
+      * phase field present. This function performs this type of averaging.
+      * The averaging is based on the choice in @p operation. Averaging is conducted
+      * over the phase functions given in @p phase_function_values, with
+      * @p parameter_values containing values of all individual phases. Unlike the average_value
+      * function defined for compositions, averaging in this function is calculated based
+      * on phase functions and the change of variables on the trajectory of phase boundaries.
+      * Thus on a single phase boundary, values of variables change gradually from one phase
+      * to the other. The values of the phase function used to average the properties varies
+      * between 0 and 1.
+      */
+      double phase_average_value (const std::vector<double> &phase_function_values,
+                                  const std::vector<unsigned int> &n_phases_per_composition,
+                                  const std::vector<double> &parameter_values,
+                                  const unsigned int composition,
+                                  const PhaseUtilities::PhaseAveragingOperation operation = PhaseUtilities::arithmetic);
 
-        double yield_strength;
-        double plastic_viscosity;
-        double viscosity_pressure_derivative;
-      };
 
-
-
-      /**
-       * For material models with plasticity:
-       * Function to compute the material properties in @p out given the
-       * inputs in @p in according to the the Drucker-Prager yield criterion.
-       */
-      template <int dim>
-      void
-      compute_drucker_prager_yielding (const DruckerPragerInputs &in,
-                                       DruckerPragerOutputs &out);
 
       /**
        * A data structure with all inputs for the
@@ -347,6 +379,18 @@ namespace aspect
         double pressure;
         double depth;
         double pressure_depth_derivative;
+
+        /**
+         * This parameter determines which phase function of all the stored
+         * functions to compute. Phase functions are numbered consecutively,
+         * starting at 0 and the interpretation of their output is up to the
+         * calling side. For example the first phase function could be used to
+         * indicate a viscosity jump in the first compositional field,
+         * while the second function indicates a density jump in all
+         * compositions. None of this is known to the PhaseFunction object,
+         * which only has information that there are two phase functions
+         * and what their properties are.
+         */
         unsigned int phase_index;
       };
 
@@ -384,6 +428,12 @@ namespace aspect
            * phase transition number @p phase_index.
            */
           double get_transition_slope (const unsigned int phase_index) const;
+
+          /**
+           * Return how many phase transitions there are for each composition.
+           */
+          const std::vector<unsigned int> &
+          n_phase_transitions_for_each_composition () const;
 
           /**
            * Declare the parameters this class takes through input files.
@@ -424,6 +474,11 @@ namespace aspect
            * depth of the phase transition.
            */
           bool use_depth_instead_of_pressure;
+
+          /**
+           * A vector that stores how many phase transitions there are for each compositional field.
+           */
+          std::shared_ptr<std::vector<unsigned int> > n_phase_transitions_per_composition;
       };
     }
   }

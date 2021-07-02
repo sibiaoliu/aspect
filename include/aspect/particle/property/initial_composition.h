@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017 by the authors of the ASPECT code.
+ Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -56,6 +56,17 @@ namespace aspect
                                             std::vector<double> &particle_properties) const override;
 
           /**
+           * Returns an enum, which determines how this particle property is
+           * initialized for particles that are created later than the initial
+           * particle generation. For this property the value of
+           * generated particles is interpolated from existing particles, unless
+           * the particle is in a boundary cell that has a Dirichlet boundary
+           * condition, in which case it uses the boundary condition value.
+           */
+          InitializationModeForLateParticles
+          late_initialization_mode () const override;
+
+          /**
            * Set up the information about the names and number of components
            * this property requires.
            *
@@ -70,4 +81,3 @@ namespace aspect
 }
 
 #endif
-

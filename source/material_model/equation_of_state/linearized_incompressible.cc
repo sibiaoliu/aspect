@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -75,23 +75,24 @@ namespace aspect
       LinearizedIncompressible<dim>::declare_parameters (ParameterHandler &prm,
                                                          const unsigned int n_compositions)
       {
-        prm.declare_entry ("Reference density", "3300",
-                           Patterns::Double (0),
-                           "Reference density $\\rho_0$. Units: $kg/m^3$.");
-        prm.declare_entry ("Reference temperature", "293",
-                           Patterns::Double (0),
+        prm.declare_entry ("Reference density", "3300.",
+                           Patterns::Double (0.),
+                           "Reference density $\\rho_0$. "
+                           "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
+        prm.declare_entry ("Reference temperature", "293.",
+                           Patterns::Double (0.),
                            "The reference temperature $T_0$. The reference temperature is used "
-                           "in both the density and viscosity formulas. Units: $K$.");
-        prm.declare_entry ("Reference specific heat", "1250",
-                           Patterns::Double (0),
+                           "in both the density and viscosity formulas. Units: \\si{\\kelvin}.");
+        prm.declare_entry ("Reference specific heat", "1250.",
+                           Patterns::Double (0.),
                            "The value of the specific heat $C_p$. "
-                           "Units: $J/kg/K$.");
+                           "Units: \\si{\\joule\\per\\kelvin\\per\\kilogram}.");
         prm.declare_entry ("Thermal expansion coefficient", "2e-5",
-                           Patterns::Double (0),
+                           Patterns::Double (0.),
                            "The value of the thermal expansion coefficient $\\alpha$. "
-                           "Units: $1/K$.");
+                           "Units: \\si{\\per\\kelvin}.");
         if (n_compositions > 0)
-          prm.declare_entry ("Density differential for compositional field 1", "0",
+          prm.declare_entry ("Density differential for compositional field 1", "0.",
                              Patterns::Double(),
                              "If compositional fields are used, then one would frequently want "
                              "to make the density depend on these fields. In this simple material "
@@ -100,10 +101,10 @@ namespace aspect
                              "one with its linear dependence on the temperature. If there are compositional "
                              "fields, then the material model determines how many of them influence the density. "
                              "The composition-dependence adds a term of the kind $+\\Delta \\rho \\; c_1(\\mathbf x)$. "
-                             "This parameter describes the value of $\\Delta \\rho$. Units: $kg/m^3/\\textrm{unit "
-                             "change in composition}$.");
+                             "This parameter describes the value of $\\Delta \\rho$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}/unit change in composition.");
         if (n_compositions > 1)
-          prm.declare_entry ("Density differential for compositional field 2", "0",
+          prm.declare_entry ("Density differential for compositional field 2", "0.",
                              Patterns::Double(),
                              "If compositional fields are used, then one would frequently want "
                              "to make the density depend on these fields. In this simple material "
@@ -112,8 +113,8 @@ namespace aspect
                              "one with its linear dependence on the temperature. If there are compositional "
                              "fields, then the material model determines how many of them influence the density. "
                              "The composition-dependence adds a term of the kind $+\\Delta \\rho \\; c_2(\\mathbf x)$. "
-                             "This parameter describes the value of $\\Delta \\rho$. Units: $kg/m^3/\\textrm{unit "
-                             "change in composition}$.");
+                             "This parameter describes the value of $\\Delta \\rho$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}/unit change in composition.");
       }
 
 
@@ -150,7 +151,10 @@ namespace aspect
     {
 #define INSTANTIATE(dim) \
   template class LinearizedIncompressible<dim>;
+
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
   }
 }

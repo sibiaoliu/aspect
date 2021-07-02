@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2020 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,6 +25,7 @@
 #include <aspect/global.h>
 #include <aspect/utilities.h>
 
+#include <deal.II/base/utilities.h>
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
 #include <deal.II/fe/fe_dgq.h>
@@ -55,7 +56,7 @@ namespace aspect
                 || (variables[i] == "adiabatic_pressure")
                 || (variables[i] == "adiabatic_density")
                 || (variables[i] == "adiabatic_density_derivative")))
-            averaging_variables.push_back(variables[i]);
+            averaging_variables.emplace_back(variables[i]);
         return averaging_variables;
       }
     }
@@ -77,8 +78,7 @@ namespace aspect
       // initialize this to a nonsensical value; set it to the actual time
       // the first time around we get to check it
       last_output_time (std::numeric_limits<double>::quiet_NaN()),
-      n_depth_zones (numbers::invalid_unsigned_int),
-      ascii_output(false)
+      n_depth_zones (numbers::invalid_unsigned_int)
     {}
 
 
@@ -105,7 +105,7 @@ namespace aspect
         const std::vector<std::string> averaging_variables = filter_non_averaging_variables(variables);
 
         // Compute averaged variables
-        data_point.values = this->get_lateral_averaging().get_averages(n_depth_zones,averaging_variables);
+        data_point.values = this->get_lateral_averaging().compute_lateral_averages(depth_bounds,averaging_variables);
 
         // Grow data_point.values to include adiabatic properties, and reorder
         // starting from end (to avoid unnecessary copies), and fill in the adiabatic variables.
@@ -137,16 +137,21 @@ namespace aspect
       }
       entries.push_back (data_point);
 
-      const double max_depth = this->get_geometry_model().maximal_depth();
-
       // On the root process, write out the file. do this using the DataOutStack
       // class on a piece-wise constant finite element space on
       // a 1d mesh with the correct subdivisions
-      std::string filename;
+      const std::string filename_prefix (this->get_output_directory() + "depth_average");
       if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
         {
           Triangulation<1> mesh;
-          GridGenerator::subdivided_hyper_cube(mesh, n_depth_zones, 0, max_depth);
+          const Point<1> p(depth_bounds[0]);
+          std::vector<std::vector<double> > spacing(1,std::vector<double>(depth_bounds.size()-1,0.0));
+          for (unsigned int i=0; i<spacing[0].size(); ++i)
+            spacing[0][i]=depth_bounds[i+1]-depth_bounds[i];
+
+          Table<1, types::material_id> material_id(spacing[0].size());
+
+          GridGenerator::subdivided_hyper_rectangle(mesh, spacing, p, material_id);
 
           FE_DGQ<1> fe(0);
           DoFHandler<1> dof_handler (mesh);
@@ -155,101 +160,102 @@ namespace aspect
 
           DataOutStack<1> data_out_stack;
 
-          if (!ascii_output)
+          for (const auto &output_format_string: output_formats)
             {
-              for (unsigned int j=0; j<variables.size(); ++j)
-                data_out_stack.declare_data_vector (variables[j],
-                                                    DataOutStack<1>::cell_vector);
-
-              for (unsigned int i=0; i<entries.size(); ++i)
+              if (output_format_string != "txt")
                 {
-                  data_out_stack.new_parameter_value ((this->convert_output_to_years()
-                                                       ?
-                                                       entries[i].time / year_in_seconds
-                                                       :
-                                                       entries[i].time),
-                                                      // declare the time step, which here is the difference
-                                                      // between successive output times. we don't have anything
-                                                      // for the first time step, however. we could do a zero
-                                                      // delta, but that leads to invisible output. rather, we
-                                                      // use an artificial value of one tenth of the first interval,
-                                                      // if available
-                                                      (i == 0 ?
-                                                       (entries.size() > 1 ? (entries[1].time - entries[0].time)/10 : 0) :
-                                                       entries[i].time - entries[i-1].time) /
-                                                      (this->convert_output_to_years()
-                                                       ?
-                                                       year_in_seconds
-                                                       :
-                                                       1));
-
-                  data_out_stack.attach_dof_handler (dof_handler);
-
-                  Vector<double> tmp(n_depth_zones);
                   for (unsigned int j=0; j<variables.size(); ++j)
+                    data_out_stack.declare_data_vector (variables[j],
+                                                        DataOutStack<1>::cell_vector);
+
+                  for (unsigned int i=0; i<entries.size(); ++i)
                     {
-                      std::copy (entries[i].values[j].begin(),
-                                 entries[i].values[j].end(),
-                                 tmp.begin());
-                      data_out_stack.add_data_vector (tmp,
-                                                      variables[j]);
+                      data_out_stack.new_parameter_value ((this->convert_output_to_years()
+                                                           ?
+                                                           entries[i].time / year_in_seconds
+                                                           :
+                                                           entries[i].time),
+                                                          // declare the time step, which here is the difference
+                                                          // between successive output times. we don't have anything
+                                                          // for the first time step, however. we could do a zero
+                                                          // delta, but that leads to invisible output. rather, we
+                                                          // use an artificial value of one tenth of the first interval,
+                                                          // if available
+                                                          (i == 0 ?
+                                                           (entries.size() > 1 ? (entries[1].time - entries[0].time)/10 : 0) :
+                                                           entries[i].time - entries[i-1].time) /
+                                                          (this->convert_output_to_years()
+                                                           ?
+                                                           year_in_seconds
+                                                           :
+                                                           1));
+
+                      data_out_stack.attach_dof_handler (dof_handler);
+
+                      Vector<double> tmp(n_depth_zones);
+                      for (unsigned int j=0; j<variables.size(); ++j)
+                        {
+                          std::copy (entries[i].values[j].begin(),
+                                     entries[i].values[j].end(),
+                                     tmp.begin());
+                          data_out_stack.add_data_vector (tmp,
+                                                          variables[j]);
+                        }
+                      data_out_stack.build_patches ();
+                      data_out_stack.finish_parameter_value ();
                     }
-                  data_out_stack.build_patches ();
-                  data_out_stack.finish_parameter_value ();
-                }
+
+                  const DataOutBase::OutputFormat output_format = DataOutBase::parse_output_format(output_format_string);
+
+                  const std::string filename = (filename_prefix +
+                                                DataOutBase::default_suffix(output_format));
+                  std::ofstream f (filename.c_str());
 
 
-              filename = (this->get_output_directory() +
-                          "depth_average" +
-                          DataOutBase::default_suffix(output_format));
-              std::ofstream f (filename.c_str());
-
-
-              if (output_format == DataOutBase::gnuplot)
-                {
-                  DataOutBase::GnuplotFlags gnuplot_flags;
-                  gnuplot_flags.space_dimension_labels.resize(2);
-                  gnuplot_flags.space_dimension_labels[0] = "depth";
-                  gnuplot_flags.space_dimension_labels[1] = "time";
-                  data_out_stack.set_flags(gnuplot_flags);
-                }
-              data_out_stack.write (f, output_format);
-
-              AssertThrow (f, ExcMessage("Writing data to <" + filename +
-                                         "> did not succeed in the `point values' "
-                                         "postprocessor."));
-            }
-          else
-            {
-              filename = (this->get_output_directory() + "depth_average.txt");
-              std::ofstream f(filename.c_str(), std::ofstream::out);
-
-              // Write the header
-              f << "#       time" << "        depth";
-              for ( unsigned int i = 0; i < variables.size(); ++i)
-                f << " " << variables[i];
-              f << std::endl;
-
-              // Output each data point in the entries object
-              for (typename std::vector<DataPoint>::const_iterator point = entries.begin();
-                   point != entries.end(); ++point)
-                {
-                  double depth = max_depth/static_cast<double>(point->values[0].size())/2.0;
-                  for (unsigned int d = 0; d < point->values[0].size(); ++d)
+                  if (output_format == DataOutBase::gnuplot)
                     {
-                      f << std::setw(12)
-                        << (this->convert_output_to_years() ? point->time/year_in_seconds : point->time)
-                        << ' ' << std::setw(12) << depth;
-                      for ( unsigned int i = 0; i < variables.size(); ++i )
-                        f << ' ' << std::setw(12) << point->values[i][d];
-                      f << std::endl;
-                      depth+= max_depth/static_cast<double>(point->values[0].size() );
+                      DataOutBase::GnuplotFlags gnuplot_flags;
+                      gnuplot_flags.space_dimension_labels.resize(2);
+                      gnuplot_flags.space_dimension_labels[0] = "depth";
+                      gnuplot_flags.space_dimension_labels[1] = "time";
+                      data_out_stack.set_flags(gnuplot_flags);
                     }
-                }
+                  data_out_stack.write (f, output_format);
 
-              AssertThrow (f, ExcMessage("Writing data to <" + filename +
-                                         "> did not succeed in the `point values' "
-                                         "postprocessor."));
+                  AssertThrow (f, ExcMessage("Writing data to <" + filename +
+                                             "> did not succeed in the `point values' "
+                                             "postprocessor."));
+                }
+              else
+                {
+                  const std::string filename (this->get_output_directory() + "depth_average.txt");
+                  std::ofstream f(filename.c_str(), std::ofstream::out);
+
+                  // Write the header
+                  f << "#       time" << "        depth";
+                  for ( unsigned int i = 0; i < variables.size(); ++i)
+                    f << " " << variables[i];
+                  f << std::endl;
+
+                  // Output each data point in the entries object
+                  for (const auto &point : entries)
+                    {
+                      for (unsigned int d = 0; d < point.values[0].size(); ++d)
+                        {
+                          const double depth = (depth_bounds[d] + depth_bounds[d+1]) / 2.0;
+                          f << std::setw(12)
+                            << (this->convert_output_to_years() ? point.time/year_in_seconds : point.time)
+                            << ' ' << std::setw(12) << depth;
+                          for ( unsigned int i = 0; i < variables.size(); ++i )
+                            f << ' ' << std::setw(12) << point.values[i][d];
+                          f << std::endl;
+                        }
+                    }
+
+                  AssertThrow (f, ExcMessage("Writing data to <" + filename +
+                                             "> did not succeed in the `point values' "
+                                             "postprocessor."));
+                }
             }
         }
 
@@ -258,7 +264,7 @@ namespace aspect
       // return what should be printed to the screen. note that we had
       // just incremented the number, so use the previous value
       return std::make_pair (std::string ("Writing depth average:"),
-                             filename);
+                             filename_prefix);
     }
 
 
@@ -271,7 +277,7 @@ namespace aspect
         prm.enter_subsection("Depth average");
         {
           prm.declare_entry ("Time between graphical output", "1e8",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The time interval between each generation of "
                              "graphical output files. A value of zero indicates "
                              "that output should be generated in each time step. "
@@ -289,19 +295,34 @@ namespace aspect
                              "less than this default. It may also make computations slightly "
                              "faster. On the other hand, if you have an extremely highly "
                              "resolved mesh, choosing more zones might also make sense.");
-          prm.declare_entry ("Output format", "gnuplot",
-                             Patterns::Selection(DataOutBase::get_output_format_names().append("|txt")),
-                             "The format in which the output shall be produced. The "
+          prm.declare_entry ("Depth boundaries of zones", "",
+                             Patterns::List (Patterns::Double()),
+                             "The depth boundaries of zones within which we "
+                             "are to compute averages. By default this list is empty "
+                             "and we subdivide the entire "
+                             "domain into equidistant depth zones and compute "
+                             "averages within each of these zones. If this list is not "
+                             "empty it has to contain one more entry "
+                             "than the 'Number of zones' parameter, representing the upper "
+                             "and lower depth boundary of each zone. It is not necessary to "
+                             "cover the whole depth-range (i.e. you can select to only average in "
+                             "a single layer by choosing 2 arbitrary depths as the boundaries "
+                             "of that layer).");
+          prm.declare_entry ("Output format", "gnuplot, txt",
+                             Patterns::MultipleSelection(DataOutBase::get_output_format_names().append("|txt")),
+                             "A list of formats in which the output shall be produced. The "
                              "format in which the output is generated also determines "
                              "the extension of the file into which data is written. "
                              "The list of possible output formats that can be given "
                              "here is documented in the appendix of the manual where "
-                             "the current parameter is described.");
+                             "the current parameter is described. By default the output "
+                             "is written as gnuplot file (for plotting), and as a simple "
+                             "text file.");
           const std::string variables =
             "all|temperature|composition|"
             "adiabatic temperature|adiabatic pressure|adiabatic density|adiabatic density derivative|"
             "velocity magnitude|sinking velocity|Vs|Vp|"
-            "viscosity|vertical heat flux";
+            "viscosity|vertical heat flux|vertical mass flux|composition mass";
           prm.declare_entry("List of output variables", "all",
                             Patterns::MultipleSelection(variables.c_str()),
                             "A comma separated list which specifies which quantities to "
@@ -325,10 +346,34 @@ namespace aspect
       {
         prm.enter_subsection("Depth average");
         {
+          n_depth_zones = prm.get_integer ("Number of zones");
+          depth_bounds = Utilities::string_to_double(Utilities::split_string_list(
+                                                       prm.get("Depth boundaries of zones")));
+
+          AssertThrow(depth_bounds.size() == 0 || depth_bounds.size() == n_depth_zones + 1,
+                      ExcMessage("The parameter 'Depth boundaries of zones' has to be either empty, or have exactly "
+                                 "one more entry than the 'Number of zones' parameter."));
+
+          if (depth_bounds.size() == 0)
+            {
+              const double maximal_depth = this->get_geometry_model().maximal_depth();
+              depth_bounds.resize(n_depth_zones+1);
+
+              // Leave index 0 at 0.0, and generate an increasing range of equidistant depth bounds
+              for (unsigned int i=1; i<depth_bounds.size(); ++i)
+                depth_bounds[i] = depth_bounds[i-1] + maximal_depth / n_depth_zones;
+            }
+          else
+            for (unsigned int i=1; i<depth_bounds.size(); ++i)
+              {
+                AssertThrow(depth_bounds[i]>depth_bounds[i-1],
+                            ExcMessage("The entries in the parameter 'Depth boundaries of zones' have "
+                                       "to be sorted in increasing order."));
+              }
+
           output_interval = prm.get_double ("Time between graphical output");
           if (this->convert_output_to_years())
             output_interval *= year_in_seconds;
-          n_depth_zones = prm.get_integer ("Number of zones");
 
           if (output_interval > 0.0)
             {
@@ -355,29 +400,29 @@ namespace aspect
           // we have to parse the list in this order to match the output columns
           {
             if (output_all_variables || std::find( output_variables.begin(), output_variables.end(), "temperature") != output_variables.end() )
-              variables.push_back("temperature");
+              variables.emplace_back("temperature");
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "composition") != output_variables.end() )
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-                variables.push_back(std::string("C_") + Utilities::int_to_string(c));
+                variables.emplace_back(this->introspection().name_for_compositional_index(c));
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "adiabatic temperature") != output_variables.end() )
-              variables.push_back("adiabatic_temperature");
+              variables.emplace_back("adiabatic_temperature");
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "adiabatic pressure") != output_variables.end() )
-              variables.push_back("adiabatic_pressure");
+              variables.emplace_back("adiabatic_pressure");
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "adiabatic density") != output_variables.end() )
-              variables.push_back("adiabatic_density");
+              variables.emplace_back("adiabatic_density");
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "adiabatic density derivative") != output_variables.end() )
-              variables.push_back("adiabatic_density_derivative");
+              variables.emplace_back("adiabatic_density_derivative");
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "velocity magnitude") != output_variables.end() )
-              variables.push_back("velocity_magnitude");
+              variables.emplace_back("velocity_magnitude");
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "sinking velocity") != output_variables.end() )
-              variables.push_back("sinking_velocity");
+              variables.emplace_back("sinking_velocity");
 
             // handle seismic velocities, because they may, or may not be provided by the material model
             {
@@ -399,29 +444,32 @@ namespace aspect
 
               if (output_all_variables && material_model_provides_seismic_output)
                 {
-                  variables.push_back("Vs");
-                  variables.push_back("Vp");
+                  variables.emplace_back("Vs");
+                  variables.emplace_back("Vp");
                 }
 
               if (output_vs)
-                variables.push_back("Vs");
+                variables.emplace_back("Vs");
 
               if (output_vp)
-                variables.push_back("Vp");
+                variables.emplace_back("Vp");
             }
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "viscosity") != output_variables.end() )
-              variables.push_back("viscosity");
+              variables.emplace_back("viscosity");
 
             if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "vertical heat flux") != output_variables.end() )
-              variables.push_back("vertical_heat_flux");
+              variables.emplace_back("vertical_heat_flux");
+
+            if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "vertical mass flux") != output_variables.end() )
+              variables.emplace_back("vertical_mass_flux");
+
+            if ( output_all_variables || std::find( output_variables.begin(), output_variables.end(), "composition mass") != output_variables.end() )
+              for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+                variables.emplace_back(this->introspection().name_for_compositional_index(c) + std::string("_mass"));
           }
 
-          std::string x_output_format = prm.get("Output format");
-          if (x_output_format == "txt")
-            ascii_output = true;
-          else
-            output_format = DataOutBase::parse_output_format(prm.get("Output format"));
+          output_formats = Utilities::split_string_list(prm.get("Output format"));
         }
         prm.leave_subsection();
       }

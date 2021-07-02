@@ -164,7 +164,7 @@ namespace aspect
    */
   template <int dim>
   void constrain_internal_velocities (const SimulatorAccess<dim> &simulator_access,
-                                      ConstraintMatrix &current_constraints)
+                                      AffineConstraints<double> &current_constraints)
   {
     if (prescribe_internal_velocities)
       {
@@ -180,7 +180,7 @@ namespace aspect
           if (! cell->is_artificial())
             {
               fe_values.reinit (cell);
-              std::vector<unsigned int> local_dof_indices(simulator_access.get_fe().dofs_per_cell);
+              std::vector<types::global_dof_index> local_dof_indices(simulator_access.get_fe().dofs_per_cell);
               cell->get_dof_indices (local_dof_indices);
 
               for (unsigned int q=0; q<quadrature.size(); q++)
@@ -279,7 +279,7 @@ namespace aspect
     signals.post_constraints_creation.connect (&constrain_internal_velocities<dim>);
   }
 
-  // Tell Aspect to send signals to the connector functions
+  // Tell ASPECT to send signals to the connector functions
   ASPECT_REGISTER_SIGNALS_PARAMETER_CONNECTOR(parameter_connector)
   ASPECT_REGISTER_SIGNALS_CONNECTOR(signal_connector<2>, signal_connector<3>)
 }
