@@ -720,17 +720,17 @@ namespace aspect
         VectorizedArray<number> viscosity_x_2 = 2.0*(*viscosity)(cell, 0);
 
         velocity.reinit (cell);
-        velocity.read_dof_values (src.block(0));
 #if DEAL_II_VERSION_GTE(9,3,0)
-        velocity.evaluate (EvaluationFlags::gradients);
+        velocity.gather_evaluate (src.block(0), EvaluationFlags::gradients);
 #else
+        velocity.read_dof_values (src.block(0));
         velocity.evaluate (false,true,false);
 #endif
         pressure.reinit (cell);
-        pressure.read_dof_values (src.block(1));
 #if DEAL_II_VERSION_GTE(9,3,0)
-        pressure.evaluate (EvaluationFlags::values);
+        pressure.gather_evaluate (src.block(1), EvaluationFlags::values);
 #else
+        pressure.read_dof_values (src.block(1));
         pressure.evaluate (true,false,false);
 #endif
 
@@ -759,17 +759,18 @@ namespace aspect
           }
 
 #if DEAL_II_VERSION_GTE(9,3,0)
-        velocity.integrate (EvaluationFlags::gradients);
+        velocity.integrate_scatter (EvaluationFlags::gradients, dst.block(0));
 #else
         velocity.integrate (false,true);
-#endif
         velocity.distribute_local_to_global (dst.block(0));
+#endif
+
 #if DEAL_II_VERSION_GTE(9,3,0)
-        pressure.integrate (EvaluationFlags::values);
+        pressure.integrate_scatter (EvaluationFlags::values, dst.block(1));
 #else
         pressure.integrate (true,false);
-#endif
         pressure.distribute_local_to_global (dst.block(1));
+#endif
       }
   }
 
@@ -840,10 +841,10 @@ namespace aspect
           one_over_viscosity[c] = pressure_scaling*pressure_scaling/one_over_viscosity[c];
 
         pressure.reinit (cell);
-        pressure.read_dof_values(src);
 #if DEAL_II_VERSION_GTE(9,3,0)
-        pressure.evaluate (EvaluationFlags::values);
+        pressure.gather_evaluate (src, EvaluationFlags::values);
 #else
+        pressure.read_dof_values(src);
         pressure.evaluate (true,false);
 #endif
         for (unsigned int q=0; q<pressure.n_q_points; ++q)
@@ -867,11 +868,11 @@ namespace aspect
                                   pressure.get_value(q),q);
           }
 #if DEAL_II_VERSION_GTE(9,3,0)
-        pressure.integrate (EvaluationFlags::values);
+        pressure.integrate_scatter (EvaluationFlags::values, dst);
 #else
         pressure.integrate (true,false);
-#endif
         pressure.distribute_local_to_global (dst);
+#endif
       }
   }
 
@@ -1056,10 +1057,11 @@ namespace aspect
         VectorizedArray<number> viscosity_x_2 = 2.0*(*viscosity)(cell, 0);
 
         velocity.reinit (cell);
-        velocity.read_dof_values(src);
+
 #if DEAL_II_VERSION_GTE(9,3,0)
-        velocity.evaluate (EvaluationFlags::gradients);
+        velocity.gather_evaluate (src, EvaluationFlags::gradients);
 #else
+        velocity.read_dof_values(src);
         velocity.evaluate (false,true,false);
 #endif
         for (unsigned int q=0; q<velocity.n_q_points; ++q)
@@ -1081,11 +1083,12 @@ namespace aspect
             velocity.submit_symmetric_gradient(sym_grad_u, q);
           }
 #if DEAL_II_VERSION_GTE(9,3,0)
-        velocity.integrate (EvaluationFlags::gradients);
+        velocity.integrate_scatter (EvaluationFlags::gradients, dst);
 #else
         velocity.integrate (false,true);
-#endif
         velocity.distribute_local_to_global (dst);
+#endif
+
       }
   }
 
@@ -1242,15 +1245,32 @@ namespace aspect
 
   template <int dim, int velocity_degree>
   void
-  StokesMatrixFreeHandlerImplementation<dim, velocity_degree>::declare_parameters(ParameterHandler &/*prm*/)
+  StokesMatrixFreeHandlerImplementation<dim, velocity_degree>::declare_parameters(ParameterHandler &prm)
   {
+    prm.enter_subsection ("Solver parameters");
+    prm.enter_subsection ("Matrix Free");
+    {
+      prm.declare_entry ("Output details", "false",
+                         Patterns::Bool(),
+                         "Turns on extra information for the matrix free GMG solver to be printed.");
+    }
+    prm.leave_subsection ();
+    prm.leave_subsection ();
+
   }
 
 
 
   template <int dim, int velocity_degree>
-  void StokesMatrixFreeHandlerImplementation<dim,velocity_degree>::parse_parameters(ParameterHandler &/*prm*/)
+  void StokesMatrixFreeHandlerImplementation<dim,velocity_degree>::parse_parameters(ParameterHandler &prm)
   {
+    prm.enter_subsection ("Solver parameters");
+    prm.enter_subsection ("Matrix Free");
+    {
+      print_details = prm.get_bool ("Output details");
+    }
+    prm.leave_subsection ();
+    prm.leave_subsection ();
   }
 
 
@@ -1341,7 +1361,7 @@ namespace aspect
     const QGauss<dim> quadrature_formula (sim.parameters.stokes_velocity_degree+1);
 
     double min_el = std::numeric_limits<double>::max();
-    double max_el = -std::numeric_limits<double>::max();
+    double max_el = std::numeric_limits<double>::lowest();
 
     // Fill the DGQ0 or DGQ1 vector of viscosity values on the active mesh
     {
@@ -1663,17 +1683,19 @@ namespace aspect
           }
 
 #if DEAL_II_VERSION_GTE(9,3,0)
-        velocity.integrate (EvaluationFlags::gradients);
+        velocity.integrate_scatter (EvaluationFlags::gradients,
+                                    rhs_correction.block(0));
 #else
         velocity.integrate (false,true);
-#endif
         velocity.distribute_local_to_global (rhs_correction.block(0));
+#endif
 #if DEAL_II_VERSION_GTE(9,3,0)
-        pressure.integrate (EvaluationFlags::values);
+        pressure.integrate_scatter (EvaluationFlags::values,
+                                    rhs_correction.block(1));
 #else
         pressure.integrate (true,false);
-#endif
         pressure.distribute_local_to_global (rhs_correction.block(1));
+#endif
       }
     rhs_correction.compress(VectorOperation::add);
 
@@ -1754,6 +1776,8 @@ namespace aspect
 
     // Estimate the eigenvalues for the Chebyshev smoothers.
 
+    types::global_dof_index coarse_A_size, coarse_S_size;
+
     //TODO: The setup for the smoother (as well as the entire GMG setup) should
     //       be moved to an assembly timing block instead of the Stokes solve
     //       timing block (as is currently the case).
@@ -1766,6 +1790,12 @@ namespace aspect
 
         mg_smoother_A[level].estimate_eigenvalues(temp_velocity);
         mg_smoother_Schur[level].estimate_eigenvalues(temp_pressure);
+
+        if (level==0)
+          {
+            coarse_A_size = temp_velocity.size();
+            coarse_S_size = temp_pressure.size();
+          }
       }
 
 
@@ -1778,6 +1808,14 @@ namespace aspect
     //Schur complement matrix GMG
     MGCoarseGridApplySmoother<VectorType> mg_coarse_Schur;
     mg_coarse_Schur.initialize(mg_smoother_Schur);
+
+
+    if (print_details)
+      {
+        sim.pcout << "\n    GMG coarse size A: " << coarse_A_size << ", coarse size S: " << coarse_S_size << '\n';
+        const double imbalance = MGTools::workload_imbalance(sim.triangulation);
+        sim.pcout << "    GMG workload imbalance: " << imbalance << std::endl;
+      }
 
     // Interface matrices
     // Ablock GMG
@@ -2130,6 +2168,19 @@ namespace aspect
     // into the ghosted one with all solution components
     sim.solution.block(block_vel) = distributed_stokes_solution.block(block_vel);
     sim.solution.block(block_p) = distributed_stokes_solution.block(block_p);
+
+    if (print_details)
+      {
+        sim.pcout << "    Schur iterations: " << preconditioner_cheap.n_iterations_Schur_complement()
+                  << "+"
+                  << preconditioner_expensive.n_iterations_Schur_complement()
+                  << '\n';
+        sim.pcout << "    A iterations: " << preconditioner_cheap.n_iterations_A_block()
+                  << "+"
+                  << preconditioner_expensive.n_iterations_A_block()
+                  << '\n';
+        sim.pcout <<"    Stokes: " << std::flush;
+      }
 
     // print the number of iterations to screen
     sim.pcout << (solver_control_cheap.last_step() != numbers::invalid_unsigned_int ?
