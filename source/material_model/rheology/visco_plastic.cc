@@ -40,6 +40,7 @@ namespace aspect
         names.emplace_back("current_cohesions");
         names.emplace_back("current_friction_angles");
         names.emplace_back("plastic_yielding");
+        names.emplace_back("current_pore_fluid_pressure_ratios");
         return names;
       }
     }
@@ -52,7 +53,8 @@ namespace aspect
       NamedAdditionalMaterialOutputs<dim>(make_plastic_additional_outputs_names()),
       cohesions(n_points, numbers::signaling_nan<double>()),
       friction_angles(n_points, numbers::signaling_nan<double>()),
-      yielding(n_points, numbers::signaling_nan<double>())
+      yielding(n_points, numbers::signaling_nan<double>()),
+      pore_fluid_pressure_ratios(n_points, numbers::signaling_nan<double>())
     {}
 
 
@@ -61,7 +63,7 @@ namespace aspect
     std::vector<double>
     PlasticAdditionalOutputs<dim>::get_nth_output(const unsigned int idx) const
     {
-      AssertIndexRange (idx, 3);
+      AssertIndexRange (idx, 4);
       switch (idx)
         {
           case 0:
@@ -72,6 +74,9 @@ namespace aspect
 
           case 2:
             return yielding;
+
+          case 3:
+            return pore_fluid_pressure_ratios;
 
           default:
             AssertThrow(false, ExcInternalError());
@@ -221,9 +226,9 @@ namespace aspect
             // Step 1e: multiply the viscosity by a constant (default value is 1)
             viscosity_pre_yield = constant_viscosity_prefactors.compute_viscosity(viscosity_pre_yield, j);
 
-            // Step 2: calculate strain weakening factors for the cohesion, friction, and pre-yield viscosity
-            // If no strain weakening is applied, the factors are 1.
-            const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
+            // Step 2: calculate strain weakening factors for the cohesion, friction, pore fluid pressure
+            // ratio, and pre-yield viscosity. If no strain weakening is applied, the factors are 1.
+            const std::array<double, 4> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
             // Apply strain weakening to the viscous viscosity.
             viscosity_pre_yield *= weakening_factors[2];
 
@@ -256,12 +261,13 @@ namespace aspect
             // Step 3b: calculate current (viscous or viscous + elastic) stress magnitude
             double current_stress = 2. * viscosity_pre_yield * current_edot_ii;
 
-            // Step 4: calculate strain-weakened friction, cohesion
+            // Step 4: calculate strain-weakened friction, cohesion, pore fluid pressure ratio
             const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
                                                                       phase_function_values,
                                                                       n_phases_per_composition);
             const double current_cohesion = drucker_prager_parameters.cohesion * weakening_factors[0];
             const double current_friction = drucker_prager_parameters.angle_internal_friction * weakening_factors[1];
+            const double current_pore_fluid_ratio = drucker_prager_parameters.pore_fluid_pressure_ratio * weakening_factors[3];
 
             // Step 5: plastic yielding
 
@@ -276,6 +282,7 @@ namespace aspect
             // Step 5a: calculate Drucker-Prager yield stress
             const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
                                                                                        current_friction,
+                                                                                       current_pore_fluid_ratio,
                                                                                        pressure_for_plasticity,
                                                                                        drucker_prager_parameters.max_yield_stress);
 
@@ -300,6 +307,7 @@ namespace aspect
                     {
                       viscosity_yield = drucker_prager_plasticity.compute_viscosity(current_cohesion,
                                                                                     current_friction,
+                                                                                    current_pore_fluid_ratio,
                                                                                     pressure_for_plasticity,
                                                                                     current_edot_ii,
                                                                                     drucker_prager_parameters.max_yield_stress,
@@ -758,18 +766,20 @@ namespace aspect
             plastic_out->cohesions[i] = 0;
             plastic_out->friction_angles[i] = 0;
             plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
+            plastic_out->pore_fluid_pressure_ratios[i] = 0;
 
             // set to weakened values, or unweakened values when strain weakening is not used
             for (unsigned int j=0; j < volume_fractions.size(); ++j)
               {
                 // Calculate the strain weakening factors and weakened values
-                const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
+                const std::array<double, 4> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
                 const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
                                                                           phase_function_values,
                                                                           n_phases_per_composition);
                 plastic_out->cohesions[i]   += volume_fractions[j] * (drucker_prager_parameters.cohesion * weakening_factors[0]);
                 // Also convert radians to degrees
                 plastic_out->friction_angles[i] += 180.0/numbers::PI * volume_fractions[j] * (drucker_prager_parameters.angle_internal_friction * weakening_factors[1]);
+               plastic_out->pore_fluid_pressure_ratios[i]   += volume_fractions[j] * (drucker_prager_parameters.pore_fluid_pressure_ratio * weakening_factors[3]); 
               }
           }
       }

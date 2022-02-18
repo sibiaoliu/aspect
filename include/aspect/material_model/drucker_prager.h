@@ -51,7 +51,7 @@ namespace aspect
      * yield surface.
      * In 2D the Drucker Prager yield surface is the same
      * as the Mohr Coulomb surface:
-     * $\sigma_y = P \sin(\phi) + C \cos(\phi)$.
+     * $\sigma_y = P (1 - \lambda) \sin(\phi) + C \cos(\phi)$.
      * Note that in 2D for $\phi=0$, these criteria
      * revert to the von Mises criterion (no pressure dependence).
      * See for example Thieulot, C. (2011), PEPI 188, 47-68.
@@ -161,6 +161,11 @@ namespace aspect
          * The cohesion
          */
         double cohesion;
+
+                /**
+         * The pore fluid pressure ratio
+         */
+        double pore_fluid_pressure_ratio;
 
         /**
          * The applied viscosity bounds

@@ -107,11 +107,12 @@ namespace aspect
                   // plasticity
                   const double eta_plastic = drucker_prager_plasticity.compute_viscosity(cohesion,
                                                                                          angle_of_internal_friction,
+                                                                                         pore_fluid_pressure_ratio,
                                                                                          pressure,
                                                                                          std::sqrt(strain_rate_effective),
                                                                                          std::numeric_limits<double>::infinity());
 
-                  const double viscosity_pressure_derivative = drucker_prager_plasticity.compute_derivative(angle_of_internal_friction,std::sqrt(strain_rate_effective));
+                  const double viscosity_pressure_derivative = drucker_prager_plasticity.compute_derivative(angle_of_internal_friction,pore_fluid_pressure_ratio,std::sqrt(strain_rate_effective));
 
                   // Cut off the viscosity between a minimum and maximum value to avoid
                   // a numerically unfavourable large viscosity range.
@@ -246,6 +247,9 @@ namespace aspect
             prm.declare_entry ("Cohesion", "2e7",
                                Patterns::Double (0.),
                                "The value of the cohesion $C$. Units: \\si{\\pascal}.");
+            prm.declare_entry ("Pore fluid pressure ratio", "0",
+                               Patterns::Double (0.),
+                               "The value of the ratio between fluid presuure and dynamic pressure. Units: None.");                                                
           }
           prm.leave_subsection();
         }
@@ -277,6 +281,7 @@ namespace aspect
             // Convert degrees to radians
             angle_of_internal_friction = prm.get_double ("Angle of internal friction") * numbers::PI/180.0;
             cohesion                   = prm.get_double ("Cohesion");
+            pore_fluid_pressure_ratio  = prm.get_double ("Pore fluid pressure ratio"); 
           }
           prm.leave_subsection();
         }

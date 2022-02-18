@@ -51,6 +51,11 @@ namespace aspect
         double cohesion;
 
         /**
+         * Pore fluid pressure ratio for the current composition and phase
+         */
+        double pore_fluid_pressure_ratio;
+
+        /**
          * Limit maximum yield stress from drucker prager yield criterion.
          */
         double max_yield_stress;
@@ -93,6 +98,7 @@ namespace aspect
           double
           compute_yield_stress (const double cohesion,
                                 const double angle_internal_friction,
+                                const double pore_fluid_pressure_ratio,
                                 const double pressure,
                                 const double max_yield_stress) const;
 
@@ -102,6 +108,7 @@ namespace aspect
           double
           compute_viscosity (const double cohesion,
                              const double angle_internal_friction,
+                             const double pore_fluid_pressure_ratio,
                              const double pressure,
                              const double effective_strain_rate,
                              const double max_yield_stress,
@@ -121,12 +128,14 @@ namespace aspect
            */
           double
           compute_derivative (const double angle_internal_friction,
+                              const double pore_fluid_pressure_ratio,
                               const double effective_strain_rate) const;
 
         private:
 
           std::vector<double> angles_internal_friction;
           std::vector<double> cohesions;
+          std::vector<double> pore_fluid_pressure_ratios;
           double max_yield_stress;
 
           /**

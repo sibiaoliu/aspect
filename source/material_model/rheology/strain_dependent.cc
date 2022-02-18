@@ -128,6 +128,13 @@ namespace aspect
                            "for a total of N+1 values, where N is the number of compositional fields. "
                            "If only one value is given, then all use the same value.  Units: None.");
 
+        prm.declare_entry ("Pore fluid pressure ratio strain weakening factors", "1.",
+                           Patterns::List(Patterns::Double (0.)),
+                           "List of pore fluid pressure ratio strain weakening factors "
+                           "for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "If only one value is given, then all use the same value.  Units: None.");
+        
         prm.declare_entry ("Start prefactor strain weakening intervals", "0.",
                            Patterns::List(Patterns::Double (0.)),
                            "List of strain weakening interval initial strains "
@@ -313,6 +320,9 @@ namespace aspect
         friction_strain_weakening_factors = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Friction strain weakening factors"))),
                                                                                     n_fields,
                                                                                     "Friction strain weakening factors");
+        fluid_ratio_strain_weakening_factors = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Pore fluid pressure ratio strain weakening factors"))),
+                                                                                    n_fields,
+                                                                                    "Pore fluid pressure ratio strain weakening factors");                                 
 
         if (prm.get ("Strain healing mechanism") == "no healing")
           healing_mechanism = no_healing;
@@ -346,13 +356,14 @@ namespace aspect
 
 
       template <int dim>
-      std::array<double, 3>
+      std::array<double, 4>
       StrainDependent<dim>::
       compute_strain_weakening_factors(const unsigned int j,
                                        const std::vector<double> &composition) const
       {
         double viscous_weakening = 1.0;
         std::pair<double, double> brittle_weakening (1.0, 1.0);
+        double fluid_weakening = 1.0;
 
         switch (weakening_mechanism)
           {
@@ -371,6 +382,7 @@ namespace aspect
               const double strain_ii = std::fabs(second_invariant(L));
               brittle_weakening = calculate_plastic_weakening(strain_ii, j);
               viscous_weakening = calculate_viscous_weakening(strain_ii, j);
+              fluid_weakening   = calculate_fluid_ratio_weakening(strain_ii, j);
               break;
             }
             case total_strain:
@@ -378,24 +390,28 @@ namespace aspect
               const unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
               brittle_weakening = calculate_plastic_weakening(composition[total_strain_index], j);
               viscous_weakening = calculate_viscous_weakening(composition[total_strain_index], j);
+              fluid_weakening   = calculate_fluid_ratio_weakening(composition[total_strain_index], j);
               break;
             }
             case plastic_weakening_with_total_strain_only:
             {
               const unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
               brittle_weakening = calculate_plastic_weakening(composition[total_strain_index], j);
+              fluid_weakening   = calculate_fluid_ratio_weakening(composition[total_strain_index], j); 
               break;
             }
             case plastic_weakening_with_plastic_strain_only:
             {
               const unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");
               brittle_weakening = calculate_plastic_weakening(composition[plastic_strain_index], j);
+              fluid_weakening   = calculate_fluid_ratio_weakening(composition[plastic_strain_index], j);
               break;
             }
             case plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain:
             {
               const unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");
               brittle_weakening = calculate_plastic_weakening(composition[plastic_strain_index], j);
+              fluid_weakening   = calculate_fluid_ratio_weakening(composition[plastic_strain_index], j);
               const unsigned int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
               viscous_weakening = calculate_viscous_weakening(composition[viscous_strain_index], j);
               break;
@@ -413,7 +429,7 @@ namespace aspect
             }
           }
 
-        const std::array<double, 3> weakening_factors = {{brittle_weakening.first,brittle_weakening.second,viscous_weakening}};
+        const std::array<double, 4> weakening_factors = {{brittle_weakening.first,brittle_weakening.second,viscous_weakening,fluid_weakening}};
 
         return weakening_factors;
 
@@ -464,6 +480,22 @@ namespace aspect
         return std::make_pair (weakening_cohesion, weakening_friction);
       }
 
+
+      template <int dim>
+      double
+      StrainDependent<dim>::
+      calculate_fluid_ratio_weakening(const double strain_ii,
+                                  const unsigned int j) const
+      {
+        // Constrain the second strain invariant of the previous timestep by the strain interval
+        const double cut_off_strain_ii = std::max(std::min(strain_ii,end_plastic_strain_weakening_intervals[j]),start_plastic_strain_weakening_intervals[j]);
+
+        // Linear strain weakening of pore fluid pressure ratio between specified strain values
+        const double strain_fraction = (cut_off_strain_ii - start_plastic_strain_weakening_intervals[j]) /
+                                       (start_plastic_strain_weakening_intervals[j] - end_plastic_strain_weakening_intervals[j]);
+
+        return 1. + ( 1. - fluid_ratio_strain_weakening_factors[j] ) * strain_fraction;
+      }
 
       template <int dim>
       double

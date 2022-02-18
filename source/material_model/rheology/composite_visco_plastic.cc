@@ -170,6 +170,7 @@ namespace aspect
             drucker_prager_parameters = drucker_prager->compute_drucker_prager_parameters(composition, phase_function_values, n_phases_per_composition);
             const double yield_stress = drucker_prager->compute_yield_stress(drucker_prager_parameters.cohesion,
                                                                              drucker_prager_parameters.angle_internal_friction,
+                                                                             drucker_prager_parameters.pore_fluid_pressure_ratio,
                                                                              pressure,
                                                                              drucker_prager_parameters.max_yield_stress);
 

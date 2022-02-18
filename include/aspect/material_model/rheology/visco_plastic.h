@@ -70,6 +70,13 @@ namespace aspect
         std::vector<double> friction_angles;
 
         /**
+         * Pore fluid pressure ratio at the evaluation points passed to
+         * the instance of MaterialModel::Interface::evaluate() that fills
+         * the current object.
+         */
+        std::vector<double> pore_fluid_pressure_ratios; 
+
+        /**
          * The area where the viscous stress exceeds the plastic yield stress,
          * and viscosity is rescaled back to the yield envelope.
          */

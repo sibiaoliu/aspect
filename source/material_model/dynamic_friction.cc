@@ -57,9 +57,12 @@ namespace aspect
           // Convert effective steady-state friction coefficient to internal angle of friction.
           const double phi = std::atan (mu);
 
+          //Assume the pore fluid ratio to be 0
+          const double lamda_ratio = 0.0;
+
           // Compute the viscosity according to the Drucker-Prager yield criterion.
           const double plastic_viscosity = drucker_prager_plasticity.compute_viscosity(cohesions[i],
-                                                                                       phi,
+                                                                                       phi,lamda_ratio,
                                                                                        std::max(pressure,0.0),
                                                                                        std::sqrt(strain_rate_dev_inv2),
                                                                                        std::numeric_limits<double>::infinity());

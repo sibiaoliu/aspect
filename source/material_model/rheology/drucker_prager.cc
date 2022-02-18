@@ -51,6 +51,7 @@ namespace aspect
             // no phases
             drucker_prager_parameters.angle_internal_friction = angles_internal_friction[composition];
             drucker_prager_parameters.cohesion = cohesions[composition];
+            drucker_prager_parameters.pore_fluid_pressure_ratio = pore_fluid_pressure_ratios[composition];
           }
         else
           {
@@ -59,6 +60,8 @@ namespace aspect
                                                                 angles_internal_friction, composition);
             drucker_prager_parameters.cohesion = MaterialModel::MaterialUtilities::phase_average_value(phase_function_values, n_phases_per_composition,
                                                  cohesions, composition);
+            drucker_prager_parameters.pore_fluid_pressure_ratio = MaterialModel::MaterialUtilities::phase_average_value(phase_function_values, n_phases_per_composition,
+                                                 pore_fluid_pressure_ratios, composition);                      
           }
         return drucker_prager_parameters;
       }
@@ -67,6 +70,7 @@ namespace aspect
       double
       DruckerPrager<dim>::compute_yield_stress (const double cohesion,
                                                 const double angle_internal_friction,
+                                                const double pore_fluid_pressure_ratio,
                                                 const double pressure,
                                                 const double max_yield_stress) const
       {
@@ -75,11 +79,12 @@ namespace aspect
         const double stress_inv_part = 1. / (std::sqrt(3.0) * (3.0 + sin_phi));
 
         // Initial yield stress (no stabilization terms)
+        // the 3D-equation should be checked.
         const double yield_stress = ( (dim==3)
                                       ?
-                                      ( 6.0 * cohesion * cos_phi + 6.0 * pressure * sin_phi) * stress_inv_part
+                                      ( 6.0 * cohesion * cos_phi + 6.0 * pressure * (1. - pore_fluid_pressure_ratio) * sin_phi) * stress_inv_part
                                       :
-                                      cohesion * cos_phi + pressure * sin_phi);
+                                      cohesion * cos_phi + pressure * (1. - pore_fluid_pressure_ratio) * sin_phi);
 
         return std::min(yield_stress, max_yield_stress);
       }
@@ -90,12 +95,13 @@ namespace aspect
       double
       DruckerPrager<dim>::compute_viscosity (const double cohesion,
                                              const double angle_internal_friction,
+                                             const double pore_fluid_pressure_ratio,
                                              const double pressure,
                                              const double effective_strain_rate,
                                              const double max_yield_stress,
                                              const double pre_yield_viscosity) const
       {
-        const double yield_stress = compute_yield_stress(cohesion, angle_internal_friction, pressure, max_yield_stress);
+        const double yield_stress = compute_yield_stress(cohesion, angle_internal_friction, pore_fluid_pressure_ratio, pressure, max_yield_stress);
 
         const double strain_rate_effective_inv = 1./(2.*effective_strain_rate);
 
@@ -128,7 +134,7 @@ namespace aspect
                                                               const DruckerPragerParameters p) const
       {
 
-        const double yield_stress = compute_yield_stress(p.cohesion, p.angle_internal_friction, pressure, p.max_yield_stress);
+        const double yield_stress = compute_yield_stress(p.cohesion, p.angle_internal_friction, p.pore_fluid_pressure_ratio, pressure, p.max_yield_stress);
 
         if (stress > yield_stress)
           {
@@ -145,6 +151,7 @@ namespace aspect
       template <int dim>
       double
       DruckerPrager<dim>::compute_derivative (const double angle_internal_friction,
+                                              const double pore_fluid_pressure_ratio,
                                               const double effective_strain_rate) const
       {
         const double sin_phi = std::sin(angle_internal_friction);
@@ -153,7 +160,7 @@ namespace aspect
 
         const double strain_rate_effective_inv = 1./(2.*effective_strain_rate);
 
-        const double viscosity_pressure_derivative = sin_phi * strain_rate_effective_inv *
+        const double viscosity_pressure_derivative = (1. - pore_fluid_pressure_ratio) * sin_phi * strain_rate_effective_inv *
                                                      (dim == 3
                                                       ?
                                                       (6.0 * stress_inv_part)
@@ -181,6 +188,11 @@ namespace aspect
                            "for a total of N+1 values, where N is the number of compositional fields. "
                            "The extremely large default cohesion value (1e20 Pa) prevents the viscous stress from "
                            "exceeding the yield stress. Units: \\si{\\pascal}.");
+        prm.declare_entry ("Pore fluid pressure ratios", "0.", Patterns::Anything(),
+                           "List of pore fluid pressure ratio, $C$, for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "This it the ratio between fluid presuure and dynamic pressure. For a value of zero "
+                           "(default), no fluid pressure is considered. Units: None.");                   
         prm.declare_entry ("Maximum yield stress", "1e12", Patterns::Double (0.),
                            "Limits the maximum value of the yield stress determined by the "
                            "Drucker-Prager plasticity parameters. Default value is chosen so this "
@@ -226,6 +238,12 @@ namespace aspect
                                                          "Cohesions",
                                                          true,
                                                          expected_n_phases_per_composition);
+        pore_fluid_pressure_ratios = Utilities::parse_map_to_double_array(prm.get("Pore fluid pressure ratios"),
+                                                         list_of_composition_names,
+                                                         has_background_field,
+                                                         "Pore fluid pressure ratios",
+                                                         true,
+                                                         expected_n_phases_per_composition);                                                 
 
         // Limit maximum value of the Drucker-Prager yield stress
         max_yield_stress = prm.get_double("Maximum yield stress");

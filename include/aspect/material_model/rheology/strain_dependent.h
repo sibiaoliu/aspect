@@ -91,10 +91,11 @@ namespace aspect
            * A function that computes by how much the rheologic parameters change
            * if strain weakening is applied. Given a compositional field with
            * the index j and a vector of all compositional fields, it returns
-           * reduction factors for the cohesion, friction angle and the prefactor
-           * of the viscous flow law(s) used in the computation for that composition.
+           * reduction factors for the cohesion, friction angle, pore fluid
+           * pressure and the prefactor of the viscous flow law(s)used in 
+           * the computation for that composition.
            */
-          std::array<double, 3>
+          std::array<double, 4>
           compute_strain_weakening_factors(const unsigned int j,
                                            const std::vector<double> &composition) const;
 
@@ -112,6 +113,15 @@ namespace aspect
            */
           std::pair<double, double>
           calculate_plastic_weakening (const double strain_ii,
+                                       const unsigned int j) const;
+
+          /**
+           * A function that computes by how much the pore fluid pressure ratio for
+           * a given compositional field are weakened under the influence of a
+           * given strain.
+           */
+          double
+          calculate_fluid_ratio_weakening (const double strain_ii,
                                        const unsigned int j) const;
 
           /**
@@ -167,19 +177,21 @@ namespace aspect
 
           /**
            * The start of the strain interval (plastic or total strain)
-           * within which cohesion and angle of friction should be weakened.
+           * within which cohesion, angle of friction, and pore fluid
+           * pressure ratio should be weakened.
            */
           std::vector<double> start_plastic_strain_weakening_intervals;
 
           /**
            * The end of the strain interval (plastic or total strain)
-           * within which cohesion and angle of friction should be weakened.
+           * within which cohesion, angle of friction, and pore fluid
+           * pressure ratio should be weakened.
            */
           std::vector<double> end_plastic_strain_weakening_intervals;
 
           /**
            * The factor specifying the amount of weakening of the
-           * cohesion over the prescribed strain interval (plastic or total strain).
+           * cohesions over the prescribed strain interval (plastic or total strain).
            */
           std::vector<double> cohesion_strain_weakening_factors;
 
@@ -191,14 +203,23 @@ namespace aspect
           std::vector<double> friction_strain_weakening_factors;
 
           /**
+           * The factor specifying the amount of weakening of the
+           * pore fluid pressure ratios over the prescribed strain
+           * interval (plastic or total strain).
+           */
+          std::vector<double> fluid_ratio_strain_weakening_factors;
+
+          /**
            * The start of the strain interval (viscous or total strain)
-           * within which cohesion and angle of friction should be weakened.
+           * within which cohesion, angle of friction, and pore fluid
+           * pressure ratio should be weakened.
            */
           std::vector<double> start_viscous_strain_weakening_intervals;
 
           /**
            * The end of the strain interval (viscous or total strain)
-           * within which cohesion and angle of friction should be weakened.
+           * within which cohesion, angle of friction, and pore fluid
+           * pressure ratio should be weakened.
            */
           std::vector<double> end_viscous_strain_weakening_intervals;
 
