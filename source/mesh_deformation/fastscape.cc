@@ -1090,6 +1090,8 @@ namespace aspect
         }
     }
 
+
+
     // TODO: Give better explanations of variables and cite the fastscape documentation.
     template <int dim>
     void FastScape<dim>::declare_parameters(ParameterHandler &prm)
