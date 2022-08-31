@@ -187,32 +187,6 @@ namespace aspect
           out.thermal_expansion_coefficients[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.thermal_expansion_coefficients, MaterialUtilities::arithmetic);
           out.specific_heat[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.specific_heat_capacities, MaterialUtilities::arithmetic);
 
-          if (define_conductivities == false)
-            {
-              double thermal_diffusivity = 0.0;
-
-              for (unsigned int j=0; j < volume_fractions.size(); ++j)
-                thermal_diffusivity += volume_fractions[j] * thermal_diffusivities[j];
-
-              // Thermal conductivity at the given positions. If the temperature equation uses
-              // the reference density profile formulation, use the reference density to
-              // calculate thermal conductivity. Otherwise, use the real density. If the adiabatic
-              // conditions are not yet initialized, the real density will still be used.
-              if (this->get_parameters().formulation_temperature_equation ==
-                  Parameters<dim>::Formulation::TemperatureEquation::reference_density_profile &&
-                  this->get_adiabatic_conditions().is_initialized())
-                out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] *
-                                                this->get_adiabatic_conditions().density(in.position[i]);
-              else
-                out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] * out.densities[i];
-            }
-          else
-            {
-              // Use thermal conductivity values specified in the parameter file, if this
-              // option was selected.
-              out.thermal_conductivities[i] = MaterialUtilities::average_value (volume_fractions, thermal_conductivities, MaterialUtilities::arithmetic);
-            }
-
           out.compressibilities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
           out.entropy_derivative_pressure[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_pressure, MaterialUtilities::arithmetic);
           out.entropy_derivative_temperature[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_temperature, MaterialUtilities::arithmetic);
@@ -245,6 +219,61 @@ namespace aspect
               if (MaterialModel::MaterialModelDerivatives<dim> *derivatives =
                     out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>())
                 rheology->compute_viscosity_derivatives(i, volume_fractions, isostrain_viscosities.composition_viscosities, in, out, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+            }
+
+          // Compute thermal conductivity or thermal diffusivity
+          if (define_conductivities == false)
+            {
+              double thermal_diffusivity = 0.0;
+
+              for (unsigned int j=0; j < volume_fractions.size(); ++j)
+                thermal_diffusivity += volume_fractions[j] * thermal_diffusivities[j];
+
+              // Thermal conductivity at the given positions. If the temperature equation uses
+              // the reference density profile formulation, use the reference density to
+              // calculate thermal conductivity. Otherwise, use the real density. If the adiabatic
+              // conditions are not yet initialized, the real density will still be used.
+              if (this->get_parameters().formulation_temperature_equation ==
+                  Parameters<dim>::Formulation::TemperatureEquation::reference_density_profile &&
+                  this->get_adiabatic_conditions().is_initialized())
+                out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] *
+                                                this->get_adiabatic_conditions().density(in.position[i]);
+              else
+                out.thermal_conductivities[i] = thermal_diffusivity * out.specific_heat[i] * out.densities[i];
+            }
+          else
+            {
+              // Use thermal conductivity values specified in the parameter file, if this
+              // option was selected.
+              if (define_hydrothermal_circulation == true)
+                {
+                  // Simplified hydrothermal circulation process to approximate
+                  // its effect on the temperature field by enhancing the thermal
+                  // conductivity. The formula is from Gregg et al. (2009)
+                  // "Melt generation, crystallization, and extraction beneath
+                  // segmented oceanic transform faults"
+                  double current_thermal_conductivity = 0.0;
+                  double current_Nusselt_number = 0.0;
+                  double current_A_smoothing = 0.0;
+                  double current_T_cooling = 0.0;
+                  double current_D_cooling = 0.0;
+                  for (unsigned int j=0; j < volume_fractions.size(); ++j)
+                    {
+                      current_thermal_conductivity += volume_fractions[j] * thermal_conductivities[j];
+                      current_Nusselt_number += volume_fractions[j] * Nusselt_number[j];
+                      current_A_smoothing += volume_fractions[j] * A_smoothing[j];
+                      current_T_cooling += volume_fractions[j] * T_cooling[j];
+                      current_D_cooling += volume_fractions[j] * D_cooling[j];
+                    }
+
+                  //Enhanced thermal conductivity due to hydrothermal circulation
+                  //at the given positions.
+                  const double point_depth = this->get_geometry_model().depth(in.position[i]);
+                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 - in.temperature[i] / current_T_cooling - point_depth / current_D_cooling));
+                  out.thermal_conductivities[i] = current_thermal_conductivity * (1 + (current_Nusselt_number - 1.0) * smoothing_part);
+                }
+              else
+                out.thermal_conductivities[i] = MaterialUtilities::average_value (volume_fractions, thermal_conductivities, MaterialUtilities::arithmetic);
             }
 
           // Now compute changes in the compositional fields (i.e. the accumulated strain).
@@ -335,6 +364,38 @@ namespace aspect
                              "for a total of N+1 values, where N is the number of compositional fields. "
                              "If only one value is given, then all use the same value. "
                              "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
+          prm.declare_entry ("Define hydrothermal circulation","false",
+                             Patterns::Bool (),
+                             "Whether to include the process of hydrothermal circulation in calculating "
+                             "thhermal conductivities for each compositional field instead of directly "
+                             "defining them. ");
+          prm.declare_entry ("Nusselt numbers", "1.0",
+                             Patterns::List(Patterns::Double(0)),
+                             "List of Nusselt numbers, for background material and compositional fields, "
+                             "for a total of N+1 values, where N is the number of compositional fields. "
+                             "If only one value is given, then all use the same value. "
+                             "It represents the ratio of the total heat transport within a "
+                             "permeable layer to heat transfer by conduction alone. Units: none");
+          prm.declare_entry ("Hydrothermal circulation reference temperatures", "873",
+                             Patterns::List(Patterns::Double(0)),
+                             "List of refernce cutoff temperatures for hydrothermal cooling, for background "
+                             "material and compositional fields, for a total of N+1 values, where N is the "
+                             "number of compositional fields. If only one value is given, then all use the "
+                             "same value. Hydrothermal activity occurs when the temperature is lower than it "
+                             "Units: K");
+          prm.declare_entry ("Hydrothermal circulation reference depths", "6e3",
+                             Patterns::List(Patterns::Double(0)),
+                             "List of refernce cutoff depths for hydrothermal cooling, for background "
+                             "material and compositional fields, for a total of N+1 values, where N is the "
+                             "number of compositional fields. If only one value is given, then all use the "
+                             "same value. Hydrothermal activity occurs when the depth is shallower than it "
+                             "Units: m");
+          prm.declare_entry ("Hydrothermal circulation smoothing factors", "0.75",
+                             Patterns::List(Patterns::Double(0)),
+                             "List of hydrothermal circulation smoothing constants, for background "
+                             "material and compositional fields, for a total of N+1 values, where N is the "
+                             "number of compositional fields. If only one value is given, then all use the "
+                             "same value. Units: none");
         }
         prm.leave_subsection();
       }
@@ -381,6 +442,19 @@ namespace aspect
           thermal_conductivities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Thermal conductivities"))),
                                                                            n_fields,
                                                                            "Thermal conductivities");
+          define_hydrothermal_circulation = prm.get_bool ("Define hydrothermal circulation");
+          Nusselt_number = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Nusselt numbers"))),
+                                                                   n_fields,
+                                                                   "Nusselt numbers");
+          T_cooling = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Hydrothermal circulation reference temperatures"))),
+                                                              n_fields,
+                                                              "Hydrothermal circulation reference temperatures");
+          D_cooling = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Hydrothermal circulation reference depths"))),
+                                                              n_fields,
+                                                              "Hydrothermal circulation reference depths");
+          A_smoothing = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Hydrothermal circulation smoothing factors"))),
+                                                                n_fields,
+                                                                "Hydrothermal circulation smoothing factors");
 
           rheology = std::make_unique<Rheology::ViscoPlastic<dim>>();
           rheology->initialize_simulator (this->get_simulator());

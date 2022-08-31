@@ -362,6 +362,25 @@ namespace aspect
                                      ) * JxW;
             }
 
+          // If we want to contribute the dike-injection effect only on horizontal x direction.
+          // i.e., additional RHS of horizontal (x) momentum eqn: - \int 2 eta R, div v
+            //const unsigned int n_component_centre=fe.n_components();
+            //const unsigned int n_sfs=scratch.finite_element_values.dofs_per_cell -6;
+            // for (unsigned int i=0, i_stokes=0; i<n_sfs, i_stokes<stokes_dofs_per_cell;)
+            for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
+            {
+                const unsigned int index_horizon=fe.system_to_component_index(i).first;
+                if (introspection.is_stokes_component(index_horizon))
+                {
+                    if (prescribed_dilation != nullptr && !material_model_is_compressible && index_horizon==0)
+                    {
+                        data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
+                    }
+                    ++i_stokes;
+                }
+                ++i;
+            }
+
           // and then the matrix, if necessary
           if (scratch.rebuild_newton_stokes_matrix)
             {
