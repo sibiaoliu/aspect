@@ -462,14 +462,11 @@ namespace aspect
             }
             case fracture_healing:
             {
-              // Formula: APS_eff = APS_current / (1+recovery_rate * timestep)
-              // delta_APS = APS_eff - APS_current is the strain increment due
-              // to fracture healing. NOTE that the "healed_strain" here does
-              // not mean the real healed strain. Instead, it means the fracture
-              // healing coefficient [1/(1+recovery_rate*dt)-1] for delta_APS,
-              // where the recovery_rate is 1/fracture healing time.
-              // healed_strain = strain_healing_fracture_recovery_rate * this->get_timestep(); (Gerya,2013)
-              healed_strain = 1.0/(1.0 + strain_healing_fracture_recovery_rate * this->get_timestep()) - 1.0;
+              // Formula: APS_new = APS_current + delta_APS, where
+              // delta_APS = edot_ii*dt - recovery_rate*dt is the strain
+              // increment due to fracture strain healing. The recovery_rate
+              // is 1/fracture healing time. See Eq. 12 in Gerya (2013).
+              healed_strain = strain_healing_fracture_recovery_rate * this->get_timestep();
               break;
             }
           }
@@ -537,31 +534,13 @@ namespace aspect
                                             min_strain_rate);
             // strain increment from current timestep
             double delta_e_ii = edot_ii*this->get_timestep();
-            // current strain: either accumulated plastic strain or total strain
-            double current_e_ii = 0.0;
-            if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
-              current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("total_strain")];
-            else if (weakening_mechanism == plastic_weakening_with_plastic_strain_only || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
-              current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")];
-            else
-              AssertThrow(false, ExcNotImplemented());
 
             // Adjusting strain values to account for strain healing
             // without exceeding an unreasonable range
-            if (healing_mechanism == temperature_dependent)
+            if (healing_mechanism != no_healing)
               {
                 // Never heal more strain than exists
                 delta_e_ii -= calculate_strain_healing(in,i);
-              }
-            if (healing_mechanism == fracture_healing)
-              {
-                // new strain increment due to fracture healing
-                // Note that the strain healing mechanism is not used
-                // for the first timestep.
-                if (this->get_timestep_number() == 1)
-                  delta_e_ii += 0.0;
-                else
-                  delta_e_ii = current_e_ii * calculate_strain_healing(in,i);
               }
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_only && plastic_yielding == true)
               out.reaction_terms[i][this->introspection().compositional_index_for_name("plastic_strain")] =
