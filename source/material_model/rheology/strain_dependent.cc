@@ -464,8 +464,8 @@ namespace aspect
             {
               // Formula: APS_new = APS_current + delta_APS, where
               // delta_APS = edot_ii*dt - recovery_rate*dt is the strain
-              // increment due to fracture healing. From Eq.12 in Gerya, 2013
-              // The recovery_rate is 1/fracture healing time.
+              // increment due to fracture strain healing. The recovery_rate
+              // is 1/fracture healing time. See Eq. 12 in Gerya (2013).
               healed_strain = strain_healing_fracture_recovery_rate * this->get_timestep();
               break;
             }
