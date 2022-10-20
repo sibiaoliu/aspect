@@ -25,7 +25,9 @@
 #include <aspect/mesh_deformation/interface.h>
 #include <aspect/simulator_access.h>
 #include <aspect/geometry_model/initial_topography_model/interface.h>
+#include <aspect/utilities.h>
 
+#include <deal.II/base/parsed_function.h>
 
 namespace aspect
 {
@@ -108,11 +110,27 @@ namespace aspect
                                         const std::set<types::boundary_id> &boundary_ids) const;
 
         /**
-         * The hillslope transport coefficient or diffusivity [m2/s]
-         * used in the hillslope diffusion of the deformed
-         * surface.
+          * Parsed functions that specify the hillslope transport coefficient
+          * which is given in the input file using the function method.
+          */
+        Functions::ParsedFunction<dim> hillslope_function;
+
+        /**
+         * The coordinate representation to evaluate the function. Possible
+         * choices are depth, cartesian and spherical.
          */
-        double diffusivity;
+        Utilities::Coordinates::CoordinateSystem coordinate_system_hillslope_function;
+
+        /**
+         * Using a given function input to get the hillslope transport coefficient
+         */       
+        double compute_hillslope_transport(const Point<dim> &position) const;
+
+        /**
+         * The maximum hillslope transport coefficient or diffusivity [m2/s]
+         * used in the hillslope diffusion of the deformed surface.
+         */
+        double diffusivity_max;
 
         /**
          * Maximum number of steps between the application of diffusion.
