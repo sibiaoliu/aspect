@@ -1,0 +1,6 @@
+New: There is now a new subsection called "Hillslope transport function"
+under the mesh deformation plugin "Diffusion", in which diffusivity
+(i.e., hillslope transport coefficient) can be given as a coordinate/time
+function. It allows you to apply diffusion only in the desired area.
+<br>
+(Sibiao Liu, 2022/10/20)
