@@ -270,7 +270,7 @@ namespace aspect
                 prescribed_dilation->dilation[i] = injection_function.value(in.position[i]);
             }
 
-          // Mimic the oceanic crust generation/accretion in the dike.
+          // Mimic the magmatic crust generation/accretion through the dike.
           // We use the compositional reaction term to implement this process.
           const std::vector<double> &composition = in.composition[i];
           for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
@@ -278,11 +278,11 @@ namespace aspect
               // Lookup the injection area
               if (injection_function.value(in.position[i]) != 0.0)
                 {
-                  AssertThrow(this->introspection().compositional_name_exists("oceanic_crust"),
+                  AssertThrow(this->introspection().compositional_name_exists("melt_dike"),
                               ExcMessage("Material model prescribed dilation only works if there "
-                                         "is a compositional field called 'oceanic_crust'."));
+                                         "is a compositional field called 'melt_dike'."));
 
-                  if (c == this->introspection().compositional_index_for_name("oceanic_crust"))
+                  if (c == this->introspection().compositional_index_for_name("melt_dike"))
                     out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
                   else
                     out.reaction_terms[i][c] = -1.0 * composition[c];

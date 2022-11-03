@@ -362,11 +362,11 @@ namespace aspect
                                      ) * JxW;
             }
 
-          // If we want to contribute the dike-injection effect only on horizontal x direction.
-          // i.e., additional RHS of horizontal (x) momentum eqn: - \int 2 eta R, div v
-            //const unsigned int n_component_centre=fe.n_components();
-            //const unsigned int n_sfs=scratch.finite_element_values.dofs_per_cell -6;
-            // for (unsigned int i=0, i_stokes=0; i<n_sfs, i_stokes<stokes_dofs_per_cell;)
+          // This is customized for the dike injection process:
+          // If we want to contribute the prescribe dilation term's effect 
+          // only on horizontal x direction (dike opening),
+          // additional RHS of horizontal (x) momentum eqn: - \int 2 eta R, div v
+          // Buck et al., 2005; Howell et al., 2019
             for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
             {
                 const unsigned int index_horizon=fe.system_to_component_index(i).first;
