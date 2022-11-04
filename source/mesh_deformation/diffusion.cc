@@ -26,7 +26,6 @@
 #include <aspect/geometry_model/two_merged_boxes.h>
 #include <aspect/simulator.h>
 #include <aspect/geometry_model/initial_topography_model/zero_topography.h>
-#include <aspect/utilities.h>
 
 #include <deal.II/dofs/dof_tools.h>
 #include <deal.II/base/symmetric_tensor.h>
@@ -43,7 +42,7 @@ namespace aspect
     template <int dim>
     Diffusion<dim>::Diffusion()
       :
-      diffusivity_max(0.),
+      diffusivity(0.),
       timesteps_between_diffusion (1),
       apply_diffusion(false)
     {}
@@ -81,17 +80,6 @@ namespace aspect
         }
     }
 
-
-
-    template <int dim>
-    double
-    Diffusion<dim>::compute_hillslope_coefficient(const Point<dim> &position) const
-    {
-      // Use a given function input to get the hillslope transport coefficient
-      const Utilities::NaturalCoordinate<dim> point =
-                this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system_hillslope_function);
-      return hillslope_function.value(Utilities::convert_array_to_point<dim>(point.get_coordinates()));
-    }
 
 
     template <int dim>
@@ -322,12 +310,6 @@ namespace aspect
                     // The projected gradients of the shape values for the i-loop
                     std::vector<Tensor<1, dim, double>> projected_grad_phi(dofs_per_cell);
 
-                    // Make sure the coordinate-based diffusivity, i.e., hillslope coefficient
-                    // of the diffusion, does not exceed the diffusivity_max
-                    double diffusivity = compute_hillslope_coefficient(fs_fe_face_values.quadrature_point(point));
-                    if (diffusivity > diffusivity_max)
-                      diffusivity = diffusivity_max;
-
                     // Loop over the shape functions
                     for (unsigned int i=0; i<dofs_per_cell; ++i)
                       {
@@ -432,7 +414,7 @@ namespace aspect
                 // Calculate the corresponding conduction timestep
                 min_local_conduction_timestep = std::min(min_local_conduction_timestep,
                                                          this->get_parameters().CFL_number*std::pow(fscell->face(face_no)->minimum_vertex_distance(),2.)
-                                                         / diffusivity_max);
+                                                         / diffusivity);
               }
 
       // Get the global minimum timestep
@@ -445,8 +427,8 @@ namespace aspect
       AssertThrow (this->get_timestep() <= min_conduction_timestep,
                    ExcMessage("The numerical timestep is too large for diffusion of the surface. Although the "
                               "diffusion scheme is stable, note that the error increases linearly with the timestep. "
-                              "The maximum diffusion timestep is: " + std::to_string(conduction_timestep) +
-                              ", while the advection timestep is: " + std::to_string (this->get_timestep ())));
+                              "The diffusion timestep is: " + std::to_string(conduction_timestep) + ", while "
+                              "the advection timestep is: " + std::to_string (this->get_timestep ())));
     }
 
 
@@ -511,9 +493,9 @@ namespace aspect
       {
         prm.enter_subsection("Diffusion");
         {
-          prm.declare_entry("Maximum hillslope transport coefficient", "1e-6",
+          prm.declare_entry("Hillslope transport coefficient", "1e-6",
                             Patterns::Double(0),
-                            "The maximum hillslope transport coefficient $\\kappa$ used to "
+                            "The hillslope transport coefficient $\\kappa$ used to "
                             "diffuse the free surface, either as a  "
                             "stabilization step or to mimic erosional "
                             "and depositional processes. Units: $\\si{m^2/s}$. ");
@@ -521,23 +503,6 @@ namespace aspect
                             Patterns::Integer(0,std::numeric_limits<int>::max()),
                             "The number of time steps between each application of "
                             "diffusion.");
-          prm.enter_subsection("Hillslope transport function");
-          {
-            // The function to specify the the hillslope transport coefficient.
-            prm.declare_entry ("Coordinate system", "cartesian",
-                             Patterns::Selection ("cartesian|spherical|depth"),
-                             "A selection that determines the assumed coordinate "
-                             "system for the function variables. Allowed values "
-                             "are `cartesian', `spherical', and `depth'. `spherical' coordinates "
-                             "are interpreted as r,phi or r,phi,theta in 2D/3D "
-                             "respectively with theta being the polar angle. `depth' "
-                             "will create a function, in which only the first "
-                             "parameter is non-zero, which is interpreted to "
-                             "be the depth of the point.");
-
-            Functions::ParsedFunction<dim>::declare_parameters(prm,1);
-          }
-          prm.leave_subsection();
         }
         prm.leave_subsection();
       }
@@ -571,25 +536,8 @@ namespace aspect
 
         prm.enter_subsection ("Diffusion");
         {
-          diffusivity_max             = prm.get_double("Maximum hillslope transport coefficient");
+          diffusivity                 = prm.get_double("Hillslope transport coefficient");
           timesteps_between_diffusion = prm.get_integer("Time steps between diffusion");
-          prm.enter_subsection("Hillslope transport function");
-            {
-              coordinate_system_hillslope_function = Utilities::Coordinates::string_to_coordinate_system(prm.get("Coordinate system"));
-              try
-                {
-                  hillslope_function.parse_parameters (prm);
-                }
-              catch (...)
-                {
-                  std::cerr << "FunctionParser failed to parse\n"
-                            << "\t Hillslope transport function\n"
-                            << "with expression \n"
-                            << "\t' " << prm.get("Function expression") << "'";
-                  throw;
-                }
-            }
-            prm.leave_subsection();          
         }
         prm.leave_subsection ();
       }
