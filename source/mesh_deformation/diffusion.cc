@@ -85,7 +85,7 @@ namespace aspect
 
     template <int dim>
     double
-    Diffusion<dim>::compute_hillslope_transport(const Point<dim> &position) const
+    Diffusion<dim>::compute_hillslope_coefficient(const Point<dim> &position) const
     {
       // Use a given function input to get the hillslope transport coefficient
       const Utilities::NaturalCoordinate<dim> point =
@@ -322,9 +322,9 @@ namespace aspect
                     // The projected gradients of the shape values for the i-loop
                     std::vector<Tensor<1, dim, double>> projected_grad_phi(dofs_per_cell);
 
-                    // Make sure the function-based diffusivity, i.e., hillslope transport
-                    // coefficient, does not exceed the diffusivity_max
-                    double diffusivity = compute_hillslope_transport(fs_fe_face_values.quadrature_point(point));
+                    // Make sure the coordinate-based diffusivity, i.e., hillslope coefficient
+                    // of the diffusion, does not exceed the diffusivity_max
+                    double diffusivity = compute_hillslope_coefficient(fs_fe_face_values.quadrature_point(point));
                     if (diffusivity > diffusivity_max)
                       diffusivity = diffusivity_max;
 

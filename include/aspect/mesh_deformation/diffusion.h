@@ -122,9 +122,9 @@ namespace aspect
         Utilities::Coordinates::CoordinateSystem coordinate_system_hillslope_function;
 
         /**
-         * Using a given function input to get the hillslope transport coefficient
+         * Using a given function input to get the position-based hillslope transport coefficient
          */       
-        double compute_hillslope_transport(const Point<dim> &position) const;
+        double compute_hillslope_coefficient(const Point<dim> &position) const;
 
         /**
          * The maximum hillslope transport coefficient or diffusivity [m2/s]
