@@ -76,8 +76,12 @@ namespace aspect
           average_elastic_shear_moduli[i] = MaterialUtilities::average_value(volume_fractions, elastic_shear_moduli, viscosity_averaging);
 
           // Average viscoelastic (e.g., effective) viscosity (equation 28 in Moresi et al., 2003, J. Comp. Phys.)
-          out.viscosities[i] = elastic_rheology.calculate_viscoelastic_viscosity(average_viscosity,
-                                                                                 average_elastic_shear_moduli[i]);
+          double dtc = this->get_timestep();
+          if (this->get_timestep_number() == 0 && this->get_timestep() == 0)
+            dtc = std::min(std::min(this->get_parameters().maximum_time_step, this->get_parameters().maximum_first_time_step), elastic_rheology.elastic_timestep());
+          const double timestep_ratio = dtc / elastic_rheology.elastic_timestep();
+          out.viscosities[i] = timestep_ratio * elastic_rheology.calculate_viscoelastic_viscosity(average_viscosity,
+                               average_elastic_shear_moduli[i]);
 
           // Fill the material properties that are part of the elastic additional outputs
           if (ElasticAdditionalOutputs<dim> *elastic_out = out.template get_additional_output<ElasticAdditionalOutputs<dim>>())
@@ -88,7 +92,27 @@ namespace aspect
 
       elastic_rheology.fill_elastic_force_outputs(in, average_elastic_shear_moduli, out);
       elastic_rheology.fill_reaction_outputs(in, average_elastic_shear_moduli, out);
+      // Fill the reaction_rates that during operator splitting apply the stress update of the previous
+      // timestep to the advected and rotated stress computed in the previous timestep ($\tau^{0}$)
+      // to obtain $\tau^{t}$.
+      if (this->get_parameters().use_operator_splitting)
+        elastic_rheology.fill_reaction_rates(in, average_elastic_shear_moduli, out);
+    }
 
+    template <int dim>
+    double
+    Viscoelastic<dim>::
+    get_elastic_viscosity(const double shear_modulus) const
+    {
+      return elastic_rheology.calculate_elastic_viscosity(shear_modulus);
+    }
+
+    template <int dim>
+    double
+    Viscoelastic<dim>::
+    get_elastic_timestep() const
+    {
+      return elastic_rheology.elastic_timestep();
     }
 
     template <int dim>

@@ -106,6 +106,18 @@ namespace aspect
                                  MaterialModel::MaterialModelOutputs<dim> &out) const;
 
           /**
+           * Given the stress of the previous time step in the material model inputs @p in,
+           * the elastic shear moduli @p average_elastic_shear_moduli at each point,
+           * and the (viscous) viscosities given in the material model outputs object @p out,
+           * compute the update to the elastic stresses of the previous timestep and use it
+           * to fill the reaction rates material model output property.
+           */
+          void
+          fill_reaction_rates (const MaterialModel::MaterialModelInputs<dim> &in,
+                               const std::vector<double> &average_elastic_shear_moduli,
+                               MaterialModel::MaterialModelOutputs<dim> &out) const;
+
+          /**
            * Return the values of the elastic shear moduli for each composition used in the
            * rheology model.
            */
@@ -132,9 +144,11 @@ namespace aspect
            * strain rate tensor, including viscoelastic stresses.
            */
           double
-          calculate_viscoelastic_strain_rate (const SymmetricTensor<2,dim> &strain_rate,
-                                              const SymmetricTensor<2,dim> &stress,
-                                              const double shear_modulus) const;
+          calculate_viscoelastic_strain_rate(const SymmetricTensor<2, dim> &strain_rate,
+                                             const SymmetricTensor<2, dim> &stress,
+                                             const SymmetricTensor<2, dim> &stress_old,
+                                             const double viscosity_pre_yield,
+                                             const double shear_modulus) const;
 
           /**
            * Compute the elastic time step.
@@ -177,13 +191,15 @@ namespace aspect
           double stabilization_time_scale_factor;
 
           /**
-           * We cache the evaluator that is necessary to evaluate the old velocity
-           * gradients. They are required to compute the elastic stresses, but
+           * We cache the evaluator that is necessary to evaluate the velocity
+           * gradients and the old compositions. They are required to compute the elastic stresses, but
            * are not provided by the material model.
-           * By caching the evaluator, we can avoid recreating it every time we
+           * By caching the evaluators, we can avoid recreating it every time we
            * need it.
            */
           mutable std::unique_ptr<FEPointEvaluation<dim, dim>> evaluator;
+          static constexpr unsigned int n_independent_components = dim == 2 ? 3 : 6;
+          mutable std::unique_ptr<FEPointEvaluation<n_independent_components, dim>> evaluator_composition;
       };
     }
   }

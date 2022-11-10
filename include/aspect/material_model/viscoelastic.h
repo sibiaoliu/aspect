@@ -174,6 +174,29 @@ namespace aspect
          */
 
         /**
+         * @name The elastic viscosity
+         * @{
+         */
+        double get_elastic_viscosity (const double shear_modulus) const;
+        /**
+         * @}
+         */
+
+        /**
+         * @name The elastic timestep
+         * @{
+         */
+        double get_elastic_timestep () const;
+        /**
+         * @}
+         */
+
+        /**
+        * @name Functions used in dealing with run-time parameters
+        * @{
+        */
+
+        /**
          * Declare the parameters this class takes through input files.
          */
         static

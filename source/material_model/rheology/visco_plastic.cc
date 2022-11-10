@@ -39,8 +39,8 @@ namespace aspect
         std::vector<std::string> names;
         names.emplace_back("current_cohesions");
         names.emplace_back("current_friction_angles");
-        names.emplace_back("current_yield_stresses");
         names.emplace_back("plastic_yielding");
+        names.emplace_back("yield_stresses");
         return names;
       }
     }
@@ -70,10 +70,10 @@ namespace aspect
             return friction_angles;
 
           case 2:
-            return yield_stresses;
+            return yielding;
 
           case 3:
-            return yielding;
+            return yield_stresses;
 
           default:
             AssertThrow(false, ExcInternalError());
@@ -110,12 +110,29 @@ namespace aspect
         output_parameters.current_friction_angles.resize(volume_fractions.size(), numbers::signaling_nan<double>());
         output_parameters.current_cohesions.resize(volume_fractions.size(), numbers::signaling_nan<double>());
 
-        // Assemble stress tensor if elastic behavior is enabled
-        SymmetricTensor<2,dim> stress_old = numbers::signaling_nan<SymmetricTensor<2,dim>>();
+        // Assemble current and old stress tensor if elastic behavior is enabled
+        SymmetricTensor<2, dim> stress_0_advected = numbers::signaling_nan<SymmetricTensor<2, dim>>();
+        SymmetricTensor<2, dim> stress_old = numbers::signaling_nan<SymmetricTensor<2, dim>>();
+        double elastic_shear_modulus = numbers::signaling_nan<double>();
         if (use_elasticity == true)
           {
-            for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
-              stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+            // in.composition holds $\tau^{0adv}$ after the first advection nonlinear iteration,
+            // which is when the viscosity matters for the Stokes system.
+            for (unsigned int j = 0; j < SymmetricTensor<2, dim>::n_independent_components; ++j)
+              stress_0_advected[SymmetricTensor<2, dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+
+            // The old stresses are only changed in the operator splitting step and are stored in the second
+            // set of n_independent_components.
+            for (unsigned int j = 0; j < SymmetricTensor<2, dim>::n_independent_components; ++j)
+              stress_old[SymmetricTensor<2, dim>::unrolled_to_component_indices(j)] = in.composition[i][SymmetricTensor<2, dim>::n_independent_components+j];
+
+            // Average the compositional contributions to elastic_shear_moduli here and use
+            // a volume-averaged shear modulus in the loop over the compositions below.
+            // Otherwise it is implied that each material is acting independently
+            // (different rotations, different stress changes), but this is inconsistent with storing only one stress tensor.
+            // Same averaging as the viscosity.
+            const std::vector<double> &elastic_shear_moduli = elastic_rheology.get_elastic_shear_moduli();
+            elastic_shear_modulus = MaterialUtilities::average_value(volume_fractions, elastic_shear_moduli, viscosity_averaging);
           }
 
         // The first time this function is called (first iteration of first time step)
@@ -238,7 +255,13 @@ namespace aspect
 
             if (use_elasticity)
               {
-                const std::vector<double> &elastic_shear_moduli = elastic_rheology.get_elastic_shear_moduli();
+
+                // Step 3a: calculate viscoelastic (effective) viscosity
+                // Estimate the timestep size when in timestep 0
+                double dtc = this->get_timestep();
+                if (this->get_timestep_number() == 0 && this->get_timestep() == 0)
+                  dtc = std::min(std::min(this->get_parameters().maximum_time_step, this->get_parameters().maximum_first_time_step), elastic_rheology.elastic_timestep());
+                viscosity_pre_yield = dtc / elastic_rheology.elastic_timestep() * elastic_rheology.calculate_viscoelastic_viscosity(viscosity_pre_yield, elastic_shear_modulus);
 
                 if (use_reference_strainrate == true)
                   current_edot_ii = ref_strain_rate;
@@ -247,17 +270,21 @@ namespace aspect
                     Assert(std::isfinite(in.strain_rate[i].norm()),
                            ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                                       "not filled by the caller."));
+
+                    // When we compute the viscosity for the Stokes assembly
+                    // the ve stresses stored in in.composition are the rotated
+                    // and advected stresses from the advection solve ($\tau^{0adv}$).
+                    // The square root of the second moment invariant is returned.
                     const double viscoelastic_strain_rate_invariant = elastic_rheology.calculate_viscoelastic_strain_rate(in.strain_rate[i],
+                                                                      stress_0_advected,
                                                                       stress_old,
-                                                                      elastic_shear_moduli[j]);
+                                                                      viscosity_pre_yield,
+                                                                      elastic_shear_modulus);
 
                     current_edot_ii = std::max(viscoelastic_strain_rate_invariant,
                                                min_strain_rate);
                   }
 
-                // Step 3a: calculate viscoelastic (effective) viscosity
-                viscosity_pre_yield = elastic_rheology.calculate_viscoelastic_viscosity(viscosity_pre_yield,
-                                                                                        elastic_shear_moduli[j]);
               }
 
             // Step 3b: calculate current (viscous or viscous + elastic) stress magnitude
@@ -290,7 +317,7 @@ namespace aspect
 
             double pressure_for_plasticity = in.pressure[i];
             if (allow_negative_pressures_in_plasticity == false)
-              pressure_for_plasticity = std::max(in.pressure[i],0.0);
+              pressure_for_plasticity = std::max(in.pressure[i], 0.0);
 
             // Step 5a: calculate Drucker-Prager yield stress
             const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
@@ -334,6 +361,14 @@ namespace aspect
                 }
               }
 
+            // TODO: Implement brentq or fixed-point iterations until the difference
+            // between the log of the strain rate and the log of the strain rate based on the
+            // proposed stress is zero (up to a certain tolerance).
+            // Explanation: The variables in Eq. 36 of Moresi et al. (2003) for the effective viscosity
+            // can depend on the strain rate. In this case (i.e. for dislocation creep or strain-dependent weakening),
+            // local iterations are needed to find lambda.
+            // We won't do this for now, we will first fix the strain-independent case.
+
             // Step 6: limit the viscosity with specified minimum and maximum bounds
             const double maximum_viscosity_for_composition = MaterialModel::MaterialUtilities::phase_average_value(
                                                                phase_function_values,
@@ -350,7 +385,12 @@ namespace aspect
                                                                MaterialModel::MaterialUtilities::PhaseUtilities::logarithmic
                                                              );
             output_parameters.composition_viscosities[j] = std::min(std::max(viscosity_yield, minimum_viscosity_for_composition), maximum_viscosity_for_composition);
+
+            // TODO: When the composite material model is done, we can assert that:
+            // 1. The decomposed strain rates sum up to the total strain rate
+            // 2. $tau^{t+\Delta te} == \eta_{eff} D^{t+\Delta te}_{eff}$
           }
+
         return output_parameters;
       }
 
@@ -484,7 +524,8 @@ namespace aspect
 
         if (use_elasticity)
           {
-            for (unsigned int i = 0; i < SymmetricTensor<2,dim>::n_independent_components ; ++i)
+            // First n_independent_components are the stress, the next the old_stress
+            for (unsigned int i = 0; i < 2*SymmetricTensor<2,dim>::n_independent_components ; ++i)
               composition_mask.set(i,false);
           }
 
@@ -742,6 +783,8 @@ namespace aspect
           }
       }
 
+
+
       template <int dim>
       void
       ViscoPlastic<dim>::
@@ -750,7 +793,8 @@ namespace aspect
                            const bool plastic_yielding,
                            const MaterialModel::MaterialModelInputs<dim> &in,
                            MaterialModel::MaterialModelOutputs<dim> &out,
-                           const IsostrainViscosities &isostrain_viscosities) const
+                           const std::vector<double> &phase_function_values,
+                           const std::vector<unsigned int> &n_phases_per_composition) const
       {
         PlasticAdditionalOutputs<dim> *plastic_out = out.template get_additional_output<PlasticAdditionalOutputs<dim>>();
 
@@ -763,29 +807,45 @@ namespace aspect
             plastic_out->friction_angles[i] = 0;
             plastic_out->yield_stresses[i] = 0;
             plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
+            
+            double pressure_for_plasticity = in.pressure[i];
+            if (allow_negative_pressures_in_plasticity == false)
+              pressure_for_plasticity = std::max(in.pressure[i],0.0);
 
-            const std::vector<double> friction_angles_RAD = isostrain_viscosities.current_friction_angles;
-            const std::vector<double> cohesions = isostrain_viscosities.current_cohesions;
+            const std::vector<double> friction_angles_RAD = calculate_isostrain_viscosities(in, i, volume_fractions,
+                                                                                            phase_function_values,
+                                                                                            n_phases_per_composition).current_friction_angles;
+                                                                                                   const std::vector<double> cohesions = calculate_isostrain_viscosities(in, i, volume_fractions,
+                                                                                            phase_function_values,
+                                                                                            n_phases_per_composition).current_cohesions;     
 
             // The max yield stress is the same for each composition, so we give the 0th field value.
             const double max_yield_stress = drucker_prager_plasticity.compute_drucker_prager_parameters(0).max_yield_stress;
 
-            double pressure_for_plasticity = in.pressure[i];
-            if (allow_negative_pressures_in_plasticity == false)
-              pressure_for_plasticity = std::max(in.pressure[i], 0.0);
+            // set to weakened values, or unweakened values when strain weakening is not used
+            std::vector<double> composition_cohesions(volume_fractions.size());
+            std::vector<double> composition_friction_angles(volume_fractions.size());
+            std::vector<double> composition_yield_stresses(volume_fractions.size());
 
-            // average over the volume volume fractions
             for (unsigned int j = 0; j < volume_fractions.size(); ++j)
               {
-                plastic_out->cohesions[i]   += volume_fractions[j] * cohesions[j];
-                // Also convert radians to degrees
-                plastic_out->friction_angles[i] += 180.0/numbers::PI * volume_fractions[j] * friction_angles_RAD[j];
-                plastic_out->yield_stresses[i] += volume_fractions[j] * drucker_prager_plasticity.compute_yield_stress(cohesions[j],
-                                                  friction_angles_RAD[j],
-                                                  pressure_for_plasticity,
-                                                  max_yield_stress);
-
+                // Calculate the strain weakening factors and weakened values
+                const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
+                const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
+                                                                          phase_function_values,
+                                                                          n_phases_per_composition);
+                composition_cohesions[j] = drucker_prager_parameters.cohesion * weakening_factors[0];
+                composition_friction_angles[j] = drucker_prager_parameters.angle_internal_friction * weakening_factors[1];
+                composition_yield_stresses[j] = drucker_prager_plasticity.compute_yield_stress(composition_cohesions[j],
+                                                                                               composition_friction_angles[j],
+                                                                                               pressure_for_plasticity,
+                                                                                               max_yield_stress);
               }
+
+            plastic_out->cohesions[i] = MaterialUtilities::average_value(volume_fractions, composition_cohesions, viscosity_averaging);
+            // Also convert radians to degrees
+            plastic_out->friction_angles[i] = 180.0 / numbers::PI * MaterialUtilities::average_value(volume_fractions, composition_friction_angles, MaterialUtilities::maximum_composition);
+            plastic_out->yield_stresses[i] = MaterialUtilities::average_value(volume_fractions, composition_yield_stresses, viscosity_averaging);
           }
       }
 
