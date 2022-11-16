@@ -21,8 +21,6 @@
 
 #include <aspect/material_model/rheology/strain_dependent.h>
 
-#include <deal.II/base/signaling_nan.h>
-#include <deal.II/base/parameter_handler.h>
 #include <aspect/utilities.h>
 #include <aspect/postprocess/particles.h>
 #include <aspect/particle/property/interface.h>
@@ -30,6 +28,9 @@
 
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/base/quadrature_lib.h>
+#include <deal.II/base/signaling_nan.h>
+#include <deal.II/base/parameter_handler.h>
+#include <deal.II/numerics/fe_field_function.h>
 
 namespace aspect
 {
@@ -462,10 +463,16 @@ namespace aspect
             }
             case fracture_healing:
             {
-              // Formula: APS_new = APS_current + delta_APS, where
-              // delta_APS = edot_ii*dt - recovery_rate*dt is the strain
-              // increment due to fracture strain healing. The recovery_rate
-              // is 1/fracture healing time. See Eq. 12 in Gerya (2013).
+              // Formula: APS_current = APS_old/(1+dt*fracture_recovery_rate)
+              // APS is the accumulated plastic strain.
+              // fracture_recovery_rate is 1/fracture healing time.
+              // Fracture healing time means a constant timescale of healing
+              // of the damaged rock or inactive fault (Buck et al., 2005)
+              // For simiplicity, here we assume that healed_strain is
+              //     healed strain = dt*fracture_recovery_rate*dt
+              // So, the increment of APS is
+              //     delta_APS = APS_current - APS_old
+              //               = APS_old/(1+heald_strain)-APS_old
               healed_strain = strain_healing_fracture_recovery_rate * this->get_timestep();
               break;
             }
@@ -521,7 +528,7 @@ namespace aspect
         // If strain weakening is used, overwrite the first reaction term,
         // which represents the second invariant of the (plastic) strain tensor.
         // If plastic strain is tracked (so not the total strain), only overwrite
-        // when plastically yielding.
+        // it when plastically yielding.
         // If viscous strain is also tracked, overwrite the second reaction term as well.
         // Calculate changes in strain and update the reaction terms
         if  (this->simulator_is_past_initialization() && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
@@ -535,34 +542,114 @@ namespace aspect
             // strain increment from current timestep
             double delta_e_ii = edot_ii*this->get_timestep();
 
-            // Adjusting strain values to account for strain healing
-            // without exceeding an unreasonable range
+            // Assign accumulated strain value according to active deformation mechanism
+
+            // Plastic strain
+            double delta_e_ii_plastic = 0.;
+            if (plastic_yielding == true)
+              delta_e_ii_plastic = delta_e_ii;
+
+            // Viscous strain
+            double delta_e_ii_viscous = 0.;
+            if (plastic_yielding == false)
+              delta_e_ii_viscous = delta_e_ii;
+
+            // Total strain
+            double delta_e_ii_total = delta_e_ii;
+
+            // Now account for strain healing
             if (healing_mechanism != no_healing)
               {
-                // Never heal more strain than exists
-                delta_e_ii -= calculate_strain_healing(in,i);
+                const double healed_strain = calculate_strain_healing(in,i);
+
+                delta_e_ii_plastic -= healed_strain;
+                delta_e_ii_viscous -= healed_strain;
+                delta_e_ii_total -= healed_strain;
               }
-            if (weakening_mechanism == plastic_weakening_with_plastic_strain_only && plastic_yielding == true)
-              out.reaction_terms[i][this->introspection().compositional_index_for_name("plastic_strain")] =
-                std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")]);
-            if (weakening_mechanism == viscous_weakening_with_viscous_strain_only && plastic_yielding == false)
-              out.reaction_terms[i][this->introspection().compositional_index_for_name("viscous_strain")] =
-                std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("viscous_strain")]);
+
+            // Assign incremental strain values to reaction terms
+            // First, obatain the old (plastic or viscous or total) strain 
+            // at the begining of the time step
+            std::vector<double> old_plastic_strain(in.n_evaluation_points());
+            std::vector<double> old_viscous_strain(in.n_evaluation_points());
+            std::vector<double> old_total_strain(in.n_evaluation_points());
+            std::vector<double> old_noninitial_plastic_strain(in.n_evaluation_points());
+            // Prepare the field function
+#if DEAL_II_VERSION_GTE(9,4,0)
+            Functions::FEFieldFunction<dim, LinearAlgebra::BlockVector>
+#else
+            Functions::FEFieldFunction<dim, DoFHandler<dim>, LinearAlgebra::BlockVector>
+#endif
+            fe_value(this->get_dof_handler(), this->get_old_solution(), this->get_mapping());
+            
+            fe_value.set_active_cell(in.current_cell);
+
+            if (weakening_mechanism == plastic_weakening_with_plastic_strain_only)
+              {
+                const unsigned int plastic_strain_idx = this->introspection().compositional_index_for_name("plastic_strain");
+                fe_value.value_list(in.position,
+                                    old_plastic_strain,
+                                    this->introspection().component_indices.compositional_fields[plastic_strain_idx]);
+                if (healing_mechanism == fracture_healing && plastic_yielding == true)
+                  {
+                    // TODO: fracture healing from viscous strain or total strain
+                    // Currently, we only consider that the fracture healing process
+                    // depends on the accumulated plastic strain (APS).
+                    // The APS  increment delta_APS = APS_current - APS_old
+                    //                              = APS_old/(1+heald_strain)-APS_old
+                    const double fracture_healing = calculate_strain_healing(in,i);                  
+                    delta_e_ii_plastic = old_plastic_strain[i]/(1+fracture_healing)-old_plastic_strain[i];
+                  }
+
+                out.reaction_terms[i][plastic_strain_idx] = std::max(delta_e_ii_plastic, -old_plastic_strain[i]);
+              }
+            if (weakening_mechanism == viscous_weakening_with_viscous_strain_only)
+              {
+                const unsigned int viscous_strain_idx = this->introspection().compositional_index_for_name("viscous_strain");
+                fe_value.value_list(in.position,
+                                    old_viscous_strain,
+                                    this->introspection().component_indices.compositional_fields[viscous_strain_idx]);
+                out.reaction_terms[i][viscous_strain_idx] = std::max(delta_e_ii_viscous, -old_viscous_strain[i]);
+              }
             if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
-              out.reaction_terms[i][this->introspection().compositional_index_for_name("total_strain")] =
-                std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("total_strain")]);
+              {
+                const unsigned int total_strain_idx = this->introspection().compositional_index_for_name("total_strain");
+                fe_value.value_list(in.position,
+                                    old_total_strain,
+                                    this->introspection().component_indices.compositional_fields[total_strain_idx]);
+                out.reaction_terms[i][total_strain_idx] = std::max(delta_e_ii_total, -old_total_strain[i]);
+              }
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
               {
-                if (plastic_yielding == true)
-                  out.reaction_terms[i][this->introspection().compositional_index_for_name("plastic_strain")] =
-                    std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")]);
-                else
-                  out.reaction_terms[i][this->introspection().compositional_index_for_name("viscous_strain")] =
-                    std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("viscous_strain")]);
+                const unsigned int viscous_strain_idx = this->introspection().compositional_index_for_name("viscous_strain");
+                const unsigned int plastic_strain_idx = this->introspection().compositional_index_for_name("plastic_strain");
+                fe_value.value_list(in.position,
+                                    old_plastic_strain,
+                                    this->introspection().component_indices.compositional_fields[plastic_strain_idx]);                
+                fe_value.value_list(in.position,
+                                    old_viscous_strain,
+                                    this->introspection().component_indices.compositional_fields[viscous_strain_idx]);
+                out.reaction_terms[i][viscous_strain_idx] = std::max(delta_e_ii_viscous, -old_viscous_strain[i]);
+                out.reaction_terms[i][plastic_strain_idx] = std::max(delta_e_ii_plastic, -old_plastic_strain[i]);
               }
-            if (this->introspection().compositional_name_exists("noninitial_plastic_strain") && plastic_yielding == true)
-              out.reaction_terms[i][this->introspection().compositional_index_for_name("noninitial_plastic_strain")] =
-                std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("noninitial_plastic_strain")]);
+            if (this->introspection().compositional_name_exists("noninitial_plastic_strain"))
+              {
+                const unsigned int noninitial_plastic_strain_idx = this->introspection().compositional_index_for_name("noninitial_plastic_strain");
+                fe_value.value_list(in.position,
+                                    old_noninitial_plastic_strain,
+                                    this->introspection().component_indices.compositional_fields[noninitial_plastic_strain_idx]);
+                if (healing_mechanism == fracture_healing && plastic_yielding == true)
+                  {
+                    // TODO: fracture healing from viscous strain or total strain
+                    // Currently, we only consider that the fracture healing process
+                    // depends on the accumulated plastic strain (APS).
+                    // The APS  increment delta_APS = APS_current - APS_old
+                    //                              = APS_old/(1+heald_strain)-APS_old
+                    const double fracture_healing = calculate_strain_healing(in,i);                  
+                    delta_e_ii_plastic = old_noninitial_plastic_strain[i]/(1+fracture_healing)-old_noninitial_plastic_strain[i];
+                  }
+                out.reaction_terms[i][noninitial_plastic_strain_idx] = std::max(delta_e_ii_plastic, -old_noninitial_plastic_strain[i]);
+              }
           }
       }
 
