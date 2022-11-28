@@ -463,13 +463,13 @@ namespace aspect
             }
             case fracture_healing:
             {
-              // Formula: APS_current = APS_old/(1+dt*fracture_recovery_rate)
+              // Formula: APS_current = APS_old/(1+fracture_recovery_rate*dt)
               // APS is the accumulated plastic strain.
               // fracture_recovery_rate is 1/fracture healing time.
               // Fracture healing time means a constant timescale of healing
               // of the damaged rock or inactive fault (Buck et al., 2005)
               // For simiplicity, here we assume that healed_strain is
-              //     healed strain = dt*fracture_recovery_rate*dt
+              //     healed strain = fracture_recovery_rate*dt
               // So, the increment of APS is
               //     delta_APS = APS_current - APS_old
               //               = APS_old/(1+heald_strain)-APS_old
@@ -558,7 +558,7 @@ namespace aspect
             double delta_e_ii_total = delta_e_ii;
 
             // Now account for strain healing
-            if (healing_mechanism != no_healing)
+            if (healing_mechanism == temperature_dependent)
               {
                 const double healed_strain = calculate_strain_healing(in,i);
 
@@ -574,22 +574,11 @@ namespace aspect
             std::vector<double> old_viscous_strain(in.n_evaluation_points());
             std::vector<double> old_total_strain(in.n_evaluation_points());
             std::vector<double> old_noninitial_plastic_strain(in.n_evaluation_points());
-            // Prepare the field function
-#if DEAL_II_VERSION_GTE(9,4,0)
-            Functions::FEFieldFunction<dim, LinearAlgebra::BlockVector>
-#else
-            Functions::FEFieldFunction<dim, DoFHandler<dim>, LinearAlgebra::BlockVector>
-#endif
-            fe_value(this->get_dof_handler(), this->get_old_solution(), this->get_mapping());
-            
-            fe_value.set_active_cell(in.current_cell);
 
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_only)
               {
                 const unsigned int plastic_strain_idx = this->introspection().compositional_index_for_name("plastic_strain");
-                fe_value.value_list(in.position,
-                                    old_plastic_strain,
-                                    this->introspection().component_indices.compositional_fields[plastic_strain_idx]);
+                old_plastic_strain = aspect::Utilities::evaluate_advection_solution(this->get_dof_handler(), this->get_mapping(), this->get_old_solution(),this->introspection().component_indices.compositional_fields[plastic_strain_idx], in.current_cell, in.position);
                 if (healing_mechanism == fracture_healing && plastic_yielding == true)
                   {
                     // TODO: fracture healing from viscous strain or total strain
@@ -606,38 +595,28 @@ namespace aspect
             if (weakening_mechanism == viscous_weakening_with_viscous_strain_only)
               {
                 const unsigned int viscous_strain_idx = this->introspection().compositional_index_for_name("viscous_strain");
-                fe_value.value_list(in.position,
-                                    old_viscous_strain,
-                                    this->introspection().component_indices.compositional_fields[viscous_strain_idx]);
+                old_viscous_strain = aspect::Utilities::evaluate_advection_solution(this->get_dof_handler(), this->get_mapping(), this->get_old_solution(),this->introspection().component_indices.compositional_fields[viscous_strain_idx], in.current_cell, in.position);
                 out.reaction_terms[i][viscous_strain_idx] = std::max(delta_e_ii_viscous, -old_viscous_strain[i]);
               }
             if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
               {
                 const unsigned int total_strain_idx = this->introspection().compositional_index_for_name("total_strain");
-                fe_value.value_list(in.position,
-                                    old_total_strain,
-                                    this->introspection().component_indices.compositional_fields[total_strain_idx]);
+                old_total_strain = aspect::Utilities::evaluate_advection_solution(this->get_dof_handler(), this->get_mapping(), this->get_old_solution(),this->introspection().component_indices.compositional_fields[total_strain_idx], in.current_cell, in.position);
                 out.reaction_terms[i][total_strain_idx] = std::max(delta_e_ii_total, -old_total_strain[i]);
               }
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
               {
                 const unsigned int viscous_strain_idx = this->introspection().compositional_index_for_name("viscous_strain");
                 const unsigned int plastic_strain_idx = this->introspection().compositional_index_for_name("plastic_strain");
-                fe_value.value_list(in.position,
-                                    old_plastic_strain,
-                                    this->introspection().component_indices.compositional_fields[plastic_strain_idx]);                
-                fe_value.value_list(in.position,
-                                    old_viscous_strain,
-                                    this->introspection().component_indices.compositional_fields[viscous_strain_idx]);
+                old_plastic_strain = aspect::Utilities::evaluate_advection_solution(this->get_dof_handler(), this->get_mapping(), this->get_old_solution(),this->introspection().component_indices.compositional_fields[plastic_strain_idx], in.current_cell, in.position);
+                old_viscous_strain = aspect::Utilities::evaluate_advection_solution(this->get_dof_handler(), this->get_mapping(), this->get_old_solution(),this->introspection().component_indices.compositional_fields[viscous_strain_idx], in.current_cell, in.position);          
                 out.reaction_terms[i][viscous_strain_idx] = std::max(delta_e_ii_viscous, -old_viscous_strain[i]);
                 out.reaction_terms[i][plastic_strain_idx] = std::max(delta_e_ii_plastic, -old_plastic_strain[i]);
               }
             if (this->introspection().compositional_name_exists("noninitial_plastic_strain"))
               {
                 const unsigned int noninitial_plastic_strain_idx = this->introspection().compositional_index_for_name("noninitial_plastic_strain");
-                fe_value.value_list(in.position,
-                                    old_noninitial_plastic_strain,
-                                    this->introspection().component_indices.compositional_fields[noninitial_plastic_strain_idx]);
+                old_noninitial_plastic_strain = aspect::Utilities::evaluate_advection_solution(this->get_dof_handler(), this->get_mapping(), this->get_old_solution(),this->introspection().component_indices.compositional_fields[noninitial_plastic_strain_idx], in.current_cell, in.position);
                 if (healing_mechanism == fracture_healing && plastic_yielding == true)
                   {
                     // TODO: fracture healing from viscous strain or total strain
