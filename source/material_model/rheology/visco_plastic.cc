@@ -39,20 +39,19 @@ namespace aspect
         std::vector<std::string> names;
         names.emplace_back("current_cohesions");
         names.emplace_back("current_friction_angles");
+        names.emplace_back("current_yield_stresses");
         names.emplace_back("plastic_yielding");
         return names;
       }
     }
 
-
-
     template <int dim>
-    PlasticAdditionalOutputs<dim>::PlasticAdditionalOutputs (const unsigned int n_points)
-      :
-      NamedAdditionalMaterialOutputs<dim>(make_plastic_additional_outputs_names()),
-      cohesions(n_points, numbers::signaling_nan<double>()),
-      friction_angles(n_points, numbers::signaling_nan<double>()),
-      yielding(n_points, numbers::signaling_nan<double>())
+    PlasticAdditionalOutputs<dim>::PlasticAdditionalOutputs(const unsigned int n_points)
+      : NamedAdditionalMaterialOutputs<dim>(make_plastic_additional_outputs_names()),
+        cohesions(n_points, numbers::signaling_nan<double>()),
+        friction_angles(n_points, numbers::signaling_nan<double>()),
+        yield_stresses(n_points, numbers::signaling_nan<double>()),
+        yielding(n_points, numbers::signaling_nan<double>())
     {}
 
 
@@ -61,7 +60,7 @@ namespace aspect
     std::vector<double>
     PlasticAdditionalOutputs<dim>::get_nth_output(const unsigned int idx) const
     {
-      AssertIndexRange (idx, 3);
+      AssertIndexRange (idx, 4);
       switch (idx)
         {
           case 0:
@@ -71,6 +70,9 @@ namespace aspect
             return friction_angles;
 
           case 2:
+            return yield_stresses;
+
+          case 3:
             return yielding;
 
           default:
@@ -98,7 +100,7 @@ namespace aspect
                                        const unsigned int i,
                                        const std::vector<double> &volume_fractions,
                                        const std::vector<double> &phase_function_values,
-                                       const std::vector<unsigned int> &n_phases_per_composition) const
+                                       const std::vector<unsigned int> &n_phase_transitions_per_composition) const
       {
         IsostrainViscosities output_parameters;
 
@@ -106,6 +108,7 @@ namespace aspect
         output_parameters.composition_yielding.resize(volume_fractions.size(), false);
         output_parameters.composition_viscosities.resize(volume_fractions.size(), numbers::signaling_nan<double>());
         output_parameters.current_friction_angles.resize(volume_fractions.size(), numbers::signaling_nan<double>());
+        output_parameters.current_cohesions.resize(volume_fractions.size(), numbers::signaling_nan<double>());
 
         // Assemble stress tensor if elastic behavior is enabled
         SymmetricTensor<2,dim> stress_old = numbers::signaling_nan<SymmetricTensor<2,dim>>();
@@ -163,7 +166,7 @@ namespace aspect
                    ?
                    diffusion_creep.compute_viscosity(pressure_for_creep, temperature_for_viscosity, j,
                                                      phase_function_values,
-                                                     n_phases_per_composition)
+                                                     n_phase_transitions_per_composition)
                    :
                    numbers::signaling_nan<double>());
 
@@ -173,7 +176,7 @@ namespace aspect
                    ?
                    dislocation_creep.compute_viscosity(edot_ii, pressure_for_creep, temperature_for_viscosity, j,
                                                        phase_function_values,
-                                                       n_phases_per_composition)
+                                                       n_phase_transitions_per_composition)
                    :
                    numbers::signaling_nan<double>());
 
@@ -213,7 +216,7 @@ namespace aspect
                 {
                   const double viscosity_peierls = peierls_creep->compute_viscosity(edot_ii, pressure_for_creep, temperature_for_viscosity, j,
                                                                                     phase_function_values,
-                                                                                    n_phases_per_composition);
+                                                                                    n_phase_transitions_per_composition);
                   viscosity_pre_yield = (viscosity_pre_yield * viscosity_peierls) / (viscosity_pre_yield + viscosity_peierls);
                 }
             }
@@ -263,7 +266,7 @@ namespace aspect
             // Step 4a: calculate strain-weakened friction and cohesion
             const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
                                                                       phase_function_values,
-                                                                      n_phases_per_composition);
+                                                                      n_phase_transitions_per_composition);
             const double current_cohesion = drucker_prager_parameters.cohesion * weakening_factors[0];
             double current_friction = drucker_prager_parameters.angle_internal_friction * weakening_factors[1];
 
@@ -277,6 +280,7 @@ namespace aspect
                                                                       current_friction,
                                                                       in.position[i]);
             output_parameters.current_friction_angles[j] = current_friction;
+            output_parameters.current_cohesions[j] = current_cohesion;
 
             // Step 5: plastic yielding
 
@@ -333,14 +337,14 @@ namespace aspect
             // Step 6: limit the viscosity with specified minimum and maximum bounds
             const double maximum_viscosity_for_composition = MaterialModel::MaterialUtilities::phase_average_value(
                                                                phase_function_values,
-                                                               n_phases_per_composition,
+                                                               n_phase_transitions_per_composition,
                                                                maximum_viscosity,
                                                                j,
                                                                MaterialModel::MaterialUtilities::PhaseUtilities::logarithmic
                                                              );
             const double minimum_viscosity_for_composition = MaterialModel::MaterialUtilities::phase_average_value(
                                                                phase_function_values,
-                                                               n_phases_per_composition,
+                                                               n_phase_transitions_per_composition,
                                                                minimum_viscosity,
                                                                j,
                                                                MaterialModel::MaterialUtilities::PhaseUtilities::logarithmic
@@ -361,7 +365,7 @@ namespace aspect
                                     const MaterialModel::MaterialModelInputs<dim> &in,
                                     MaterialModel::MaterialModelOutputs<dim> &out,
                                     const std::vector<double> &phase_function_values,
-                                    const std::vector<unsigned int> &n_phases_per_composition) const
+                                    const std::vector<unsigned int> &n_phase_transitions_per_composition) const
       {
         MaterialModel::MaterialModelDerivatives<dim> *derivatives =
           out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>();
@@ -399,7 +403,7 @@ namespace aspect
 
                 std::vector<double> eta_component =
                   calculate_isostrain_viscosities(in_derivatives, i, volume_fractions,
-                                                  phase_function_values, n_phases_per_composition).composition_viscosities;
+                                                  phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
                 // For each composition of the independent component, compute the derivative.
                 for (unsigned int composition_index = 0; composition_index < eta_component.size(); ++composition_index)
@@ -426,7 +430,7 @@ namespace aspect
 
             const std::vector<double> viscosity_difference =
               calculate_isostrain_viscosities(in_derivatives, i, volume_fractions,
-                                              phase_function_values, n_phases_per_composition).composition_viscosities;
+                                              phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
             for (unsigned int composition_index = 0; composition_index < viscosity_difference.size(); ++composition_index)
               {
@@ -607,9 +611,6 @@ namespace aspect
         // Retrieve the list of composition names
         const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
 
-        // increment by one for background:
-        const unsigned int n_fields = this->n_compositional_fields() + 1;
-
         strain_rheology.initialize_simulator (this->get_simulator());
         strain_rheology.parse_parameters(prm);
 
@@ -710,9 +711,10 @@ namespace aspect
         drucker_prager_plasticity.parse_parameters(prm, expected_n_phases_per_composition);
 
         // Stress limiter parameter
-        exponents_stress_limiter  = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Stress limiter exponents"))),
-                                                                            n_fields,
-                                                                            "Stress limiter exponents");
+        exponents_stress_limiter = Utilities::parse_map_to_double_array (prm.get("Stress limiter exponents"),
+                                                                         list_of_composition_names,
+                                                                         has_background_field,
+                                                                         "Stress limiter exponents");
 
         // Include an adiabat temperature gradient in flow laws
         adiabatic_temperature_gradient_for_viscosity = prm.get_double("Adiabat temperature gradient for viscosity");
@@ -738,8 +740,6 @@ namespace aspect
           }
       }
 
-
-
       template <int dim>
       void
       ViscoPlastic<dim>::
@@ -748,32 +748,41 @@ namespace aspect
                            const bool plastic_yielding,
                            const MaterialModel::MaterialModelInputs<dim> &in,
                            MaterialModel::MaterialModelOutputs<dim> &out,
-                           const std::vector<double> &phase_function_values,
-                           const std::vector<unsigned int> &n_phases_per_composition) const
+                           const IsostrainViscosities &isostrain_viscosities) const
       {
         PlasticAdditionalOutputs<dim> *plastic_out = out.template get_additional_output<PlasticAdditionalOutputs<dim>>();
 
         if (plastic_out != nullptr)
           {
+            AssertThrow(in.requests_property(MaterialProperties::viscosity),
+                        ExcMessage("The PlasticAdditionalOutputs cannot be filled when the viscosity has not been computed."));
+
             plastic_out->cohesions[i] = 0;
             plastic_out->friction_angles[i] = 0;
+            plastic_out->yield_stresses[i] = 0;
             plastic_out->yielding[i] = plastic_yielding ? 1 : 0;
 
-            const std::vector<double> friction_angles_RAD = calculate_isostrain_viscosities(in, i, volume_fractions,
-                                                                                            phase_function_values,
-                                                                                            n_phases_per_composition).current_friction_angles;
+            const std::vector<double> friction_angles_RAD = isostrain_viscosities.current_friction_angles;
+            const std::vector<double> cohesions = isostrain_viscosities.current_cohesions;
 
-            // set to weakened values, or unweakened values when strain weakening is not used
-            for (unsigned int j=0; j < volume_fractions.size(); ++j)
+            // The max yield stress is the same for each composition, so we give the 0th field value.
+            const double max_yield_stress = drucker_prager_plasticity.compute_drucker_prager_parameters(0).max_yield_stress;
+
+            double pressure_for_plasticity = in.pressure[i];
+            if (allow_negative_pressures_in_plasticity == false)
+              pressure_for_plasticity = std::max(in.pressure[i], 0.0);
+
+            // average over the volume volume fractions
+            for (unsigned int j = 0; j < volume_fractions.size(); ++j)
               {
-                // Calculate the strain weakening factors and weakened values
-                const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
-                const DruckerPragerParameters drucker_prager_parameters = drucker_prager_plasticity.compute_drucker_prager_parameters(j,
-                                                                          phase_function_values,
-                                                                          n_phases_per_composition);
-                plastic_out->cohesions[i]   += volume_fractions[j] * (drucker_prager_parameters.cohesion * weakening_factors[0]);
+                plastic_out->cohesions[i]   += volume_fractions[j] * cohesions[j];
                 // Also convert radians to degrees
                 plastic_out->friction_angles[i] += 180.0/numbers::PI * volume_fractions[j] * friction_angles_RAD[j];
+                plastic_out->yield_stresses[i] += volume_fractions[j] * drucker_prager_plasticity.compute_yield_stress(cohesions[j],
+                                                  friction_angles_RAD[j],
+                                                  pressure_for_plasticity,
+                                                  max_yield_stress);
+
               }
           }
       }
