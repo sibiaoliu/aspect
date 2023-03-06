@@ -543,14 +543,35 @@ namespace aspect
                                             min_strain_rate);
             // strain increment from current timestep
             double delta_e_ii = edot_ii*this->get_timestep();
+            // MAKE A TEST TO CALL CURRENT STRAIN
+            // // current extrapolate strain: either accumulated plastic strain or total strain
+            // double current_e_ii = 0.0;
+            // if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
+            //   current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("total_strain")];
+            // else if (weakening_mechanism == plastic_weakening_with_plastic_strain_only || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
+            //   current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")];
+            // else
+            //   AssertThrow(false, ExcNotImplemented());
 
             // Adjusting strain values to account for strain healing
             // without exceeding an unreasonable range
-            if (healing_mechanism != no_healing)
+            if (healing_mechanism == temperature_dependent)
               {
                 // Never heal more strain than exists
                 delta_e_ii -= calculate_strain_healing(in,i);
               }
+            if (healing_mechanism == fracture_healing)
+              {
+                // new strain increment due to fracture healing
+                // Note that the strain healing mechanism is not used
+                // for the first timestep.
+                //if (this->get_timestep_number() == 1)
+                //  delta_e_ii += 0.0;
+                //else
+                  // delta_e_ii += current_e_ii / (calculate_strain_healing(in,i)+1.0) - current_e_ii - edot_ii*this->get_timestep();
+                delta_e_ii -= calculate_strain_healing(in,i);                  
+              }
+
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_only && plastic_yielding == true)
               out.reaction_terms[i][this->introspection().compositional_index_for_name("plastic_strain")] =
                 std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")]);

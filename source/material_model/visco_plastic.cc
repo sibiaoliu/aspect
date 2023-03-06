@@ -266,18 +266,20 @@ namespace aspect
                       current_T_cooling += volume_fractions[j] * T_cooling[j];
                       current_D_cooling += volume_fractions[j] * D_cooling[j];
                     }
-
                   //Enhanced thermal conductivity due to hydrothermal circulation
                   //at the given positions where the temperature is not greater
                   //than cut-off temperature.
                   // Note that the unit of the temperature used in the smoothing
                   // part is Celcius, instead of the default unit Kelvin.                  
                   const double point_depth = this->get_geometry_model().depth(in.position[i]);
-                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 - (in.temperature[i]-273) / (current_T_cooling-273) - point_depth / current_D_cooling));
-                  if (current_A_smoothing == 0.0 && in.temperature[i]<= current_T_cooling)
-                    out.thermal_conductivities[i] = current_thermal_conductivity * current_Nusselt_number;
-                  else if (current_A_smoothing == 0.0 && in.temperature[i]> current_T_cooling)
+                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 - std::max((in.temperature[i]-273),0) / (current_T_cooling-273) - point_depth / current_D_cooling));
+                  if (current_A_smoothing == 0.0)
+                    {
+                      if (in.temperature[i]<= current_T_cooling && point_depth <= current_D_cooling)
+                        out.thermal_conductivities[i] = current_thermal_conductivity * current_Nusselt_number;
+                      else
                         out.thermal_conductivities[i] = current_thermal_conductivity;
+                    }
                   else
                     out.thermal_conductivities[i] = current_thermal_conductivity * (1 + (current_Nusselt_number - 1.0) * smoothing_part);
                 }
