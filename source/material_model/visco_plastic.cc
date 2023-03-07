@@ -454,7 +454,7 @@ namespace aspect
           thermal_conductivities = Utilities::parse_map_to_double_array (prm.get("Thermal conductivities"),
                                                                         list_of_composition_names,
                                                                         has_background_field,
-                                                                        "Thermal diffusivities");
+                                                                        "Thermal conductivities");
           define_hydrothermal_circulation = prm.get_bool ("Define hydrothermal circulation");
           Nusselt_number = Utilities::parse_map_to_double_array (prm.get("Nusselt numbers"),
                                                                         list_of_composition_names,

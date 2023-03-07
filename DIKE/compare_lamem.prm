@@ -80,15 +80,15 @@ end
 ##################### Compositional Fields ############
 
 subsection Compositional fields
-  set Number of fields      = 6
-  set Names of fields       = ve_stress_xx, ve_stress_yy, ve_stress_xy, plastic_strain, oceanic_crust, lithosphere
+  set Number of fields      = 5
+  set Names of fields       = ve_stress_xx, ve_stress_yy, ve_stress_xy, plastic_strain, melt_dike
 end
 
 subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      =x,y
-    set Function expression = 0;0;0;0; if(y>=16e3, 1, 0); if(y<16e3, 1, 0)
+    set Function expression = 0;0;0;0; if(y>=16e3, 1, 0)
   end
 end
 
@@ -100,14 +100,20 @@ end
 ##################### Velocity ########################
 
 subsection Boundary velocity model
-  set Prescribed velocity boundary indicators = left x :function, \
-                                                right x :function, \
-                                                bottom y :function
+  set Prescribed velocity boundary indicators = left: function, right: function
   subsection Function 
     set Variable names      = x,y
     set Function constants  = cm=0.01, year=1
-    set Function expression = if(x<0, -2*cm/year, 2*cm/year); 0.95*cm/year
+    set Function expression = if(x<0, -2*cm/year, 2*cm/year); 0
   end    
+end
+
+subsection Boundary traction model
+ set Prescribed traction boundary indicators = bottom:initial lithostatic pressure
+ subsection Initial lithostatic pressure
+   set Number of integration points = 1000
+   set Representative point         = 40e3, 20e3
+ end
 end
 
 # Advecting the free surface vertically rather than
@@ -121,9 +127,8 @@ subsection Mesh deformation
     set Free surface stabilization theta = 1.0
   end
   subsection Diffusion
-  # Time_diff (=CFL * dxyz_min^2 / kappa) should be greater than numerical dt
-    set Hillslope transport coefficient = 0.25e-6
-    set Time steps between diffusion    = 2
+    set Hillslope transport coefficient = 1.584e-6
+    set Time steps between diffusion    = 1
   end
 end
 
@@ -170,6 +175,7 @@ end
 # to the Stokes equation. 
 subsection Formulation
   set Formulation = Boussinesq approximation
+  set Enable dike injection = true
   set Enable prescribed dilation = true
   set Enable elasticity = true
 end
@@ -201,9 +207,9 @@ subsection Material model
     set Thermal conductivities = 3.5
     set Define hydrothermal circulation = true
     set Nusselt numbers = 1
-    set Hydrothermal circulation reference temperatures = 873
-    set Hydrothermal circulation reference depths = 6e3
-    set Hydrothermal circulation smoothing factors = 0
+    set Hydrothermal circulation cutoff temperatures = 873
+    set Hydrothermal circulation cutoff depths = 6e3
+    set Hydrothermal circulation smoothing factors = 0.0
 
     # Choose to have the viscosity (pre-yield) follow a dislocation flow law.
     # O.C.: Maryland Diabase (Mackwell et al. 1998)
@@ -222,16 +228,16 @@ subsection Material model
     set Strain weakening mechanism  = plastic weakening with plastic strain only
     set Start plasticity strain weakening intervals = 0.01
     set End plasticity strain weakening intervals   = 0.2
-    set Cohesion strain weakening factors           = 1,1,1,1,1, 0.04, 0.04
+    set Cohesion strain weakening factors           = 1e-3
     set Maximum yield stress        = 1e9
     set Strain healing mechanism    = fracture healing
-    set Strain healing fracture recovery rate = 1.58e-13 #0.2 Ma - fault healing time
+    set Strain healing fracture recovery rate = 1.e-13 #0.32 Ma - fault healing time
 
     # Elasticity parameters
     set Include viscoelasticity     = true
     set Elastic shear moduli        = 40e9
-    set Use fixed elastic time step = true
-    set Fixed elastic time step     = 2e3
+    set Use fixed elastic time step = false
+    #set Fixed elastic time step     = 2e3
 
     end
 end
@@ -246,9 +252,8 @@ subsection Postprocess
 
     set Output format = vtu
     set Time between graphical output = 1e5
-    set Interpolate output = true
-    set Write higher order output = true  
     set Number of grouped files             = 1
+    set Point-wise stress and strain        = true
   end
   subsection Topography
     set Output to file                              = true
