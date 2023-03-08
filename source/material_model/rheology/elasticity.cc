@@ -415,7 +415,7 @@ namespace aspect
         // elastic part of the strain rate deviator. Note the parallels with the
         // viscous part of the strain rate deviator,
         // which is equal to 0.5 * stress / viscosity.
-        const SymmetricTensor<2,dim> edot_deviator = deviator(strain_rate) + 0.5*stress /
+        const SymmetricTensor<2,dim> edot_deviator = strain_rate + 0.5*stress /
                                                      calculate_elastic_viscosity(shear_modulus);
 
         return std::sqrt(std::max(-second_invariant(edot_deviator), 0.));

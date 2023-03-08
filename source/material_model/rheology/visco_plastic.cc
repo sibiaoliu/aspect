@@ -98,6 +98,7 @@ namespace aspect
       ViscoPlastic<dim>::
       calculate_isostrain_viscosities (const MaterialModel::MaterialModelInputs<dim> &in,
                                        const unsigned int i,
+                                       const std::vector<double> &dilation,
                                        const std::vector<double> &volume_fractions,
                                        const std::vector<double> &phase_function_values,
                                        const std::vector<unsigned int> &n_phase_transitions_per_composition) const
@@ -109,6 +110,7 @@ namespace aspect
         output_parameters.composition_viscosities.resize(volume_fractions.size(), numbers::signaling_nan<double>());
         output_parameters.current_friction_angles.resize(volume_fractions.size(), numbers::signaling_nan<double>());
         output_parameters.current_cohesions.resize(volume_fractions.size(), numbers::signaling_nan<double>());
+        // output_parameters.composition_current_edot_ii.resize(volume_fractions.size(), numbers::signaling_nan<double>());
 
         // Assemble stress tensor if elastic behavior is enabled
         SymmetricTensor<2,dim> stress_old = numbers::signaling_nan<SymmetricTensor<2,dim>>();
@@ -125,16 +127,32 @@ namespace aspect
                                               (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
 
         double edot_ii;
-        if (use_reference_strainrate)
-          edot_ii = ref_strain_rate;
-        else
-          // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
-          edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(in.strain_rate[i])), 0.)),
-                             min_strain_rate);
+        const double dike_removal = dilation[i];
+        std::cout << "dike strain rate : " << dike_removal << " 1/s \n" << std::endl;
 
         // Calculate viscosities for each of the individual compositional phases
         for (unsigned int j=0; j < volume_fractions.size(); ++j)
           {
+            // If dike injection is activate, remove its effect on the strain rate here
+            const SymmetricTensor<2, dim> strain_rate_current = in.strain_rate[i];
+            SymmetricTensor<2, dim> deviatoric_strain_rate_current = deviator(strain_rate_current);
+            if (this->get_parameters().enable_dike_injection == true)
+              {
+                deviatoric_strain_rate_current[0][0] += 2/3 * dike_removal;
+                deviatoric_strain_rate_current[1][1] -= 1/3 * dike_removal;
+                if (dim == 3)
+                  deviatoric_strain_rate_current[2][2] -= 1/3 * dike_removal;
+                    
+              }
+
+            // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
+            if (use_reference_strainrate)
+              edot_ii = ref_strain_rate;
+            else           
+              edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.)),
+                             min_strain_rate);
+            // output_parameters.composition_current_edot_ii[j] = edot_ii;
+
             // Step 1: viscous behavior
             double viscosity_pre_yield = numbers::signaling_nan<double>();
             {
@@ -247,7 +265,7 @@ namespace aspect
                     Assert(std::isfinite(in.strain_rate[i].norm()),
                            ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                                       "not filled by the caller."));
-                    const double viscoelastic_strain_rate_invariant = elastic_rheology.calculate_viscoelastic_strain_rate(in.strain_rate[i],
+                    const double viscoelastic_strain_rate_invariant = elastic_rheology.calculate_viscoelastic_strain_rate(deviatoric_strain_rate_current,
                                                                       stress_old,
                                                                       elastic_shear_moduli[j]);
 
@@ -369,6 +387,11 @@ namespace aspect
       {
         MaterialModel::MaterialModelDerivatives<dim> *derivatives =
           out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>();
+        // If the function of prescrbed dilation is on
+        MaterialModel::PrescribedPlasticDilation<dim>
+        *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
+                        ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
+                        : nullptr;          
 
         if (derivatives != nullptr)
           {
@@ -402,7 +425,7 @@ namespace aspect
                 in_derivatives.strain_rate[i] = strain_rate_difference;
 
                 std::vector<double> eta_component =
-                  calculate_isostrain_viscosities(in_derivatives, i, volume_fractions,
+                  calculate_isostrain_viscosities(in_derivatives, i, prescribed_dilation->dilation, volume_fractions,
                                                   phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
                 // For each composition of the independent component, compute the derivative.
@@ -429,7 +452,7 @@ namespace aspect
             in_derivatives.strain_rate[i] = in.strain_rate[i];
 
             const std::vector<double> viscosity_difference =
-              calculate_isostrain_viscosities(in_derivatives, i, volume_fractions,
+              calculate_isostrain_viscosities(in_derivatives, i, prescribed_dilation->dilation, volume_fractions,
                                               phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
             for (unsigned int composition_index = 0; composition_index < viscosity_difference.size(); ++composition_index)
@@ -518,6 +541,13 @@ namespace aspect
                            "List with as many components as active "
                            "compositional fields (material data is assumed to "
                            "be in order with the ordering of the fields). ");
+        // If the dike injecton function is on
+        prm.declare_entry ("Dike injection rates", "0.0",
+                           Patterns::List(Patterns::Double (0.)),
+                           "List of magmatc injection rates, if 'Enable dike injection' is true, "
+                           "for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "Units: \\si{\\per\\second}.");                           
 
         // Rheological parameters
         prm.declare_entry ("Viscosity averaging scheme", "harmonic",
@@ -624,6 +654,12 @@ namespace aspect
             elastic_rheology.initialize_simulator (this->get_simulator());
             elastic_rheology.parse_parameters(prm);
           }
+
+        // If the dike injecton function is on
+        dike_injection_rates = Utilities::parse_map_to_double_array (prm.get("Dike injection rates"),
+                                                                         list_of_composition_names,
+                                                                         has_background_field,
+                                                                         "Dike injection rates");
 
         // Reference and minimum/maximum values
         min_strain_rate = prm.get_double("Minimum strain rate");

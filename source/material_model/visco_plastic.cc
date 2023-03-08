@@ -57,8 +57,12 @@ namespace aspect
         = MaterialUtilities::compute_composition_fractions(composition,
                                                            rheology->get_volumetric_composition_mask());
 
+      std::vector<double> dike_injection_rates = volume_fractions;
+        for (unsigned int i=0; i < dike_injection_rates.size(); ++i)
+          dike_injection_rates[i] = 0.0;
+
       const IsostrainViscosities isostrain_viscosities
-        = rheology->calculate_isostrain_viscosities(in, i, volume_fractions);
+        = rheology->calculate_isostrain_viscosities(in, i, dike_injection_rates, volume_fractions);
 
       std::vector<double>::const_iterator max_composition
         = std::max_element(volume_fractions.begin(),volume_fractions.end());
@@ -79,6 +83,9 @@ namespace aspect
       Assert(in.n_evaluation_points() == 1, ExcInternalError());
 
       const std::vector<double> volume_fractions = MaterialUtilities::compute_composition_fractions(in.composition[0], rheology->get_volumetric_composition_mask());
+      std::vector<double> dike_injection_rates = volume_fractions;
+        for (unsigned int i=0; i < dike_injection_rates.size(); ++i)
+          dike_injection_rates[i] = 0.0;
 
       /* The following handles phases in a similar way as in the 'evaluate' function.
        * Results then enter the calculation of plastic yielding.
@@ -117,7 +124,7 @@ namespace aspect
       /* The following returns whether or not the material is plastically yielding
        * as documented in evaluate.
        */
-      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, dike_injection_rates, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
       std::vector<double>::const_iterator max_composition = std::max_element(volume_fractions.begin(), volume_fractions.end());
       const bool plastic_yielding = isostrain_viscosities.composition_yielding[std::distance(volume_fractions.begin(), max_composition)];
@@ -196,12 +203,18 @@ namespace aspect
           IsostrainViscosities isostrain_viscosities;
           if (in.requests_property(MaterialProperties::viscosity))
             {
+              // If the function of prescrbed dilation is on
+              MaterialModel::PrescribedPlasticDilation<dim>
+              *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
+                             ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
+                             : nullptr;
+
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
               // TODO: This is only consistent with viscosity averaging if the arithmetic averaging
               // scheme is chosen. It would be useful to have a function to calculate isostress viscosities.
               isostrain_viscosities =
-                rheology->calculate_isostrain_viscosities(in, i, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+                rheology->calculate_isostrain_viscosities(in, i, prescribed_dilation->dilation, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
               // The isostrain condition implies that the viscosity averaging should be arithmetic (see above).
               // We have given the user freedom to apply alternative bounds, because in diffusion-dominated
@@ -272,7 +285,7 @@ namespace aspect
                   // Note that the unit of the temperature used in the smoothing
                   // part is Celcius, instead of the default unit Kelvin.                  
                   const double point_depth = this->get_geometry_model().depth(in.position[i]);
-                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 - std::max((in.temperature[i]-273),0) / (current_T_cooling-273) - point_depth / current_D_cooling));
+                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 - (in.temperature[i]-273) / (current_T_cooling-273) - point_depth / current_D_cooling));
                   if (current_A_smoothing == 0.0)
                     {
                       if (in.temperature[i]<= current_T_cooling && point_depth <= current_D_cooling)

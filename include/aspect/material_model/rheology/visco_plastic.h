@@ -132,6 +132,7 @@ namespace aspect
           IsostrainViscosities
           calculate_isostrain_viscosities ( const MaterialModel::MaterialModelInputs<dim> &in,
                                             const unsigned int i,
+                                            const std::vector<double> &dilation,
                                             const std::vector<double> &volume_fractions,
                                             const std::vector<double> &phase_function_values = std::vector<double>(),
                                             const std::vector<unsigned int> &n_phase_transitions_per_composition =
@@ -204,6 +205,12 @@ namespace aspect
            * Minimum strain rate used to stabilize the strain rate dependent rheology.
            */
           double min_strain_rate;
+
+          /**
+           * List of magma injection rates via the dike
+           * Note that 'Enable dike injection' should be on.
+           */
+          std::vector<double> dike_injection_rates;
 
           /**
            * Enumeration for selecting which viscosity averaging scheme to use.
