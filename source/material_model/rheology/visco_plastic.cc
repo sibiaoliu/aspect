@@ -98,7 +98,7 @@ namespace aspect
       ViscoPlastic<dim>::
       calculate_isostrain_viscosities (const MaterialModel::MaterialModelInputs<dim> &in,
                                        const unsigned int i,
-                                       const std::vector<double> &dilation,
+                                       const unsigned int dike_injection_rate,
                                        const std::vector<double> &volume_fractions,
                                        const std::vector<double> &phase_function_values,
                                        const std::vector<unsigned int> &n_phase_transitions_per_composition) const
@@ -126,33 +126,33 @@ namespace aspect
         const bool use_reference_strainrate = (this->get_timestep_number() == 0) &&
                                               (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
 
+        // If dike injection is activate, remove its effect on the strain rate here
+        const SymmetricTensor<2, dim> strain_rate_current = in.strain_rate[i];
+        SymmetricTensor<2, dim> deviatoric_strain_rate_current = deviator(strain_rate_current);
+        const double dike = 1.58444e-12;
+        std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << std::endl;
+        if (this->get_parameters().enable_dike_injection == true)
+          {
+            deviatoric_strain_rate_current[0][0] += 2.0 / 3.0 * dike; //dike_injection_rate;
+            deviatoric_strain_rate_current[1][1] -= 1.0 / 3.0 * dike; //dike_injection_rate;
+            if (dim == 3)
+              deviatoric_strain_rate_current[2][2] -= 1.0 / 3.0 * dike; //dike_injection_rate;
+                    
+          }
+        std::cout << "NEW Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "NEW Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << std::endl;  
+        
         double edot_ii;
-        const double dike_removal = dilation[i];
-        std::cout << "dike strain rate : " << dike_removal << " 1/s \n" << std::endl;
+        // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
+        if (use_reference_strainrate)
+          edot_ii = ref_strain_rate;
+        else           
+          edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.)),
+                             min_strain_rate);
+        // output_parameters.composition_current_edot_ii[j] = edot_ii;
 
         // Calculate viscosities for each of the individual compositional phases
         for (unsigned int j=0; j < volume_fractions.size(); ++j)
           {
-            // If dike injection is activate, remove its effect on the strain rate here
-            const SymmetricTensor<2, dim> strain_rate_current = in.strain_rate[i];
-            SymmetricTensor<2, dim> deviatoric_strain_rate_current = deviator(strain_rate_current);
-            if (this->get_parameters().enable_dike_injection == true)
-              {
-                deviatoric_strain_rate_current[0][0] += 2/3 * dike_removal;
-                deviatoric_strain_rate_current[1][1] -= 1/3 * dike_removal;
-                if (dim == 3)
-                  deviatoric_strain_rate_current[2][2] -= 1/3 * dike_removal;
-                    
-              }
-
-            // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
-            if (use_reference_strainrate)
-              edot_ii = ref_strain_rate;
-            else           
-              edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.)),
-                             min_strain_rate);
-            // output_parameters.composition_current_edot_ii[j] = edot_ii;
-
             // Step 1: viscous behavior
             double viscosity_pre_yield = numbers::signaling_nan<double>();
             {
@@ -392,6 +392,11 @@ namespace aspect
         *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                         ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                         : nullptr;          
+        double dike_injection_rate;
+        if (this->get_timestep_number() == 0)
+          dike_injection_rate = 0.0;
+        else
+          dike_injection_rate = 1.58444e-12; //prescribed_dilation->dilation[i];
 
         if (derivatives != nullptr)
           {
@@ -425,7 +430,7 @@ namespace aspect
                 in_derivatives.strain_rate[i] = strain_rate_difference;
 
                 std::vector<double> eta_component =
-                  calculate_isostrain_viscosities(in_derivatives, i, prescribed_dilation->dilation, volume_fractions,
+                  calculate_isostrain_viscosities(in_derivatives, i, dike_injection_rate, volume_fractions,
                                                   phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
                 // For each composition of the independent component, compute the derivative.
@@ -452,7 +457,7 @@ namespace aspect
             in_derivatives.strain_rate[i] = in.strain_rate[i];
 
             const std::vector<double> viscosity_difference =
-              calculate_isostrain_viscosities(in_derivatives, i, prescribed_dilation->dilation, volume_fractions,
+              calculate_isostrain_viscosities(in_derivatives, i, dike_injection_rate, volume_fractions,
                                               phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
             for (unsigned int composition_index = 0; composition_index < viscosity_difference.size(); ++composition_index)

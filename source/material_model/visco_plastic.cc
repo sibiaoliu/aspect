@@ -57,12 +57,8 @@ namespace aspect
         = MaterialUtilities::compute_composition_fractions(composition,
                                                            rheology->get_volumetric_composition_mask());
 
-      std::vector<double> dike_injection_rates = volume_fractions;
-        for (unsigned int i=0; i < dike_injection_rates.size(); ++i)
-          dike_injection_rates[i] = 0.0;
-
       const IsostrainViscosities isostrain_viscosities
-        = rheology->calculate_isostrain_viscosities(in, i, dike_injection_rates, volume_fractions);
+        = rheology->calculate_isostrain_viscosities(in, i, 0.0, volume_fractions);
 
       std::vector<double>::const_iterator max_composition
         = std::max_element(volume_fractions.begin(),volume_fractions.end());
@@ -124,7 +120,7 @@ namespace aspect
       /* The following returns whether or not the material is plastically yielding
        * as documented in evaluate.
        */
-      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, dike_injection_rates, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, 0.0, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
       std::vector<double>::const_iterator max_composition = std::max_element(volume_fractions.begin(), volume_fractions.end());
       const bool plastic_yielding = isostrain_viscosities.composition_yielding[std::distance(volume_fractions.begin(), max_composition)];
@@ -208,13 +204,18 @@ namespace aspect
               *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                              : nullptr;
+              double dike_injection_rate;
+              if(this->get_timestep_number() == 0)
+                dike_injection_rate = 0.0;
+              else
+                dike_injection_rate = 1.58444e-12; // prescribed_dilation->dilation[i];
 
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
               // TODO: This is only consistent with viscosity averaging if the arithmetic averaging
               // scheme is chosen. It would be useful to have a function to calculate isostress viscosities.
               isostrain_viscosities =
-                rheology->calculate_isostrain_viscosities(in, i, prescribed_dilation->dilation, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+                rheology->calculate_isostrain_viscosities(in, i, dike_injection_rate, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
               // The isostrain condition implies that the viscosity averaging should be arithmetic (see above).
               // We have given the user freedom to apply alternative bounds, because in diffusion-dominated

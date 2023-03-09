@@ -132,7 +132,7 @@ namespace aspect
           IsostrainViscosities
           calculate_isostrain_viscosities ( const MaterialModel::MaterialModelInputs<dim> &in,
                                             const unsigned int i,
-                                            const std::vector<double> &dilation,
+                                            const unsigned int dike_injection_rate,
                                             const std::vector<double> &volume_fractions,
                                             const std::vector<double> &phase_function_values = std::vector<double>(),
                                             const std::vector<unsigned int> &n_phase_transitions_per_composition =
