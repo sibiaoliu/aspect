@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2021 - 2023 by the authors of the ASPECT code.
   This file is part of ASPECT.
   ASPECT is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -229,11 +229,6 @@ namespace aspect
       out.move_additional_outputs_from(base_output);
 
       // Start to add the additional RHS terms to Stokes equations.
-      MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>
-      *force = (this->get_parameters().enable_additional_stokes_rhs)
-               ? out.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >()
-               : nullptr;
-
       MaterialModel::PrescribedPlasticDilation<dim>
       *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
@@ -241,34 +236,23 @@ namespace aspect
 
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
-          // If "Enable additional Stokes RHS " is on, then the
-          // additional rhs term is added into the rhs of the mass eq.
-          if (force != nullptr)
-            {
-              for (unsigned int d=0; d < dim; ++d)
-                force->rhs_u[i][d] = 0;
-
-              // we get time passed as seconds (always) but may want
-              // to reinterpret it in years.
-              if (this->convert_output_to_years())
-                force->rhs_p[i] = -1.0 * injection_function.value(in.position[i]) / year_in_seconds;
-              else
-                force->rhs_p[i] = -1.0 * injection_function.value(in.position[i]);
-            }
-
           // If "Enable prescribed dilation" is on, then the injection rate
           // R (m/s or m/yr) is added to the rhs of the mass eq., i.e.,
           // -div(u,q) = -(R, q).
           // Meanwhile, the term - 2.0 / 3.0 * eta * (R, div v) is added to
           // the rhs of the momentum eq. (if the model is incompressible),
           // otherwise this term is already present on the left side.
-          if (prescribed_dilation != nullptr && this->get_parameters().enable_dike_injection)
+          if (prescribed_dilation != nullptr)
             {
               if (this->convert_output_to_years())
                 prescribed_dilation->dilation[i] = injection_function.value(in.position[i]) / year_in_seconds;
               else
                 prescribed_dilation->dilation[i] = injection_function.value(in.position[i]);
             }
+          // NOTE:
+          // If "Enable dike injection" is on, then the motion of dike injection
+          // is prescribed only in the hortizontal direction (x). 
+          // This is internally implemented in the stokes.cc and newton_stokes.cc files
 
           // Mimic the magmatic crust generation/accretion through the dike.
           // We use the compositional reaction term to implement this process.
@@ -278,40 +262,23 @@ namespace aspect
               // Lookup the injection area
               if (injection_function.value(in.position[i]) != 0.0)
                 {
-                  AssertThrow(this->introspection().compositional_name_exists("melt_dike"),
+                  AssertThrow(this->introspection().compositional_name_exists("injection_phase"),
                               ExcMessage("Material model prescribed dilation only works if there "
-                                         "is a compositional field called 'melt_dike'."));
+                                         "is a compositional field called 'injection_phase'."));
 
-                  if (c == this->introspection().compositional_index_for_name("melt_dike"))
+                  if (c == this->introspection().compositional_index_for_name("injection_phase"))
                     out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
                   
+                  // TODO: find a good way to avoid this user-defined compositional name
+                  if (c == this->introspection().compositional_index_for_name("mantle"))
+                    out.reaction_terms[i][c] = -1.0 * composition[c];
+
+                  // Do not allow the plastic deformation within the dike
                   if (c == this->introspection().compositional_index_for_name("plastic_strain"))
                     out.reaction_terms[i][c] = -1.0 * composition[c];
                 }
             }
         }
-
-      // Currently, the dike injection process assumes that the nonlinear solver
-      // scheme does a single advection iteration.
-      // TODO: allow iterated advection.
-      AssertThrow((this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_single_Stokes
-                   ||
-                   this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes
-                   ||
-                   this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes
-                   ||
-                   this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_iterated_defect_correction_Stokes),
-                  ExcMessage("The material model will only work with the nonlinear "
-                             "solver schemes 'single Advection, single Stokes', "
-                             "'single Advection, iterated Stokes', "
-                             "'single Advection, iterated Newton Stokes', and "
-                             "'single Advection, iterated defect correction Stokes' "
-                             "when prescribed dilation is enabled."));
-
     }
 
     template <int dim>
@@ -396,15 +363,6 @@ namespace aspect
       return base_model->is_compressible();
     }
 
-    // ref_eta is not used any more.
-    // template <int dim>
-    // double
-    // PrescribedDilation<dim>::
-    // reference_viscosity() const
-    // {
-    //   return true;
-    // }
-
     template <int dim>
     void
     PrescribedDilation<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
@@ -463,12 +421,6 @@ namespace aspect
                   ExcMessage ("Heating outputs need to have the same number of entries as the material "
                               "model inputs."));
 
-      const MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>
-      *force =
-        (this->get_parameters().enable_additional_stokes_rhs)
-        ? material_model_outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >()
-        : nullptr;
-
       const MaterialModel::PrescribedPlasticDilation<dim>
       *prescribed_dilation =
         (this->get_parameters().enable_prescribed_dilation)
@@ -482,9 +434,6 @@ namespace aspect
           heating_model_outputs.heating_source_terms[q] = 0.0;
           heating_model_outputs.lhs_latent_heat_terms[q] = 0.0;
           heating_model_outputs.rates_of_temperature_change[q] = 0.0;
-
-          if (force != nullptr)
-            heating_model_outputs.heating_source_terms[q] = -1.0 * force->rhs_p[q] * (latent_heat_of_crystallization + (temperature_of_injected_melt - material_model_inputs.temperature[q]) * material_model_outputs.densities[q] * material_model_outputs.specific_heat[q]);
 
           if (prescribed_dilation != nullptr)
             heating_model_outputs.heating_source_terms[q] = prescribed_dilation->dilation[q] * (latent_heat_of_crystallization + (temperature_of_injected_melt - material_model_inputs.temperature[q]) * material_model_outputs.densities[q] * material_model_outputs.specific_heat[q]);
@@ -505,7 +454,7 @@ namespace aspect
                              "The latent heat of crystallization that is released when material "
                              "is injected into the model. "
                              "Units: J/m$^3$.");
-          prm.declare_entry ("Temperature of injected melt", "1573",
+          prm.declare_entry ("Temperature of injected melt", "1473",
                              Patterns::Double(0),
                              "The temperature of the material injected into the model. "
                              "Units: K.");
