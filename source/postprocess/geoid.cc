@@ -113,7 +113,7 @@ namespace aspect
       std::vector<std::vector<double>>
       composition_values(this->n_compositional_fields(), std::vector<double>(quadrature_formula.size()));
 
-      // Directly do the global 3D integral over each quadrature point of every cell (different from traditional way to do layer integral).
+      // Directly do the global 3d integral over each quadrature point of every cell (different from traditional way to do layer integral).
       // This is necessary because of ASPECT's adaptive mesh refinement feature.
       std::vector<double> SH_density_coecos;
       std::vector<double> SH_density_coesin;
@@ -396,7 +396,7 @@ namespace aspect
       AssertThrow (Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>>(this->get_geometry_model())
                    &&
                    dim == 3,
-                   ExcMessage("The geoid postprocessor is currently only implemented for the 3D spherical shell geometry model."));
+                   ExcMessage("The geoid postprocessor is currently only implemented for the 3d spherical shell geometry model."));
 
       const GeometryModel::SphericalShell<dim> &geometry_model =
         Plugins::get_plugin_as_type<const GeometryModel::SphericalShell<dim>> (this->get_geometry_model());
@@ -751,12 +751,12 @@ namespace aspect
           for (unsigned int i=0; i<surface_cell_spherical_coordinates.size(); ++i)
             {
               // Transfer the spherical coordinates to geographical coordinates.
-              lat = 90. - surface_cell_spherical_coordinates.at(i).first*(180./numbers::PI);
+              lat = 90. - surface_cell_spherical_coordinates.at(i).first * constants::radians_to_degree;
               lon = (surface_cell_spherical_coordinates.at(i).second <= numbers::PI
                      ?
-                     surface_cell_spherical_coordinates.at(i).second*(180./numbers::PI)
+                     surface_cell_spherical_coordinates.at(i).second * constants::radians_to_degree
                      :
-                     surface_cell_spherical_coordinates.at(i).second*(180./numbers::PI) - 360.);
+                     surface_cell_spherical_coordinates.at(i).second * constants::radians_to_degree - 360.);
 
               // Write the solution to the stream output.
               output << lon
@@ -838,12 +838,12 @@ namespace aspect
               for (unsigned int i=0; i<surface_cell_spherical_coordinates.size(); ++i)
                 {
                   // Transfer the spherical coordinates to geographical coordinates.
-                  lat = 90. - surface_cell_spherical_coordinates.at(i).first*(180./numbers::PI);
+                  lat = 90. - surface_cell_spherical_coordinates.at(i).first * constants::radians_to_degree;
                   lon = (surface_cell_spherical_coordinates.at(i).second <= numbers::PI
                          ?
-                         surface_cell_spherical_coordinates.at(i).second*(180./numbers::PI)
+                         surface_cell_spherical_coordinates.at(i).second * constants::radians_to_degree
                          :
-                         surface_cell_spherical_coordinates.at(i).second*(180./numbers::PI) - 360.);
+                         surface_cell_spherical_coordinates.at(i).second * constants::radians_to_degree - 360.);
 
                   // Write the solution to the stream output.
                   output_gravity_anomaly << lon
@@ -1075,6 +1075,6 @@ namespace aspect
                                   "and based on the real surface from the geometry model in case "
                                   "of a free surface. The geoid is computed "
                                   "from a spherical harmonic expansion, so the geometry "
-                                  "of the domain must be a 3D spherical shell.")
+                                  "of the domain must be a 3d spherical shell.")
   }
 }

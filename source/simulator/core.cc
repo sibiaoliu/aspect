@@ -597,6 +597,8 @@ namespace aspect
 
     nonlinear_iteration = 0;
 
+    signals.start_timestep(*this);
+
     // Copy particle handler to restore particle location and properties
     // before repeating a timestep
     if (particle_world.get() != nullptr)
@@ -1687,12 +1689,28 @@ namespace aspect
       signals.pre_refinement_store_user_data(triangulation);
 
 
-      {
 
-      }
       exchange_refinement_flags();
 
       triangulation.prepare_coarsening_and_refinement();
+      bool any_flags_set = false;
+      {
+        for (const auto &cell:dof_handler.active_cell_iterators())
+          {
+            if (cell->refine_flag_set() || cell->coarsen_flag_set())
+              {
+                any_flags_set = true;
+                break;
+              }
+          }
+      }
+      const bool mesh_changed = Utilities::MPI::max(any_flags_set?1:0,mpi_communicator) == 1 ? true : false;
+      if (!mesh_changed)
+        {
+          pcout << "Skipping mesh refinement, because the mesh did not change.\n" << std::endl;
+          return;
+        }
+
       system_trans.prepare_for_coarsening_and_refinement(x_system);
 
       if (parameters.mesh_deformation_enabled)
@@ -1745,6 +1763,12 @@ namespace aspect
 
       constraints.distribute (old_distributed_system);
       old_solution = old_distributed_system;
+
+      // We need the current linearization point at the start of the new time step
+      // when we set the boundary conditions for advected fields (to determine parts
+      // of the boundary with outflow). Therefore, we here set it to the solution
+      // vector, but it will be reinitialized the next time the equations are solved.
+      current_linearization_point = distributed_system;
 
       // do the same as above, but for the mesh deformation solution
       if (parameters.mesh_deformation_enabled)

@@ -65,29 +65,45 @@ namespace aspect
     TwoMergedChunks<dim>::
     create_coarse_mesh (parallel::distributed::Triangulation<dim> &coarse_grid) const
     {
-      // The two triangulations that will be merged into coarse_grid.
-      Triangulation<dim> lower_coarse_grid;
-      Triangulation<dim> upper_coarse_grid;
+      if (use_merged_grids)
+        {
+          // The two triangulations that will be merged into coarse_grid.
+          Triangulation<dim> lower_coarse_grid;
+          Triangulation<dim> upper_coarse_grid;
 
-      // Create the lower box.
-      GridGenerator::subdivided_hyper_rectangle (lower_coarse_grid,
-                                                 lower_repetitions,
-                                                 point1,
-                                                 point4,
-                                                 false);
+          const std::vector<unsigned int> lower_rep_vec(lower_repetitions.begin(), lower_repetitions.end());
+          const std::vector<unsigned int> upper_rep_vec(upper_repetitions.begin(), upper_repetitions.end());
 
-      // Create the upper box.
-      GridGenerator::subdivided_hyper_rectangle (upper_coarse_grid,
-                                                 upper_repetitions,
-                                                 point3,
-                                                 point2,
-                                                 false);
+          // Create the lower box.
+          GridGenerator::subdivided_hyper_rectangle (lower_coarse_grid,
+                                                     lower_rep_vec,
+                                                     point1,
+                                                     point4,
+                                                     false);
 
-      // Merge the lower and upper mesh into one coarse_grid.
-      // Now we have at least two cells.
-      GridGenerator::merge_triangulations(lower_coarse_grid,
-                                          upper_coarse_grid,
-                                          coarse_grid);
+          // Create the upper box.
+          GridGenerator::subdivided_hyper_rectangle (upper_coarse_grid,
+                                                     upper_rep_vec,
+                                                     point3,
+                                                     point2,
+                                                     false);
+
+          // Merge the lower and upper mesh into one coarse_grid.
+          // Now we have at least two cells.
+          GridGenerator::merge_triangulations(lower_coarse_grid,
+                                              upper_coarse_grid,
+                                              coarse_grid);
+        }
+      else
+        {
+          const std::vector<unsigned int> lower_rep_vec(lower_repetitions.begin(), lower_repetitions.end());
+          GridGenerator::subdivided_hyper_rectangle (coarse_grid,
+                                                     lower_rep_vec,
+                                                     point1,
+                                                     point2,
+                                                     false);
+
+        }
 
       // Transform box into spherical chunk
       GridTools::transform (
@@ -516,6 +532,20 @@ namespace aspect
                              "Number of cells in latitude. This value is ignored "
                              "if the simulation is in 2d");
 
+          prm.declare_entry ("Use merged grids", "true",
+                             Patterns::Bool (),
+                             "Whether to make the grid by gluing together two boxes, or just "
+                             "use one chunk to make the grid. Using two grids glued together "
+                             "is a safer option, since it forces the boundary conditions "
+                             "to be always applied to the same depth, but using one grid allows "
+                             "for a more flexible usage of the adaptive refinement. Note that if "
+                             "there is no cell boundary exactly on the boundary between the lithosphere "
+                             "and the mantle, the velocity boundary will not be exactly at that depth. "
+                             "Therefore, using a merged "
+                             "grid is generally recommended over using one grid. "
+                             "When using one grid, the parameter for lower repetitions is used and the upper "
+                             "repetitions are ignored.");
+
         }
         prm.leave_subsection();
       }
@@ -532,23 +562,14 @@ namespace aspect
       {
         prm.enter_subsection("Chunk with lithosphere boundary indicators");
         {
-
-          const double degtorad = dealii::numbers::PI/180;
-
-          Assert (dim >= 2, ExcInternalError());
-          Assert (dim <= 3, ExcInternalError());
-
-          upper_repetitions.resize(dim);
-          lower_repetitions.resize(dim);
-
           point1[0] = prm.get_double("Chunk inner radius");
           point2[0] = prm.get_double("Chunk outer radius");
           point3[0] = prm.get_double("Chunk middle boundary radius");
           point4[0] = point3[0];
           lower_repetitions[0] = prm.get_integer("Inner chunk radius repetitions");
           upper_repetitions[0] = prm.get_integer("Outer chunk radius repetitions");
-          point1[1] = prm.get_double("Chunk minimum longitude") * degtorad;
-          point2[1] = prm.get_double("Chunk maximum longitude") * degtorad;
+          point1[1] = prm.get_double("Chunk minimum longitude") * constants::degree_to_radians;
+          point2[1] = prm.get_double("Chunk maximum longitude") * constants::degree_to_radians;
           point3[1] = point1[1];
           point4[1] = point2[1];
           lower_repetitions[1] = prm.get_integer("Longitude repetitions");
@@ -572,8 +593,8 @@ namespace aspect
 
           if (dim == 3)
             {
-              point1[2] = prm.get_double ("Chunk minimum latitude") * degtorad;
-              point2[2] = prm.get_double ("Chunk maximum latitude") * degtorad;
+              point1[2] = prm.get_double ("Chunk minimum latitude") * constants::degree_to_radians;
+              point2[2] = prm.get_double ("Chunk maximum latitude") * constants::degree_to_radians;
               point3[2] = point1[2];
               point4[2] = point2[2];
               lower_repetitions[2] = prm.get_integer ("Latitude repetitions");
@@ -586,7 +607,7 @@ namespace aspect
               AssertThrow (point2[2] < 0.5*numbers::PI,
                            ExcMessage ("Maximum latitude needs to be less than 90 degrees."));
             }
-
+          use_merged_grids = prm.get_bool ("Use merged grids");
         }
         prm.leave_subsection();
       }

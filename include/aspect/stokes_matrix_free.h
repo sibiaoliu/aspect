@@ -353,10 +353,30 @@ namespace aspect
         void set_diagonal (const dealii::LinearAlgebra::distributed::Vector<number> &diag);
 
       private:
+        /**
+         * Defines the inner-most operator on a single cell batch with
+         * the loop over quadrature points.
+         */
+        void inner_cell_operation(FEEvaluation<dim,
+                                  degree_v,
+                                  degree_v+1,
+                                  dim,
+                                  number> &velocity) const;
 
         /**
-         * Performs the application of the matrix-free operator. This function is called by
-         * vmult() functions MatrixFreeOperators::Base.
+         * Defines the operation on a single cell batch including
+         * load/store and calls inner_cell_operation().
+         */
+        void cell_operation(FEEvaluation<dim,
+                            degree_v,
+                            degree_v+1,
+                            dim,
+                            number> &velocity) const;
+
+        /**
+         * Performs the application of the matrix-free operator. This
+         * function is called by vmult() functions
+         * MatrixFreeOperators::Base.
          */
         void apply_add (dealii::LinearAlgebra::distributed::Vector<number> &dst,
                         const dealii::LinearAlgebra::distributed::Vector<number> &src) const override;
@@ -368,14 +388,6 @@ namespace aspect
                           dealii::LinearAlgebra::distributed::Vector<number> &dst,
                           const dealii::LinearAlgebra::distributed::Vector<number> &src,
                           const std::pair<unsigned int, unsigned int> &cell_range) const;
-
-        /**
-         * Computes the diagonal contribution from a cell matrix.
-         */
-        void local_compute_diagonal (const MatrixFree<dim,number>                     &data,
-                                     dealii::LinearAlgebra::distributed::Vector<number>  &dst,
-                                     const unsigned int                               &dummy,
-                                     const std::pair<unsigned int,unsigned int>       &cell_range) const;
 
         /**
          * A pointer to the current cell data that contains viscosity and other required parameters per cell.
@@ -656,10 +668,6 @@ namespace aspect
        * Store the data for the Stokes operator (viscosity, etc.) for each multigrid level.
        */
       MGLevelObject<MatrixFreeStokesOperators::OperatorCellData<dim, GMGNumberType>> level_cell_data;
-
-      // This variable is needed only in the setup in both evaluate_material_model()
-      // and build_preconditioner(). It will be deleted after the last use.
-      MGLevelObject<dealii::LinearAlgebra::distributed::Vector<GMGNumberType>> level_viscosity_vector;
 
       using StokesMatrixType = MatrixFreeStokesOperators::StokesOperator<dim,velocity_degree,double>;
       using SchurComplementMatrixType = MatrixFreeStokesOperators::MassMatrixOperator<dim,velocity_degree-1,double>;

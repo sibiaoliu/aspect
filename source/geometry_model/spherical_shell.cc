@@ -106,7 +106,7 @@ namespace aspect
               Assert(custom_mesh == slices || custom_mesh == list, ExcNotImplemented());
               // If we are using a custom mesh scheme, we need to create
               // a new triangulation to extrude (this will be a 1D line in
-              // 2D space, or a 2D surface in 3D space).
+              // 2d space, or a 2d surface in 3d space).
               Triangulation<dim-1,dim> sphere_mesh;
               GridGenerator::hyper_sphere (sphere_mesh);
               sphere_mesh.refine_global (initial_lateral_refinement);
@@ -379,7 +379,7 @@ namespace aspect
     {
       AssertThrow(dim == 2,
                   ExcMessage("Periodic boundaries currently "
-                             "only work with 2D spherical shell."));
+                             "only work with 2d spherical shell."));
       AssertThrow(phi == 90,
                   ExcMessage("Periodic boundaries currently "
                              "only work with 90 degree opening angle in spherical shell."));
@@ -519,7 +519,7 @@ namespace aspect
       point1[0] = R0;
       point2[0] = R1;
       point1[1] = 0.0;
-      point2[1] = phi / 180.0 * numbers::PI;
+      point2[1] = phi * constants::degree_to_radians;
       if (dim == 3)
         {
           point1[2] = 0.0;
@@ -747,7 +747,7 @@ namespace aspect
           periodic = prm.get_bool ("Phi periodic");
           if (periodic)
             {
-              AssertThrow (dim == 2,  ExcMessage("Periodic boundaries in the spherical shell are only supported for 2D models."));
+              AssertThrow (dim == 2,  ExcMessage("Periodic boundaries in the spherical shell are only supported for 2d models."));
               AssertThrow (phi == 90, ExcMessage("Periodic boundaries in the spherical shell are only supported for an opening angle of 90 degrees."));
             }
 

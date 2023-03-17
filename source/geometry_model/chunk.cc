@@ -337,7 +337,7 @@ namespace aspect
               const double radius=v.norm();
               output_vertex[0] = radius;
               output_vertex[1] = std::atan2(v[1], v[0]);
-              // See 2D case
+              // See 2d case
               if (output_vertex[1] < 0.0)
                 if (output_vertex[1] < point1_lon - 100 * std::abs(point1_lon)*std::numeric_limits<double>::epsilon())
                   output_vertex[1] += 2.0 * numbers::PI;
@@ -502,8 +502,9 @@ namespace aspect
     Chunk<dim>::
     create_coarse_mesh (parallel::distributed::Triangulation<dim> &coarse_grid) const
     {
+      const std::vector<unsigned int> rep_vec(repetitions.begin(), repetitions.end());
       GridGenerator::subdivided_hyper_rectangle (coarse_grid,
-                                                 repetitions,
+                                                 rep_vec,
                                                  point1,
                                                  point2,
                                                  true);
@@ -880,16 +881,11 @@ namespace aspect
       {
         prm.enter_subsection("Chunk");
         {
-
-          const double degtorad = dealii::numbers::PI/180;
-
-          repetitions.resize(dim);
-
           point1[0] = prm.get_double ("Chunk inner radius");
           point2[0] = prm.get_double ("Chunk outer radius");
           repetitions[0] = prm.get_integer ("Radius repetitions");
-          point1[1] = prm.get_double ("Chunk minimum longitude") * degtorad;
-          point2[1] = prm.get_double ("Chunk maximum longitude") * degtorad;
+          point1[1] = prm.get_double ("Chunk minimum longitude") * constants::degree_to_radians;
+          point2[1] = prm.get_double ("Chunk maximum longitude") * constants::degree_to_radians;
           repetitions[1] = prm.get_integer ("Longitude repetitions");
 
           AssertThrow (point1[0] < point2[0],
@@ -908,8 +904,8 @@ namespace aspect
 
           if (dim == 3)
             {
-              point1[2] = prm.get_double ("Chunk minimum latitude") * degtorad;
-              point2[2] = prm.get_double ("Chunk maximum latitude") * degtorad;
+              point1[2] = prm.get_double ("Chunk minimum latitude") * constants::degree_to_radians;
+              point2[2] = prm.get_double ("Chunk maximum latitude") * constants::degree_to_radians;
               repetitions[2] = prm.get_integer ("Latitude repetitions");
 
               AssertThrow (point1[2] < point2[2],

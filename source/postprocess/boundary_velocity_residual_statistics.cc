@@ -44,8 +44,8 @@ namespace aspect
         }
       else
         {
-          // The two points are used in GPlates to find the 2D plane in which
-          // the model lies.  These values are not used for 3D geometries and
+          // The two points are used in GPlates to find the 2d plane in which
+          // the model lies.  These values are not used for 3d geometries and
           // are thus set to the default.
           Point<2> point_one(numbers::PI/2., 0.);
           Point<2> point_two(numbers::PI/2., numbers::PI/2.);
@@ -312,7 +312,7 @@ namespace aspect
                              Patterns::Bool (),
                              "Specify velocity as r, phi, and theta components "
                              "instead of x, y, and z. Positive velocities point up, east, "
-                             "and north (in 3D) or out and clockwise (in 2D). "
+                             "and north (in 3d) or out and clockwise (in 2d). "
                              "This setting only makes sense for spherical geometries."
                              "GPlates data is always interpreted to be in east and north directions "
                              "and is not affected by this parameter.");
