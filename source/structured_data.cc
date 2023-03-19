@@ -31,6 +31,22 @@
 #include <aspect/geometry_model/two_merged_chunks.h>
 
 #include <boost/lexical_cast.hpp>
+#include <deal.II/base/exceptions.h>
+
+#ifdef ASPECT_WITH_NETCDF
+
+#include <netcdf.h>
+#define AssertThrowNetCDF(error_code) \
+  AssertThrow(error_code == NC_NOERR, dealii::ExcMessage("A NetCDF Error with code " + std::to_string(error_code) + " occured."))
+
+#else
+
+#define AssertThrowNetCDF(error_code) \
+  AssertThrow(false, ExcInternalError())
+
+#endif
+
+
 
 namespace aspect
 {
@@ -607,6 +623,257 @@ namespace aspect
     }
 
 
+
+    template <int dim>
+    void
+    StructuredDataLookup<dim>::load_netcdf(const std::string &filename, const std::vector<std::string> &data_column_names_)
+    {
+#ifndef ASPECT_WITH_NETCDF
+      (void)filename;
+      (void)data_column_names_;
+      AssertThrow(false, ExcMessage("Loading NetCDF files is only supported if ASPECT is configured with the NetCDF library!"));
+#else
+      TableIndices<dim> new_table_points;
+      std::vector<std::string> coordinate_column_names(dim);
+      std::vector<Table<dim,double>> data_tables;
+      std::vector<std::string> data_column_names = data_column_names_;
+      std::vector<std::vector<double>> coordinate_values(dim);
+
+      int ncid;
+      int status;
+
+      status = nc_open(filename.c_str(), NC_NOWRITE, &ncid);
+      AssertThrowNetCDF(status);
+
+      int ndims, nvars, ngatts, unlimdimid;
+      status = nc_inq(ncid, &ndims, &nvars, &ngatts, &unlimdimid);
+      AssertThrowNetCDF(status);
+
+      // The number of dimensions ndims in the netcdf file can be
+      // different than dim. In fact, each variable (data column in
+      // our notation) has a subset of those dimensions associated
+      // with it. That also means that variables can have a different
+      // number of dimensions and/or a different subset. We can only
+      // use variables with dim dimensions (our template argument) and
+      // only those that all use the same dimids inside the netcdf
+      // file.
+      int dimids_to_use[dim]; // dimids of the coordinate columns to use
+      std::vector<int> varids_to_use; // all netCDF varids of the data columns
+
+      if (data_column_names.empty())
+        {
+          // The user did not ask for a specific list of data
+          // columns. Let's find all columns we can possible load. We
+          // find the first data column with the correct number of
+          // dims. This one will determine the dimids of the
+          // coordinates to use. Following that, we pick all other
+          // data columns with the same coordinates.
+
+          for (int varid=0; varid<nvars; ++varid)
+            {
+              // Each netCDF dimension also has an associated variable that stores the
+              // coordinate data. We are looking for data columns, so skip them:
+              if (varid < ndims)
+                continue;
+
+              char  var_name[NC_MAX_NAME];
+              nc_type xtype;
+              int var_ndims;
+              int var_dimids[NC_MAX_VAR_DIMS];
+              int var_natts;
+
+              status = nc_inq_var (ncid, varid, var_name, &xtype, &var_ndims, var_dimids,
+                                   &var_natts);
+              AssertThrowNetCDF(status);
+
+              // only consider data that has dim variables:
+              if (var_ndims == dim)
+                {
+                  bool use = true;
+                  if (varids_to_use.size()>0)
+                    {
+                      // This is not the first data column, so we can only use it if
+                      // it uses the same dim variables as the first data column we
+                      // found.
+                      for (int i=0; i<dim; ++i)
+                        if (dimids_to_use[i]!=var_dimids[i])
+                          {
+                            use=false;
+                            break;
+                          }
+                    }
+                  else
+                    {
+                      // This is the first data column we found, so grab the ids of
+                      // the dimensions to use and store in dimids_to_use:
+                      for (int i=0; i<dim; ++i)
+                        {
+                          size_t length;
+                          status = nc_inq_dim(ncid, var_dimids[i], nullptr, &length);
+                          dimids_to_use[i] = var_dimids[i];
+                          // dimensions are specified in reverse order in the nc file:
+                          new_table_points[dim-1-i] = length;
+                        }
+                    }
+
+                  if (use)
+                    {
+                      varids_to_use.push_back(varid);
+                      data_column_names.push_back(var_name);
+                    }
+                }
+            }
+
+        }
+      else
+        {
+          // The user wants a specific list of columns, so lets find them.
+
+          for (const auto &cur_name: data_column_names)
+            {
+              bool found = false;
+
+              for (int varid=0; varid<nvars; ++varid)
+                {
+                  // Each netCDF dimension also has an associated variable that stores the
+                  // coordinate data. We are looking for data columns, so skip them:
+                  if (varid < ndims)
+                    continue;
+
+                  nc_type xtype;
+                  int ndims;
+                  int dimids[NC_MAX_VAR_DIMS];
+                  char  name[NC_MAX_NAME];
+                  int natts;
+
+                  status = nc_inq_var (ncid, varid, name, &xtype, &ndims, dimids,
+                                       &natts);
+                  AssertThrowNetCDF(status);
+                  if (cur_name != name)
+                    continue;
+
+                  found = true;
+
+                  if (ndims == dim)
+                    {
+                      bool use = true;
+                      if (varids_to_use.size()>0)
+                        {
+                          for (int i=0; i<dim; ++i)
+                            if (dimids_to_use[i]!=dimids[i])
+                              {
+                                use=false;
+                                break;
+                              }
+                        }
+                      else
+                        {
+                          for (int i=0; i<dim; ++i)
+                            {
+                              size_t length;
+                              status = nc_inq_dim(ncid, dimids[i], nullptr, &length);
+                              dimids_to_use[i] = dimids[i];
+                              // dimensions are specified in reverse order in the nc file:
+                              new_table_points[dim-1-i] = length;
+                            }
+                        }
+
+                      AssertThrow(use, ExcMessage(
+                                    "You asked to include column '" + cur_name + "', but it unfortunately has different dimensions than the first column you chose."
+                                  ));
+
+
+                      varids_to_use.push_back(varid);
+                    }
+                  else
+                    AssertThrow(false, ExcMessage(
+                                  "You asked to include column '" + cur_name + "', but it unfortunately has an incorrect number of dimensions."
+                                ));
+
+                }
+              AssertThrow(found, ExcMessage(
+                            "You asked to include column '" + cur_name + "', but it was not found!"
+                          ));
+
+            }
+        }
+
+
+      // Extract names of the coordinates
+      for (int idx=0; idx<dim; ++idx)
+        {
+          char  name[NC_MAX_NAME];
+          size_t length;
+          status = nc_inq_dim(ncid, dimids_to_use[idx], name, &length);
+          AssertThrowNetCDF(status);
+          coordinate_column_names[idx] = name;
+        }
+
+      {
+        // Now load coordinate data
+
+        for (int d=0; d<dim; ++d)
+          {
+            // dimensions are specified in reverse order in the nc file:
+            int varid = dimids_to_use[dim-1-d];
+
+            nc_type xtype;
+            int ndims;
+            int dimids[NC_MAX_VAR_DIMS];
+            char  name[NC_MAX_NAME];
+            int natts;
+
+            status = nc_inq_var (ncid, varid, name, &xtype, &ndims, dimids,
+                                 &natts);
+            AssertThrow(ndims == 1, ExcMessage("A variable of a dimension should have only one dimension."));
+
+            AssertThrow(xtype == NC_DOUBLE || xtype == NC_FLOAT, ExcMessage("We only support float or double data."));
+
+            coordinate_values[d].resize(new_table_points[d]);
+            status = nc_get_var_double(ncid, varid, coordinate_values[d].data());
+            AssertThrowNetCDF(status);
+          }
+      }
+
+      {
+        // Finally load the data for each column
+        data_tables.resize(varids_to_use.size());
+        std::vector<double> raw_data;
+
+        for (unsigned int var = 0; var<varids_to_use.size(); ++var)
+          {
+            // Allocate space
+            data_tables[var].TableBase<dim,double>::reinit(new_table_points);
+            const std::size_t n_elements = data_tables[var].n_elements();
+            raw_data.resize(n_elements);
+
+            // Load the data
+            status = nc_get_var_double(ncid, varids_to_use[var], raw_data.data());
+            AssertThrowNetCDF(status);
+
+            // .. and copy it over:
+            for (std::size_t n = 0; n < n_elements; ++n)
+              {
+                TableIndices<dim> ind = compute_table_indices(new_table_points, n);
+                TableIndices<dim> ind_to_use;
+                for (int i=0; i<dim; ++i)
+                  ind_to_use[i] = ind[dimids_to_use[i]];
+
+                data_tables[var](ind) = raw_data[n];
+              }
+          }
+
+      }
+
+
+      status = nc_close(ncid);
+      AssertThrowNetCDF(status);
+
+      // ready to go:
+      this->reinit(data_column_names, std::move(coordinate_values),std::move(data_tables));
+#endif
+    }
+
     template <int dim>
     double
     StructuredDataLookup<dim>::get_data(const Point<dim> &position,
@@ -698,17 +965,35 @@ namespace aspect
       prm.leave_subsection();
     }
 
+    namespace
+    {
+      template <int dim>
+      void
+      check_supported_geometry_models(const GeometryModel::Interface<dim> &geometry_model)
+      {
+        AssertThrow ((Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>> (geometry_model))
+                     || (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (geometry_model))
+                     || (Plugins::plugin_type_matches<const GeometryModel::TwoMergedChunks<dim>> (geometry_model))
+                     || (Plugins::plugin_type_matches<const GeometryModel::EllipsoidalChunk<dim>> (geometry_model))
+                     || (Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>> (geometry_model))
+                     || (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (geometry_model))
+                     || (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (geometry_model)),
+                     ExcMessage ("This ascii data plugin can only be used with supported "
+                                 "geometry models."));
+      }
+    }
+
 
 
     template <int dim>
     AsciiDataBoundary<dim>::AsciiDataBoundary ()
       :
-      current_file_number(0),
-      first_data_file_number(0),
+      current_file_number(numbers::invalid_unsigned_int),
+      first_data_file_number(numbers::invalid_unsigned_int),
       decreasing_file_order(false),
-      data_file_time_step(0.0),
-      time_weight(0.0),
-      time_dependent(true),
+      data_file_time_step(numbers::signaling_nan<double>()),
+      time_weight(numbers::signaling_nan<double>()),
+      time_dependent(false),
       lookups(),
       old_lookups()
     {}
@@ -720,15 +1005,7 @@ namespace aspect
     AsciiDataBoundary<dim>::initialize(const std::set<types::boundary_id> &boundary_ids,
                                        const unsigned int components)
     {
-      AssertThrow ((Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>> (this->get_geometry_model()))
-                   || (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (this->get_geometry_model()))
-                   || (Plugins::plugin_type_matches<const GeometryModel::TwoMergedChunks<dim>> (this->get_geometry_model()))
-                   || (Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>> (this->get_geometry_model()))
-                   || (Plugins::plugin_type_matches<const GeometryModel::Box<dim>> (this->get_geometry_model()))
-                   || (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model())),
-                   ExcMessage ("This ascii data plugin can only be used when using "
-                               "a spherical shell, chunk, box or two merged boxes geometry."));
-
+      check_supported_geometry_models(this->get_geometry_model());
 
       for (const auto &boundary_id : boundary_ids)
         {
@@ -737,19 +1014,8 @@ namespace aspect
                                         (components,
                                          this->scale_factor)));
 
-          old_lookups.insert(std::make_pair(boundary_id,
-                                            std::make_unique<Utilities::StructuredDataLookup<dim-1>>
-                                            (components,
-                                             this->scale_factor)));
-
           // Set the first file number and load the first files
           current_file_number = first_data_file_number;
-
-          const int next_file_number =
-            (decreasing_file_order) ?
-            current_file_number - 1
-            :
-            current_file_number + 1;
 
           const std::string filename (create_filename (current_file_number, boundary_id));
 
@@ -765,16 +1031,19 @@ namespace aspect
                                   "> not found!"));
           lookups.find(boundary_id)->second->load_file(filename,this->get_mpi_communicator());
 
-          // If the boundary condition is constant, switch off time_dependence
-          // immediately. If not, also load the second file for interpolation.
-          // This catches the case that many files are present, but the
-          // parameter file requests a single file.
-          if (filename == create_filename (current_file_number+1, boundary_id))
+          if (time_dependent == true)
             {
-              end_time_dependence ();
-            }
-          else
-            {
+              old_lookups.insert(std::make_pair(boundary_id,
+                                                std::make_unique<Utilities::StructuredDataLookup<dim-1>>
+                                                (components,
+                                                 this->scale_factor)));
+
+              const int next_file_number =
+                (decreasing_file_order) ?
+                current_file_number - 1
+                :
+                current_file_number + 1;
+
               const std::string filename (create_filename (next_file_number, boundary_id));
               if (Utilities::fexists(filename))
                 {
@@ -784,69 +1053,15 @@ namespace aspect
                   lookups.find(boundary_id)->second->load_file(filename, this->get_mpi_communicator());
                 }
               else
-                end_time_dependence ();
+                {
+                  // next file not found, issue warning and end looking for new files
+                  end_time_dependence ();
+                }
             }
         }
     }
 
 
-
-    template <int dim>
-    std::array<unsigned int,dim-1>
-    AsciiDataBoundary<dim>::get_boundary_dimensions (const types::boundary_id boundary_id) const
-    {
-      std::array<unsigned int,dim-1> boundary_dimensions;
-
-      switch (dim)
-        {
-          case 2:
-            if ((boundary_id == 2) || (boundary_id == 3) || (boundary_id == 4) || (boundary_id == 5))
-              {
-                boundary_dimensions[0] = 0;
-              }
-            else if ((boundary_id == 0) || (boundary_id == 1))
-              {
-                boundary_dimensions[0] = 1;
-              }
-            else
-              {
-                boundary_dimensions[0] = numbers::invalid_unsigned_int;
-                AssertThrow(false,ExcNotImplemented());
-              }
-            break;
-
-          case 3:
-            if ((boundary_id == 4) || (boundary_id == 5) || (boundary_id == 8) || (boundary_id == 9))
-              {
-                boundary_dimensions[0] = 0;
-                boundary_dimensions[1] = 1;
-              }
-            else if ((boundary_id == 0) || (boundary_id == 1))
-              {
-                boundary_dimensions[0] = 1;
-                boundary_dimensions[1] = 2;
-              }
-            else if ((boundary_id == 2) || (boundary_id == 3) || (boundary_id == 6) || (boundary_id == 7))
-              {
-                boundary_dimensions[0] = 0;
-                boundary_dimensions[1] = 2;
-              }
-            else
-              {
-                boundary_dimensions[0] = numbers::invalid_unsigned_int;
-                boundary_dimensions[1] = numbers::invalid_unsigned_int;
-                AssertThrow(false,ExcNotImplemented());
-              }
-
-            break;
-
-          default:
-            for (unsigned int d=0; d<dim-1; ++d)
-              boundary_dimensions[d] = numbers::invalid_unsigned_int;
-            AssertThrow(false,ExcNotImplemented());
-        }
-      return boundary_dimensions;
-    }
 
     namespace
     {
@@ -923,16 +1138,16 @@ namespace aspect
     void
     AsciiDataBoundary<dim>::update ()
     {
-      // always initialize with the start time during model setup, even
-      // when restarting (to have identical setup in both cases)
-      double model_time = this->get_parameters().start_time;
-
-      // if we are past initialization use the current time instead
-      if (this->simulator_is_past_initialization())
-        model_time = this->get_time();
-
       if (time_dependent == true)
         {
+          // always initialize with the start time during model setup, even
+          // when restarting (to have identical setup in both cases)
+          double model_time = this->get_parameters().start_time;
+
+          // if we are past initialization use the current time instead
+          if (this->simulator_is_past_initialization())
+            model_time = this->get_time();
+
           const double time_steps_since_start = model_time / data_file_time_step;
           // whether we need to update our data files. This looks so complicated
           // because we need to catch increasing and decreasing file orders and all
@@ -1016,7 +1231,7 @@ namespace aspect
           lookups.find(boundary_id)->second->load_file(filename,this->get_mpi_communicator());
         }
 
-      // If next file does not exist, end time dependent part with current_time_step.
+      // If next file does not exist, end time dependent part with current_time_step and issue warning.
       else
         end_time_dependence ();
     }
@@ -1030,6 +1245,7 @@ namespace aspect
       // no longer consider the problem time dependent from here on out
       // this cancels all attempts to read files at the next time steps
       time_dependent = false;
+
       // Give warning if first processor
       this->get_pcout() << std::endl
                         << "   From this timestep onwards, ASPECT will not attempt to load new Ascii data files." << std::endl
@@ -1042,6 +1258,132 @@ namespace aspect
 
 
 
+    namespace
+    {
+      /**
+       * Determines which of the dimensions of a position are aligned with
+       * a certain @p boundary_id. E.g. the left boundary of a box
+       * model extents in the y and z direction (position[1] and
+       * position[2]), therefore the function would return [1,2] for dim==3
+       * or [1] for dim==2. We are lucky that these indices are identical
+       * for all existing geometries (if we use natural coordinates),
+       * therefore we do not need to distinguish between them. If we
+       * introduce a geometry model for which boundaries are not aligned
+       * with natural coordinates this needs to become a function in
+       * the interface of the geometry model and needs to be specialized
+       * for distinct geometry models.
+       */
+      template <int dim>
+      std::array<unsigned int,dim-1>
+      get_boundary_dimensions (const types::boundary_id boundary_id)
+      {
+        std::array<unsigned int,dim-1> boundary_dimensions;
+        boundary_dimensions.fill(numbers::invalid_unsigned_int);
+
+        switch (dim)
+          {
+            case 2:
+              if ((boundary_id == 2) || (boundary_id == 3) || (boundary_id == 4) || (boundary_id == 5))
+                {
+                  boundary_dimensions[0] = 0;
+                }
+              else if ((boundary_id == 0) || (boundary_id == 1))
+                {
+                  boundary_dimensions[0] = 1;
+                }
+              else
+                {
+                  AssertThrow(false,ExcNotImplemented());
+                }
+              break;
+
+            case 3:
+              if ((boundary_id == 4) || (boundary_id == 5) || (boundary_id == 8) || (boundary_id == 9))
+                {
+                  boundary_dimensions[0] = 0;
+                  boundary_dimensions[1] = 1;
+                }
+              else if ((boundary_id == 0) || (boundary_id == 1))
+                {
+                  boundary_dimensions[0] = 1;
+                  boundary_dimensions[1] = 2;
+                }
+              else if ((boundary_id == 2) || (boundary_id == 3) || (boundary_id == 6) || (boundary_id == 7))
+                {
+                  boundary_dimensions[0] = 0;
+                  boundary_dimensions[1] = 2;
+                }
+              else
+                {
+                  AssertThrow(false,ExcNotImplemented());
+                }
+
+              break;
+
+            default:
+              AssertThrow(false,ExcNotImplemented());
+          }
+        return boundary_dimensions;
+      }
+
+
+
+      /**
+       * Convert a point @p position in cartesian coordinates into the set of coordinates
+       * used in the structured data input files, i.e. coordinates in the
+       * natural coordinate system of the given @p geometry_model.
+       */
+      template <int dim>
+      Point<dim>
+      data_coordinates_from_position (const Point<dim> &position,
+                                      const aspect::GeometryModel::Interface<dim> &geometry_model)
+      {
+        const std::array<double,dim> natural_position = geometry_model.cartesian_to_natural_coordinates(position);
+        Point<dim> data_coordinates = Utilities::convert_array_to_point<dim>(natural_position);
+
+        // The chunk model has latitude as natural coordinate. We need to convert this to colatitude
+        // to allow for consistent data files between chunk geometries and spherical geometries.
+        if (dim == 3 &&
+            (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (geometry_model) ||
+             Plugins::plugin_type_matches<const GeometryModel::TwoMergedChunks<dim>> (geometry_model) ||
+             Plugins::plugin_type_matches<const GeometryModel::EllipsoidalChunk<dim>> (geometry_model)))
+          {
+            data_coordinates[2] = numbers::PI/2. - data_coordinates[2];
+          }
+
+        return data_coordinates;
+      }
+
+
+
+      /**
+       * Convert a point @p data_coordinates using coordinates appropriate for
+       * volumetric structured data input files (e.g. produced by the
+       * data_coordinates_from_position() function above) into appropriate
+       * coordinates on the boundary given by @p boundary_indicator.
+       * Because all existing geometry models use boundaries that are aligned
+       * with natural coordinate directions this means finding the correct components
+       * of the input coordinates and returning a point with one dimension less
+       * than the input point that is determined by these coordinates.
+       */
+      template <int dim>
+      Point<dim-1>
+      boundary_coordinates_from_data_coordinates (const Point<dim> &data_coordinates,
+                                                  const types::boundary_id boundary_indicator)
+      {
+        const std::array<unsigned int,dim-1> boundary_dimensions =
+          get_boundary_dimensions<dim>(boundary_indicator);
+
+        Point<dim-1> boundary_coordinates;
+        for (unsigned int i = 0; i < dim-1; i++)
+          boundary_coordinates[i] = data_coordinates[boundary_dimensions[i]];
+
+        return boundary_coordinates;
+      }
+    }
+
+
+
     template <int dim>
     double
     AsciiDataBoundary<dim>::
@@ -1049,33 +1391,17 @@ namespace aspect
                         const Point<dim>                    &position,
                         const unsigned int                   component) const
     {
-      const std::array<double,dim> natural_position = this->get_geometry_model().cartesian_to_natural_coordinates(position);
-
-      Point<dim> internal_position;
-      for (unsigned int i = 0; i < dim; i++)
-        internal_position[i] = natural_position[i];
-
-      // The chunk model has latitude as natural coordinate. We need to convert this to colatitude
-      if (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (this->get_geometry_model()) && dim == 3)
-        {
-          internal_position[2] = numbers::PI/2. - internal_position[2];
-        }
-
-      const std::array<unsigned int,dim-1> boundary_dimensions =
-        get_boundary_dimensions(boundary_indicator);
-
-      Point<dim-1> data_position;
-      for (unsigned int i = 0; i < dim-1; i++)
-        data_position[i] = internal_position[boundary_dimensions[i]];
+      const Point<dim> data_coordinates = data_coordinates_from_position(position, this->get_geometry_model());
+      const Point<dim-1> boundary_coordinates = boundary_coordinates_from_data_coordinates(data_coordinates, boundary_indicator);
 
       Assert (lookups.find(boundary_indicator) != lookups.end(),
               ExcInternalError());
-      const double data = lookups.find(boundary_indicator)->second->get_data(data_position,component);
+      const double data = lookups.find(boundary_indicator)->second->get_data(boundary_coordinates,component);
 
       if (!time_dependent)
         return data;
 
-      const double old_data = old_lookups.find(boundary_indicator)->second->get_data(data_position,component);
+      const double old_data = old_lookups.find(boundary_indicator)->second->get_data(boundary_coordinates,component);
 
       return time_weight * data + (1 - time_weight) * old_data;
     }
@@ -1087,31 +1413,15 @@ namespace aspect
                                              const Point<dim>                    &position,
                                              const unsigned int                   component) const
     {
-      const std::array<double,dim> natural_position = this->get_geometry_model().cartesian_to_natural_coordinates(position);
+      const Point<dim> data_coordinates = data_coordinates_from_position(position, this->get_geometry_model());
+      const Point<dim-1> boundary_coordinates = boundary_coordinates_from_data_coordinates(data_coordinates, boundary_indicator);
 
-      Point<dim> internal_position;
-      for (unsigned int i = 0; i < dim; i++)
-        internal_position[i] = natural_position[i];
-
-      // The chunk model has latitude as natural coordinate. We need to convert this to colatitude
-      if (dynamic_cast<const GeometryModel::Chunk<dim>*> (&this->get_geometry_model()) != nullptr && dim == 3)
-        {
-          internal_position[2] = numbers::PI/2. - internal_position[2];
-        }
-
-      const std::array<unsigned int,dim-1> boundary_dimensions =
-        get_boundary_dimensions(boundary_indicator);
-
-      Point<dim-1> data_position;
-      for (unsigned int i = 0; i < dim-1; ++i)
-        data_position[i] = internal_position[boundary_dimensions[i]];
-
-      const Tensor<1,dim-1>  gradients = lookups.find(boundary_indicator)->second->get_gradients(data_position,component);
+      const Tensor<1,dim-1>  gradients = lookups.find(boundary_indicator)->second->get_gradients(boundary_coordinates,component);
 
       if (!time_dependent)
         return gradients;
 
-      const Tensor<1,dim-1> old_gradients = old_lookups.find(boundary_indicator)->second->get_gradients(data_position,component);
+      const Tensor<1,dim-1> old_gradients = old_lookups.find(boundary_indicator)->second->get_gradients(boundary_coordinates,component);
 
       return time_weight * gradients + (1 - time_weight) * old_gradients;
     }
@@ -1130,7 +1440,8 @@ namespace aspect
     AsciiDataBoundary<dim>::declare_parameters (ParameterHandler  &prm,
                                                 const std::string &default_directory,
                                                 const std::string &default_filename,
-                                                const std::string &subsection_name)
+                                                const std::string &subsection_name,
+                                                const bool declare_time_dependent_parameters)
     {
       Utilities::AsciiDataBase<dim>::declare_parameters(prm,
                                                         default_directory,
@@ -1139,37 +1450,50 @@ namespace aspect
 
       prm.enter_subsection (subsection_name);
       {
-        prm.declare_entry ("Data file name",
-                           default_filename,
-                           Patterns::Anything (),
-                           "The file name of the model data. Provide file in format: "
-                           "(File name).\\%s\\%d, where \\%s is a string specifying "
-                           "the boundary of the model according to the names of the boundary "
-                           "indicators (of the chosen geometry model), and \\%d is any sprintf "
-                           "integer qualifier specifying the format of the current file number.");
-        prm.declare_entry ("Data file time step", "1e6",
-                           Patterns::Double (0.),
-                           "Time step between following data files. "
-                           "Depending on the setting of the global `Use years in output instead of seconds' flag "
-                           "in the input file, this number is either interpreted as seconds or as years. "
-                           "The default is one million, i.e., either one million seconds or one million years.");
-        prm.declare_entry ("First data file model time", "0",
-                           Patterns::Double (0.),
-                           "The `First data file model time' parameter "
-                           "has been deactivated and will be removed in a future release. "
-                           "Do not use this paramter and instead provide data files "
-                           "starting from the model start time.");
-        prm.declare_entry ("First data file number", "0",
-                           Patterns::Integer (),
-                           "Number of the first velocity file to be loaded when the model time "
-                           "is larger than `First velocity file model time'.");
-        prm.declare_entry ("Decreasing file order", "false",
-                           Patterns::Bool (),
-                           "In some cases the boundary files are not numbered in increasing "
-                           "but in decreasing order (e.g. `Ma BP'). If this flag is set to "
-                           "`True' the plugin will first load the file with the number "
-                           "`First data file number' and decrease the file number during "
-                           "the model run.");
+        if (declare_time_dependent_parameters == true)
+          {
+            prm.declare_entry ("Data file name",
+                               default_filename,
+                               Patterns::Anything (),
+                               "The file name of the model data. Provide file in format: "
+                               "(File name).\\%s\\%d, where \\%s is a string specifying "
+                               "the boundary of the model according to the names of the boundary "
+                               "indicators (of the chosen geometry model), and \\%d is any sprintf "
+                               "integer qualifier specifying the format of the current file number.");
+            prm.declare_entry ("Data file time step", "1e6",
+                               Patterns::Double (0.),
+                               "Time step between following data files. "
+                               "Depending on the setting of the global `Use years in output instead of seconds' flag "
+                               "in the input file, this number is either interpreted as seconds or as years. "
+                               "The default is one million, i.e., either one million seconds or one million years.");
+            prm.declare_entry ("First data file model time", "0",
+                               Patterns::Double (0.),
+                               "The `First data file model time' parameter "
+                               "has been deactivated and will be removed in a future release. "
+                               "Do not use this paramter and instead provide data files "
+                               "starting from the model start time.");
+            prm.declare_entry ("First data file number", "0",
+                               Patterns::Integer (),
+                               "Number of the first velocity file to be loaded when the model time "
+                               "is larger than `First velocity file model time'.");
+            prm.declare_entry ("Decreasing file order", "false",
+                               Patterns::Bool (),
+                               "In some cases the boundary files are not numbered in increasing "
+                               "but in decreasing order (e.g. `Ma BP'). If this flag is set to "
+                               "`True' the plugin will first load the file with the number "
+                               "`First data file number' and decrease the file number during "
+                               "the model run.");
+          }
+        else
+          {
+            prm.declare_entry ("Data file name",
+                               default_filename,
+                               Patterns::Anything (),
+                               "The file name of the model data. Provide file in format: "
+                               "(File name).\\%s, where \\%s is a string specifying "
+                               "the boundary of the model according to the names of the boundary "
+                               "indicators (of the chosen geometry model).");
+          }
       }
       prm.leave_subsection();
     }
@@ -1178,29 +1502,47 @@ namespace aspect
     template <int dim>
     void
     AsciiDataBoundary<dim>::parse_parameters (ParameterHandler &prm,
-                                              const std::string &subsection_name)
+                                              const std::string &subsection_name,
+                                              const bool parse_time_dependent_parameters)
     {
       Utilities::AsciiDataBase<dim>::parse_parameters(prm,
                                                       subsection_name);
 
       prm.enter_subsection(subsection_name);
       {
-        data_file_time_step             = prm.get_double ("Data file time step");
-        const double first_data_file_model_time      = prm.get_double ("First data file model time");
-
-        AssertThrow (first_data_file_model_time == 0.0,
-                     ExcMessage("The `First data file model time' parameter "
-                                "has been deactivated and will be removed in a future release. "
-                                "Do not use this parameter and instead provide data files "
-                                "starting from the model start time."));
-
-        first_data_file_number          = prm.get_integer("First data file number");
-        decreasing_file_order           = prm.get_bool   ("Decreasing file order");
-
-        if (this->convert_output_to_years() == true)
+        if (parse_time_dependent_parameters == true)
           {
-            data_file_time_step        *= year_in_seconds;
+            data_file_time_step             = prm.get_double ("Data file time step");
+            const double first_data_file_model_time      = prm.get_double ("First data file model time");
+
+            AssertThrow (first_data_file_model_time == 0.0,
+                         ExcMessage("The `First data file model time' parameter "
+                                    "has been deactivated and will be removed in a future release. "
+                                    "Do not use this parameter and instead provide data files "
+                                    "starting from the model start time."));
+
+            first_data_file_number          = prm.get_integer("First data file number");
+            decreasing_file_order           = prm.get_bool   ("Decreasing file order");
+
+            if (this->convert_output_to_years() == true)
+              {
+                data_file_time_step        *= year_in_seconds;
+              }
           }
+        else
+          {
+            AssertThrow (create_filename (0, 0) == create_filename (1, 0),
+                         ExcMessage("A boundary data file name was used that contained a placeholder for "
+                                    "the current file number, but this AsciiDataBoundary object does not support "
+                                    "time dependent information. Please remove the file number placeholder."));
+          }
+
+        // if filename does not contain a placeholder for timestep, no time dependence
+        // do not issue a warning, the parameter file is specifying exactly one file.
+        if (create_filename (0, 0) == create_filename (1, 0))
+          time_dependent = false;
+        else
+          time_dependent = true;
       }
       prm.leave_subsection();
     }
@@ -1217,14 +1559,7 @@ namespace aspect
     void
     AsciiDataLayered<dim>::initialize(const unsigned int components)
     {
-      AssertThrow ((Plugins::plugin_type_matches<GeometryModel::SphericalShell<dim>>(this->get_geometry_model()) ||
-                    Plugins::plugin_type_matches<GeometryModel::Chunk<dim>>(this->get_geometry_model()) ||
-                    Plugins::plugin_type_matches<GeometryModel::TwoMergedChunks<dim>>(this->get_geometry_model()) ||
-                    Plugins::plugin_type_matches<GeometryModel::Sphere<dim>>(this->get_geometry_model()) ||
-                    Plugins::plugin_type_matches<GeometryModel::Box<dim>>(this->get_geometry_model())) ||
-                   Plugins::plugin_type_matches<GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()),
-                   ExcMessage ("This ascii data plugin can only be used when using "
-                               "a spherical shell, chunk, sphere, box or two merged boxes geometry."));
+      check_supported_geometry_models(this->get_geometry_model());
 
       // Create the lookups for each file
       number_of_layer_boundaries = data_file_names.size();
@@ -1252,34 +1587,23 @@ namespace aspect
     get_data_component (const Point<dim> &position,
                         const unsigned int component) const
     {
-      // Get the location of the component in the coordinate system of the ascii data input
-      const std::array<double,dim> natural_position = this->get_geometry_model().cartesian_to_natural_coordinates(position);
-
-      Point<dim> internal_position;
-      for (unsigned int i = 0; i < dim; i++)
-        internal_position[i] = natural_position[i];
-
-      // The chunk model has latitude as natural coordinate. We need to convert this to colatitude
-      if (Plugins::plugin_type_matches<GeometryModel::Chunk<dim>>(this->get_geometry_model()) && dim == 3)
-        {
-          internal_position[2] = numbers::PI/2. - internal_position[2];
-        }
+      const Point<dim> data_coordinates = data_coordinates_from_position(position, this->get_geometry_model());
 
       double vertical_position;
       Point<dim-1> horizontal_position;
       if (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::CoordinateSystem::cartesian)
         {
           // in cartesian coordinates, the vertical component comes last
-          vertical_position = internal_position[dim-1];
+          vertical_position = data_coordinates[dim-1];
           for (unsigned int i = 0; i < dim-1; i++)
-            horizontal_position[i] = internal_position[i];
+            horizontal_position[i] = data_coordinates[i];
         }
       else
         {
           // in spherical coordinates, the vertical component comes first
-          vertical_position = internal_position[0];
+          vertical_position = data_coordinates[0];
           for (unsigned int i = 0; i < dim-1; i++)
-            horizontal_position[i] = internal_position[i+1];
+            horizontal_position[i] = data_coordinates[i+1];
         }
 
       // Find which layer we're in
@@ -1427,10 +1751,10 @@ namespace aspect
       // Handle the special case of slicing through data first
       if (slice_data == true)
         {
-          // This implies a SphericalShell, a 2D model, and a 3D dataset as asserted
+          // This implies a SphericalShell, a 2d model, and a 3d dataset as asserted
           // in the parse_parameters function below.
 
-          // Compute the coordinates of a 3d point based on the 2D position.
+          // Compute the coordinates of a 3d point based on the 2d position.
           const Tensor<1,3> position_tensor({position[0], position[1], 0.0});
           const Point<3> rotated_position (rotation_matrix * position_tensor);
 
@@ -1441,25 +1765,9 @@ namespace aspect
         }
 
       // else slice_data == false: model and dataset have the same dimension
-      const std::array<double,dim> natural_position = this->get_geometry_model().cartesian_to_natural_coordinates(position);
+      const Point<dim> data_coordinates = data_coordinates_from_position(position, this->get_geometry_model());
 
-      Point<dim> internal_position;
-      for (unsigned int i = 0; i < dim; ++i)
-        internal_position[i] = natural_position[i];
-
-      if (dim == 3)
-        {
-          // Unfortunately, the chunk model uses latitude as natural coordinate. We need to convert this
-          // to colatitude to be consistent with the input files for spherical shells and spheres.
-          if (Plugins::plugin_type_matches<const GeometryModel::Chunk<dim>> (this->get_geometry_model()) ||
-              Plugins::plugin_type_matches<const GeometryModel::TwoMergedChunks<dim>> (this->get_geometry_model()) ||
-              Plugins::plugin_type_matches<const GeometryModel::EllipsoidalChunk<dim>> (this->get_geometry_model()))
-            {
-              internal_position[2] = numbers::PI/2. - internal_position[2];
-            }
-        }
-
-      return lookup->get_data(internal_position,component);
+      return lookup->get_data(data_coordinates,component);
     }
 
 
@@ -1480,13 +1788,13 @@ namespace aspect
       {
         prm.declare_entry("Slice dataset in 2D plane", "false",
                           Patterns::Bool (),
-                          "Whether to use a 2D data slice of a 3D data file "
-                          "or the entire data file. Slicing a 3D dataset is "
-                          "only supported for 2D models.");
+                          "Whether to use a 2d data slice of a 3d data file "
+                          "or the entire data file. Slicing a 3d dataset is "
+                          "only supported for 2d models.");
         prm.declare_entry ("First point on slice", "0.0,1.0,0.0",
                            Patterns::Anything (),
-                           "Point that determines the plane in which the 2D slice lies in. "
-                           "This variable is only used if 'Slice dataset in 2D plane' is true. "
+                           "Point that determines the plane in which the 2d slice lies in. "
+                           "This variable is only used if 'Slice dataset in 2d plane' is true. "
                            "The slice will go through this point, the point defined by the "
                            "parameter 'Second point on slice', and the center of the model "
                            "domain. After the rotation, this first point will lie along the "
@@ -1494,8 +1802,8 @@ namespace aspect
                            "point have to be given in Cartesian coordinates.");
         prm.declare_entry ("Second point on slice", "1.0,0.0,0.0",
                            Patterns::Anything (),
-                           "Second point that determines the plane in which the 2D slice lies in. "
-                           "This variable is only used if 'Slice dataset in 2D plane' is true. "
+                           "Second point that determines the plane in which the 2d slice lies in. "
+                           "This variable is only used if 'Slice dataset in 2d plane' is true. "
                            "The slice will go through this point, the point defined by the "
                            "parameter 'First point on slice', and the center of the model "
                            "domain. The coordinates of the point have to be given in Cartesian "

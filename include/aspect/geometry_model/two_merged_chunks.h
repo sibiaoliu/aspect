@@ -273,6 +273,15 @@ namespace aspect
 
       private:
         /**
+         * Whether to make the grid by gluing together two chunks, or just
+         * use one chunk to make the grid. Using two grids glued together
+         * is a safer option, since it forces the boundary conditions
+         * to be always applied to the same depth, but one unified grid allows
+         * for a more flexible usage of the adaptive refinement.
+         */
+        bool use_merged_grids;
+
+        /**
          * Minimum longitude-depth (2D) or
          * longitude-latitude-depth (3D) point
          * of the entire merged chunk.
@@ -304,8 +313,8 @@ namespace aspect
          * The number of cells in each coordinate direction
          * for the lower and upper chunk.
          */
-        std::vector<unsigned int> lower_repetitions;
-        std::vector<unsigned int> upper_repetitions;
+        std::array<unsigned int, dim> lower_repetitions;
+        std::array<unsigned int, dim> upper_repetitions;
 
         /**
          * An object that describes the geometry.

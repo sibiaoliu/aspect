@@ -155,7 +155,7 @@ namespace aspect
         // of grains per tracer to perform reliable statistics on it. This minimum is the same for all phases.
         // and enstatite.
         //
-        // Furthermore, for this plugin the following dims are always 3. When using 2D an infinitely thin 3D domain is assumed.
+        // Furthermore, for this plugin the following dims are always 3. When using 2d an infinitely thin 3d domain is assumed.
         //
         // The rotation matrix is a direction cosine matrix, representing the orientation of the grain in the domain.
         // The fabric is determined later in the computations, so initialize it to -1.
@@ -1126,9 +1126,9 @@ namespace aspect
       void
       CrystalPreferredOrientation<dim>::parse_parameters (ParameterHandler &prm)
       {
-        AssertThrow(dim == 3, ExcMessage("CPO computations are currently only supported for 3D models. "
-                                         "2D computations will work when this assert is removed, but you will need to make sure that the "
-                                         "correct 3D strain-rate and velocity gradient tensors are provided to the algorithm."));
+        AssertThrow(dim == 3, ExcMessage("CPO computations are currently only supported for 3d models. "
+                                         "2d computations will work when this assert is removed, but you will need to make sure that the "
+                                         "correct 3d strain-rate and velocity gradient tensors are provided to the algorithm."));
 
         prm.enter_subsection("Postprocess");
         {
