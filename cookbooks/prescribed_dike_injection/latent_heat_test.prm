@@ -24,6 +24,7 @@ set Use years in output instead of seconds = true
 # to the Stokes equation. 
 subsection Formulation
   set Enable prescribed dilation    = true
+  set Enable dike injecttion    = true
 end
 
 subsection Material model

@@ -427,19 +427,21 @@ namespace aspect
           // only on horizontal x direction (dike opening),
           // additional RHS of horizontal (x) momentum eqn: - \int 2 eta R, div v
           // Buck et al., 2005; Howell et al., 2019
-          for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
-            {
-              const unsigned int index_horizon=fe.system_to_component_index(i).first;
-              if (introspection.is_stokes_component(index_horizon))
+          // Note here: Enable_prescribed_dilation = true
+          if (this->get_parameters().enable_dike_injection == true)
+            for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
               {
-                  if (prescribed_dilation != nullptr && !material_model_is_compressible && index_horizon==0)
+                const unsigned int index_horizon=fe.system_to_component_index(i).first;
+                if (introspection.is_stokes_component(index_horizon))
                   {
-                      data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
+                    if (prescribed_dilation != nullptr && !material_model_is_compressible && index_horizon==0)
+                      {
+                        data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
+                      }
+                    ++i_stokes;
                   }
-                  ++i_stokes;
+                ++i;
               }
-              ++i;
-            }
 
           // If we are using the equal order Q1-Q1 element, then we also need
           // to put the stabilization term into the (P,P) block of the matrix:

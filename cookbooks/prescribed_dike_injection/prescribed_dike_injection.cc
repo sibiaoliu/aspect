@@ -262,7 +262,7 @@ namespace aspect
           // Meanwhile, the term - 2.0 / 3.0 * eta * (R, div v) is added to
           // the rhs of the momentum eq. (if the model is incompressible),
           // otherwise this term is already present on the left side.
-          if (prescribed_dilation != nullptr)
+          if (prescribed_dilation != nullptr && this->get_parameters().enable_dike_injection)
             {
               if (this->convert_output_to_years())
                 prescribed_dilation->dilation[i] = injection_function.value(in.position[i]) / year_in_seconds;
@@ -284,7 +284,8 @@ namespace aspect
 
                   if (c == this->introspection().compositional_index_for_name("melt_dike"))
                     out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
-                  else
+                  
+                  if (c == this->introspection().compositional_index_for_name("plastic_strain"))
                     out.reaction_terms[i][c] = -1.0 * composition[c];
                 }
             }

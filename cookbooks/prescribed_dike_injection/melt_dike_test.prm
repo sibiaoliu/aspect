@@ -19,6 +19,7 @@ set Use years in output instead of seconds = true
 # to the Stokes equation. 
 subsection Formulation
   set Enable prescribed dilation    = true
+  set Enable dike injecttion    = true
 end
 
 subsection Material model
@@ -102,7 +103,7 @@ end
 
 subsection Compositional fields
   set Number of fields      = 2
-  set Names of fields       = oceanic_crust, mantle
+  set Names of fields       = melt_dike, mantle
 end
 
 subsection Initial composition model
