@@ -1,8 +1,7 @@
 # This is a test model to reproduce the same results as in the LaMEM.
 
 ##################### Global parameters #####################
-#set Additional shared libraries            = ../../libprescribed_dike_injection.so
-set Additional shared libraries = /scratch/usr/shkliusb/Aspect/src_dike_injection/libprescribed_dike_injection.so
+set Additional shared libraries            = ../dike_src/libprescribed_dike_injection.so
 
 set Dimension                              = 2
 set Adiabatic surface temperature          = 1573
@@ -81,7 +80,7 @@ end
 
 subsection Compositional fields
   set Number of fields      = 5
-  set Names of fields       = ve_stress_xx, ve_stress_yy, ve_stress_xy, plastic_strain, melt_dike
+  set Names of fields       = ve_stress_xx, ve_stress_yy, ve_stress_xy, plastic_strain, injection_phase
 end
 
 subsection Initial composition model
@@ -155,22 +154,14 @@ end
 # Include latent heat of crystallization of the injected material 
 # The latent heat source term = dilation_term * (Hf + (T_inject - T)*rho *Cp)
 # subsection Heating model
-#   set List of model names = constant heating #, latent heat injection
-#   subsection Constant heating
-#     set Radiogenic heating rate = 1e-19
-#   end
-#   subsection Compositional heating
-#     set Use compositional field for heat production averaging = 1, 0, 0, 0, 0, 1, 1
-#     set Compositional heating values = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-6, 0.25e-6
-#   end
+#   set List of model names = latent heat injection
 # #  subsection Latent heat injection
 # #    set Latent heat of crystallization = 1.1e9 #Unit: J/kg; or 1.5e9
 # #    set Temperature of injected melt = 1573
 # #  end
 # end
 
-##################### Dilation  ########################
-
+##################### Dike Injection  ########################
 # We need to enable the assembler that allows us to add terms
 # to the Stokes equation. 
 subsection Formulation
@@ -200,7 +191,7 @@ subsection Material model
     set Maximum viscosity     = 1e24
     set Reference strain rate = 1e-16
     set Minimum strain rate   = 1e-20
-    set Reference temperature = 1573
+    set Reference temperature = 298
     set Heat capacities       = 1000
     set Thermal expansivities = 3e-5
     set Define thermal conductivities = true
@@ -248,8 +239,6 @@ subsection Postprocess
   set List of postprocessors = velocity statistics,temperature statistics,visualization, topography
   subsection Visualization
     set List of output variables = density, viscosity, strain rate, stress, named additional outputs
-                                  # maximum horizontal compressive stress, heating, vertical heat flux
-
     set Output format = vtu
     set Time between graphical output = 1e5
     set Number of grouped files             = 1
