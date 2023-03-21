@@ -283,10 +283,13 @@ namespace aspect
                   //Enhanced thermal conductivity due to hydrothermal circulation
                   //at the given positions where the temperature is not greater
                   //than cut-off temperature.
-                  // Note that the unit of the temperature used in the smoothing
-                  // part is Celcius, instead of the default unit Kelvin.                  
+                  // Note that the unit of the temperature (>=0) used in the 
+                  // smoothing part is Celcius, not the default unit Kelvin.
+                  const double temperature_in_C = in.temperature[i]-273;
                   const double point_depth = this->get_geometry_model().depth(in.position[i]);
-                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 - (in.temperature[i]-273) / (current_T_cooling-273) - point_depth / current_D_cooling));
+                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 -
+                                                std::max(temperature_in_C,0.0) / (current_T_cooling-273)
+                                                - point_depth / current_D_cooling));
                   if (current_A_smoothing == 0.0)
                     {
                       if (in.temperature[i]<= current_T_cooling && point_depth <= current_D_cooling)
