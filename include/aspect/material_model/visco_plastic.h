@@ -287,12 +287,6 @@ namespace aspect
          * Smoothing factors
          */
         std::vector<double> A_smoothing;
-
-        /**
-         * Parsed function that specifies the region and amount of
-         * material that is injected into the model.
-         */
-        Functions::ParsedFunction<dim> injection_function;
         
         /**
          * Object for computing the equation of state.

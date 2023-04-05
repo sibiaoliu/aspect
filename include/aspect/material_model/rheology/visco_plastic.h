@@ -132,7 +132,6 @@ namespace aspect
           IsostrainViscosities
           calculate_isostrain_viscosities ( const MaterialModel::MaterialModelInputs<dim> &in,
                                             const unsigned int i,
-                                            const unsigned int dike_injection_rate,
                                             const std::vector<double> &volume_fractions,
                                             const std::vector<double> &phase_function_values = std::vector<double>(),
                                             const std::vector<unsigned int> &n_phase_transitions_per_composition =
@@ -332,6 +331,12 @@ namespace aspect
            */
           Rheology::DruckerPragerParameters drucker_prager_parameters;
 
+        /**
+         * Parsed function that specifies the region and amount of
+         * material that is injected into the model.
+         */
+        Functions::ParsedFunction<dim> injection_function;
+        
       };
     }
   }

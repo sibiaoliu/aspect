@@ -57,19 +57,8 @@ namespace aspect
         = MaterialUtilities::compute_composition_fractions(composition,
                                                            rheology->get_volumetric_composition_mask());
 
-      // This is for removing the effect of dike injection function from 
-      // the viscosity calculation.
-      double dike_injection_rate = 0.0;
-      if(this->get_timestep_number() != 0)
-        {
-          if (this->convert_output_to_years())
-            dike_injection_rate = injection_function.value(in.position[i]) / year_in_seconds;
-          else
-            dike_injection_rate = injection_function.value(in.position[i]);        
-        }
-
       const IsostrainViscosities isostrain_viscosities
-        = rheology->calculate_isostrain_viscosities(in, i, dike_injection_rate, volume_fractions);
+        = rheology->calculate_isostrain_viscosities(in, i, volume_fractions);
 
       std::vector<double>::const_iterator max_composition
         = std::max_element(volume_fractions.begin(),volume_fractions.end());
@@ -90,17 +79,6 @@ namespace aspect
       Assert(in.n_evaluation_points() == 1, ExcInternalError());
 
       const std::vector<double> volume_fractions = MaterialUtilities::compute_composition_fractions(in.composition[0], rheology->get_volumetric_composition_mask());
-
-      // This is for removing the effect of dike injection function from 
-      // the viscosity calculation.
-      double dike_injection_rate = 0.0;
-      if(this->get_timestep_number() != 0)
-        {
-          if (this->convert_output_to_years())
-            dike_injection_rate = injection_function.value(in.position[0]) / year_in_seconds;
-          else
-            dike_injection_rate = injection_function.value(in.position[0]);        
-        }
 
       /* The following handles phases in a similar way as in the 'evaluate' function.
        * Results then enter the calculation of plastic yielding.
@@ -139,7 +117,7 @@ namespace aspect
       /* The following returns whether or not the material is plastically yielding
        * as documented in evaluate.
        */
-      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, dike_injection_rate, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
       std::vector<double>::const_iterator max_composition = std::max_element(volume_fractions.begin(), volume_fractions.end());
       const bool plastic_yielding = isostrain_viscosities.composition_yielding[std::distance(volume_fractions.begin(), max_composition)];
@@ -218,21 +196,12 @@ namespace aspect
           IsostrainViscosities isostrain_viscosities;
           if (in.requests_property(MaterialProperties::viscosity))
             {
-              // If the function of prescrbed dilation is on
-              MaterialModel::PrescribedPlasticDilation<dim>
-              *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
-                             ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
-                             : nullptr;
-              double dike_injection_rate = 0.0;
-              if(prescribed_dilation != nullptr && this->get_timestep_number() != 0)
-                dike_injection_rate = prescribed_dilation->dilation[i];
-
               // Currently, the viscosities for each of the compositional fields are calculated assuming
               // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
               // TODO: This is only consistent with viscosity averaging if the arithmetic averaging
               // scheme is chosen. It would be useful to have a function to calculate isostress viscosities.
               isostrain_viscosities =
-                rheology->calculate_isostrain_viscosities(in, i, dike_injection_rate, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+                rheology->calculate_isostrain_viscosities(in, i, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
               // The isostrain condition implies that the viscosity averaging should be arithmetic (see above).
               // We have given the user freedom to apply alternative bounds, because in diffusion-dominated
@@ -396,14 +365,6 @@ namespace aspect
 
           Rheology::ViscoPlastic<dim>::declare_parameters(prm);
           
-          //Adding the same dike injection function for removal_in_eta
-          prm.enter_subsection("Remove dike effect function");
-          {
-            Functions::ParsedFunction<dim>::declare_parameters(prm,1);
-            prm.declare_entry("Function expression","0.0");
-          }
-          prm.leave_subsection();
-
           // Equation of state parameters
           prm.declare_entry ("Thermal diffusivities", "0.8e-6",
                              Patterns::List(Patterns::Double (0.)),
@@ -478,24 +439,6 @@ namespace aspect
           equation_of_state.initialize_simulator (this->get_simulator());
           equation_of_state.parse_parameters (prm,
                                               std::make_unique<std::vector<unsigned int>>(phase_function.n_phases_for_each_composition()));
-
-          //Adding the same dike injection function for removal_in_eta
-          prm.enter_subsection("Remove dike effect function");
-          {
-            try
-              {
-                injection_function.parse_parameters(prm);
-              }
-            catch (...)
-              {
-                std::cerr << "FunctionParser failed to parse\n"
-                          << "\t Remove dike effect function\n"
-                          << "with expression \n"
-                          << "\t' " << prm.get("Function expression") << "'";
-                throw;
-              } 
-          }
-          prm.leave_subsection();
 
           // Retrieve the list of composition names
           const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
