@@ -341,8 +341,8 @@ namespace aspect
                           << "\t' " << prm.get("Function expression") << "'";
                 throw;
               }
-            prm.leave_subsection();
           }
+          prm.leave_subsection();
         }
         prm.leave_subsection();
       }

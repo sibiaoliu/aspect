@@ -207,12 +207,6 @@ namespace aspect
           double min_strain_rate;
 
           /**
-           * List of magma injection rates via the dike
-           * Note that 'Enable dike injection' should be on.
-           */
-          std::vector<double> dike_injection_rates;
-
-          /**
            * Enumeration for selecting which viscosity averaging scheme to use.
            */
           MaterialUtilities::CompositionalAveragingOperation viscosity_averaging;

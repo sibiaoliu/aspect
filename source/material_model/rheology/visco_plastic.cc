@@ -126,21 +126,18 @@ namespace aspect
         const bool use_reference_strainrate = (this->get_timestep_number() == 0) &&
                                               (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
 
-        // If dike injection is activate, remove its effect on the strain rate here
+        // If dike injection is activated, remove its effect on the strain rate here
         const SymmetricTensor<2, dim> strain_rate_current = in.strain_rate[i];
         SymmetricTensor<2, dim> deviatoric_strain_rate_current = deviator(strain_rate_current);
-        const double dike = 1.58444e-12;
-        std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << std::endl;
         if (this->get_parameters().enable_dike_injection == true)
           {
-            deviatoric_strain_rate_current[0][0] += 2.0 / 3.0 * dike; //dike_injection_rate;
-            deviatoric_strain_rate_current[1][1] -= 1.0 / 3.0 * dike; //dike_injection_rate;
+            deviatoric_strain_rate_current[0][0] += 2.0 / 3.0 * dike_injection_rate;
+            deviatoric_strain_rate_current[1][1] -= 1.0 / 3.0 * dike_injection_rate;
             if (dim == 3)
-              deviatoric_strain_rate_current[2][2] -= 1.0 / 3.0 * dike; //dike_injection_rate;
+              deviatoric_strain_rate_current[2][2] -= 1.0 / 3.0 * dike_injection_rate;
                     
           }
-        std::cout << "NEW Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "NEW Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << std::endl;  
-        
+
         double edot_ii;
         // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
         if (use_reference_strainrate)
@@ -148,6 +145,7 @@ namespace aspect
         else           
           edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.)),
                              min_strain_rate);
+        // output the current edot_ii
         // output_parameters.composition_current_edot_ii[j] = edot_ii;
 
         // Calculate viscosities for each of the individual compositional phases
@@ -392,11 +390,9 @@ namespace aspect
         *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                         ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                         : nullptr;          
-        double dike_injection_rate;
-        if (this->get_timestep_number() == 0)
-          dike_injection_rate = 0.0;
-        else
-          dike_injection_rate = 1.58444e-12; //prescribed_dilation->dilation[i];
+        double dike_injection_rate = 0.0;
+        if (prescribed_dilation != nullptr && this->get_timestep_number() != 0)
+          dike_injection_rate = prescribed_dilation->dilation[i];
 
         if (derivatives != nullptr)
           {
@@ -545,14 +541,7 @@ namespace aspect
                            "Upper cutoff for effective viscosity. Units: \\si{\\pascal\\second}. "
                            "List with as many components as active "
                            "compositional fields (material data is assumed to "
-                           "be in order with the ordering of the fields). ");
-        // If the dike injecton function is on
-        prm.declare_entry ("Dike injection rates", "0.0",
-                           Patterns::List(Patterns::Double (0.)),
-                           "List of magmatc injection rates, if 'Enable dike injection' is true, "
-                           "for background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
-                           "Units: \\si{\\per\\second}.");                           
+                           "be in order with the ordering of the fields). ");                     
 
         // Rheological parameters
         prm.declare_entry ("Viscosity averaging scheme", "harmonic",
@@ -659,12 +648,6 @@ namespace aspect
             elastic_rheology.initialize_simulator (this->get_simulator());
             elastic_rheology.parse_parameters(prm);
           }
-
-        // If the dike injecton function is on
-        dike_injection_rates = Utilities::parse_map_to_double_array (prm.get("Dike injection rates"),
-                                                                         list_of_composition_names,
-                                                                         has_background_field,
-                                                                         "Dike injection rates");
 
         // Reference and minimum/maximum values
         min_strain_rate = prm.get_double("Minimum strain rate");
