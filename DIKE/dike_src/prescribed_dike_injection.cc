@@ -264,7 +264,10 @@ namespace aspect
                 {
                   AssertThrow(this->introspection().compositional_name_exists("injection_phase"),
                               ExcMessage("Material model prescribed dilation only works if there "
-                                         "is a compositional field called 'injection_phase'."));
+                                         "is a compositional field called 'injection_phase'. If "
+                                         "you only want the 'injection phase' field in the injection "
+                                         "area, you should prescribe other fields such as 'mantle' "
+                                         "below to be 0."));
 
                   if (c == this->introspection().compositional_index_for_name("injection_phase"))
                     out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
@@ -278,28 +281,7 @@ namespace aspect
                     out.reaction_terms[i][c] = -1.0 * composition[c];
                 }
             }
-        }
-      // Currently, the dike injection process assumes that the nonlinear solver
-      // scheme does a single advection iteration.
-      // TODO: TEST iterated advection. It may work?
-      AssertThrow((this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_single_Stokes
-                   ||
-                   this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes
-                   ||
-                   this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes
-                   ||
-                   this->get_parameters().nonlinear_solver ==
-                   Parameters<dim>::NonlinearSolver::single_Advection_iterated_defect_correction_Stokes),
-                  ExcMessage("The material model will only work with the nonlinear "
-                             "solver schemes 'single Advection, single Stokes', "
-                             "'single Advection, iterated Stokes', "
-                             "'single Advection, iterated Newton Stokes', and "
-                             "'single Advection, iterated defect correction Stokes' "
-                             "when prescribed dilation is enabled."));
-  
+        } 
     }
 
     template <int dim>
@@ -361,9 +343,9 @@ namespace aspect
                           << "with expression \n"
                           << "\t' " << prm.get("Function expression") << "'";
                 throw;
-              }
-            prm.leave_subsection();
+              } 
           }
+          prm.leave_subsection();
         }
         prm.leave_subsection();
       }
