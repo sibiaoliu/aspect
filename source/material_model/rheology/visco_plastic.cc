@@ -118,7 +118,16 @@ namespace aspect
               stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
           }
 
-        // If dike injection is activated, remove its effect on the strain rate here
+        // The first time this function is called (first iteration of first time step)
+        // a specified "reference" strain rate is used as the returned value would
+        // otherwise be zero.
+        const bool use_reference_strainrate = (this->get_timestep_number() == 0) &&
+                                              (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
+
+        double edot_ii;
+
+        // If the dike injection is activated, we want to remove its
+        // effect on the strain rate when calculating the viscosity
         double dike_injection_rate = 0.0;
         if (this->convert_output_to_years())
           dike_injection_rate = injection_function.value(in.position[i]) / year_in_seconds;
@@ -130,34 +139,29 @@ namespace aspect
         if(dike_injection_rate !=0)
         {
           std::cout << "dike injection rate: " << dike_injection_rate << " 1/s \n" << std::endl;
-          std::cout << "strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << std::endl;                 
-          std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << std::endl;        
+          std::cout << "strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << "strain rate zz: " << strain_rate_current[2][2] << " 1/s \n" << std::endl;                 
+          std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate_current[2][2] << " 1/s \n" << std::endl;        
         }
 
-        // The first time this function is called (first iteration of first time step)
-        // a specified "reference" strain rate is used as the returned value would
-        // otherwise be zero.
-        const bool use_reference_strainrate = (this->get_timestep_number() == 0) &&
-                                              (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
-
-        double edot_ii;            
-        // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
         if (use_reference_strainrate)
           edot_ii = ref_strain_rate;
         else
           {  
+            // If the dike injection is activated --- TEST first
             if (this->get_parameters().enable_dike_injection == true)
               {
                 strain_rate_current[0][0] -= 2.0 / 3.0 * dike_injection_rate;
+                strain_rate_current[1][1] += 1.0 / 3.0 * dike_injection_rate;
+                strain_rate_current[2][2] += 1.0 / 3.0 * dike_injection_rate;
                 deviatoric_strain_rate_current = deviator(strain_rate_current);
               }
 
             if (dike_injection_rate !=0)
               {
-                std::cout << "NEW strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "NEW strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << std::endl;        
-                std::cout << "NEW Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "NEW Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << std::endl; 
+                std::cout << "NEW strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "NEW strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << "NEW strain rate zz: " << strain_rate_current[2][2] << " 1/s \n" << std::endl;        
+                std::cout << "NEW Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "NEW Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << "NEW Dev. strain rate zz: " << deviatoric_strain_rate_current[2][2] << " 1/s \n" << std::endl; 
               }
-
+            // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
             edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.)),
                              min_strain_rate);      
           }
