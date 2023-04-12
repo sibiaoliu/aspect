@@ -353,13 +353,13 @@ namespace aspect
 
               // Only assemble this term if we are running incompressible, otherwise this term
               // is already included on the LHS of the equation.
-              if (enable_prescribed_dilation && !material_model_is_compressible)
-                data.local_rhs(i) += (
-                                       // RHS of momentum eqn: - \int 2/3 eta R, div v
-                                       - 2.0 / 3.0 * eta
-                                       * prescribed_dilation->dilation[q]
-                                       * scratch.div_phi_u[i]
-                                     ) * JxW;
+              // if (enable_prescribed_dilation && !material_model_is_compressible)
+              //   data.local_rhs(i) += (
+              //                          // RHS of momentum eqn: - \int 2/3 eta R, div v
+              //                          - 2.0 / 3.0 * eta
+              //                          * prescribed_dilation->dilation[q]
+              //                          * scratch.div_phi_u[i]
+              //                        ) * JxW;
             }
 
           // This is customized for the dike injection process:
@@ -368,20 +368,20 @@ namespace aspect
           // additional RHS of horizontal (x) momentum eqn: - \int 2 eta R, div v
           // Buck et al., 2005; Howell et al., 2019
           // Note here: Enable_prescribed_dilation = true
-          if (this->get_parameters().enable_dike_injection == true)
-            for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
-              {
-                const unsigned int index_horizon=fe.system_to_component_index(i).first;
-                if (introspection.is_stokes_component(index_horizon))
-                  {
-                    if (prescribed_dilation != nullptr && !material_model_is_compressible && index_horizon==0)
-                      {
-                        data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
-                      }
-                    ++i_stokes;
-                  }
-                ++i;
-              }
+          // if (this->get_parameters().enable_dike_injection == true)
+          //   for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
+          //     {
+          //       const unsigned int index_horizon=fe.system_to_component_index(i).first;
+          //       if (introspection.is_stokes_component(index_horizon))
+          //         {
+          //           if (prescribed_dilation != nullptr && !material_model_is_compressible && index_horizon==0)
+          //             {
+          //               data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
+          //             }
+          //           ++i_stokes;
+          //         }
+          //       ++i;
+          //     }
 
           // and then the matrix, if necessary
           if (scratch.rebuild_newton_stokes_matrix)
