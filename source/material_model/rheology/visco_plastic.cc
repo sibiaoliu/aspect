@@ -160,9 +160,10 @@ namespace aspect
             if (this->get_parameters().enable_dike_injection == true)
               {
                 //remove dike contribution to strain rate from deviatoric strain rate (for xx, yy and zz components)
-                deviatoric_strain_rate_current[0][0] -= 2.0 / 3.0 * dike_injection_rate;
-                deviatoric_strain_rate_current[1][1] += 1.0 / 3.0 * dike_injection_rate;
-                deviatoric_strain_rate_current[2][2] += 1.0 / 3.0 * dike_injection_rate;
+                deviatoric_strain_rate_current[0][0] -= dike_injection_rate;
+                //deviatoric_strain_rate_current[0][0] -= 2.0 / 3.0 * dike_injection_rate;
+                //deviatoric_strain_rate_current[1][1] += 1.0 / 3.0 * dike_injection_rate;
+                //deviatoric_strain_rate_current[2][2] += 1.0 / 3.0 * dike_injection_rate;
                 edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.)),		
                                 min_strain_rate);
               }
