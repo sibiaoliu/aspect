@@ -378,6 +378,10 @@ namespace aspect
                       {
                         data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
                       }
+                    else
+                      {
+                        data.local_rhs(i_stokes) += 2.0 / 3.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;                        
+                      }                      
                     ++i_stokes;
                   }
                 ++i;
