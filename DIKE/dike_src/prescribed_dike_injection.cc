@@ -271,14 +271,11 @@ namespace aspect
 
                   if (c == this->introspection().compositional_index_for_name("injection_phase"))
                     out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
-                  
-                  // TODO: find a good way to avoid this user-defined compositional name
-                  if (c == this->introspection().compositional_index_for_name("mantle"))
+                  else if (c == this->introspection().compositional_index_for_name("mantle"))
                     out.reaction_terms[i][c] = -1.0 * composition[c];
-
-                  // Do not allow the plastic deformation within the dike
-                  if (c == this->introspection().compositional_index_for_name("plastic_strain"))
-                    out.reaction_terms[i][c] = -1.0 * composition[c];
+                  else if (c == this->introspection().compositional_index_for_name("plastic_strain"))
+                    out.reaction_terms[i][c] = -1.0 * composition[c];// No plastic deformation in the dike
+                
                 }
             }
         } 
