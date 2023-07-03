@@ -20,8 +20,13 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/simulator_access.h>
 #include <aspect/simulator.h>
+#include <aspect/utilities.h>
+#include <aspect/global.h>
+
 #include <deal.II/base/function_lib.h>
 #include <deal.II/base/parsed_function.h>
+#include <deal.II/base/signaling_nan.h>
+
 #include <aspect/heating_model/interface.h>
 #include <aspect/material_model/visco_plastic.h>
 
@@ -195,6 +200,13 @@ namespace aspect
     void
     PrescribedDilation<dim>::update()
     {
+      // we get time passed as seconds (always) but may want
+      // to reinterpret it in years
+      if (this->convert_output_to_years())
+        injection_function.set_time (this->get_time() / year_in_seconds);
+      else
+        injection_function.set_time (this->get_time());
+      
       base_model->update();
     }
 
@@ -335,7 +347,7 @@ namespace aspect
               }
             catch (...)
               {
-                std::cerr << "FunctionParser failed to parse\n"
+                std::cerr << "ERROR: FunctionParser failed to parse\n"
                           << "\t Injection function\n"
                           << "with expression \n"
                           << "\t' " << prm.get("Function expression") << "'";
