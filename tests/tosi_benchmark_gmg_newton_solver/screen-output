@@ -82,7 +82,7 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
    Solving temperature system... 20 iterations.
    Solving Stokes system... 21+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 0.0613293, norm of the rhs: 0.00229308, newton_derivative_scaling_factor: 0
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 2: 0.0613292, norm of the rhs: 0.00229308, newton_derivative_scaling_factor: 0
 
    Solving temperature system... 22 iterations.
    Solving Stokes system... 21+0 iterations.
@@ -94,7 +94,7 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
    Solving temperature system... 25 iterations.
    Solving Stokes system... 23+0 iterations.
-      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 0.113004, norm of the rhs: 0.0042252, newton_derivative_scaling_factor: 0
+      Relative nonlinear residual (total Newton system) after nonlinear iteration 5: 0.113004, norm of the rhs: 0.00422519, newton_derivative_scaling_factor: 0
 
    Solving temperature system... 28 iterations.
    Switching from defect correction form of Picard to the Newton solver scheme.
