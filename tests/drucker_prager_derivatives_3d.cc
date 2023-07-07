@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2022 by the authors of the ASPECT code.
+  Copyright (C) 2022 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -232,7 +232,7 @@ void f(const aspect::SimulatorAccess<dim> &simulator_access,
 
   if (Error)
     {
-      std::cout << "Some parts of the test where not succesful." << std::endl;
+      std::cout << "Some parts of the test where not successful." << std::endl;
     }
   else
     {

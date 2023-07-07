@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -1129,7 +1129,7 @@ namespace aspect
         /**
          * Function for NamedAdditionalMaterialOutputs interface
          */
-        virtual std::vector<double> get_nth_output(const unsigned int idx) const;
+        std::vector<double> get_nth_output(const unsigned int idx) const override;
 
         /**
          * A scalar value per evaluation point that specifies the prescribed dilation
@@ -1196,9 +1196,9 @@ namespace aspect
         virtual ~EnthalpyOutputs()
           = default;
 
-        virtual void average (const MaterialAveraging::AveragingOperation operation,
-                              const FullMatrix<double>  &/*projection_matrix*/,
-                              const FullMatrix<double>  &/*expansion_matrix*/)
+        void average (const MaterialAveraging::AveragingOperation operation,
+                      const FullMatrix<double>  &/*projection_matrix*/,
+                      const FullMatrix<double>  &/*expansion_matrix*/) override
         {
           AssertThrow(operation == MaterialAveraging::AveragingOperation::none,ExcNotImplemented());
           return;

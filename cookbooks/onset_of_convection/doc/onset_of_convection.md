@@ -16,13 +16,13 @@ models with small parameter variations. More details can be found in the
 example assignment below.
 
 
-```{figure-md} fig:convection-box-iterations
+```{figure-md} fig:onset-of-convection-models
 <img src="convection_models.png" style="width:80.0%" />
 
  Onset of convection model with different Rayleigh numbers. Background colors show temperature.
 ```
 
-Slides that describe the different forces controling convective motion (which
+Slides that describe the different forces controlling convective motion (which
 is related to one of the questions in the assignment) can be found [here]( https://www.dropbox.com/s/0wqtg05w7713hdz/06_geophysics_lecture_01_29.pdf?dl=0).
 
 ## Example assignment: Onset of convection in celestial bodies

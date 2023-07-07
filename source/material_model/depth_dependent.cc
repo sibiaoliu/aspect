@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -169,7 +169,7 @@ namespace aspect
                              boost::lexical_cast<std::string>(std::numeric_limits<double>::max()),
                              Patterns::Double (0.),
                              "The value of the constant reference viscosity $\\eta_r$ that is used to scale "
-                             "the non-dimenional depth-dependent viscosity prefactor. "
+                             "the non-dimensional depth-dependent viscosity prefactor. "
                              "Units: \\si{\\pascal\\second}.");
 
 

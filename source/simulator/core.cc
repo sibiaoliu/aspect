@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -603,21 +603,6 @@ namespace aspect
     // before repeating a timestep
     if (particle_world.get() != nullptr)
       particle_world->backup_particles();
-
-    // Re-compute the pressure scaling factor. In some sense, it would be nice
-    // if we did this not just once per time step, but once for each solve --
-    // i.e., multiple times per time step if we iterate out the nonlinearity
-    // during a Newton or Picard iteration. But that's more work,
-    // and the function would need to be called in more different places.
-    // Unless we have evidence that that's necessary, let's assume that
-    // the reference viscosity does not change too much between nonlinear
-    // iterations and that it's ok to update it only once per time step.
-    //
-    // The call to this function must precede the one to the computation
-    // of constraints because some kinds of constraints require scaling
-    // pressure degrees of freedom to a size adjusted by the pressure_scaling
-    // factor.
-    pressure_scaling = compute_pressure_scaling_factor();
 
     // then interpolate the current boundary velocities. copy constraints
     // into current_constraints and then add to current_constraints
@@ -1665,20 +1650,21 @@ namespace aspect
             cell->clear_coarsen_flag ();
         }
 
-      std::vector<const LinearAlgebra::BlockVector *> x_system (2);
-      x_system[0] = &solution;
-      x_system[1] = &old_solution;
+
+      // Next set up whatever is necessary to transfer the solution from old
+      // to new mesh:
+      std::vector<const LinearAlgebra::BlockVector *> x_system
+        = { &solution, &old_solution };
 
       if (parameters.mesh_deformation_enabled)
-        x_system.push_back( &mesh_deformation->mesh_velocity );
+        x_system.push_back(&mesh_deformation->mesh_velocity);
 
-      std::vector<const LinearAlgebra::Vector *> x_fs_system (3);
-
+      std::vector<const LinearAlgebra::Vector *> x_fs_system;
       if (parameters.mesh_deformation_enabled)
         {
-          x_fs_system[0] = &mesh_deformation->mesh_displacements;
-          x_fs_system[1] = &mesh_deformation->old_mesh_displacements;
-          x_fs_system[2] = &mesh_deformation->initial_topography;
+          x_fs_system.push_back (&mesh_deformation->mesh_displacements);
+          x_fs_system.push_back (&mesh_deformation->old_mesh_displacements);
+          x_fs_system.push_back (&mesh_deformation->initial_topography);
           mesh_deformation_trans
             = std::make_unique<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>>
               (mesh_deformation->mesh_deformation_dof_handler);
@@ -1735,9 +1721,8 @@ namespace aspect
       if (parameters.mesh_deformation_enabled)
         distributed_mesh_velocity.reinit(introspection.index_sets.system_partitioning, mpi_communicator);
 
-      std::vector<LinearAlgebra::BlockVector *> system_tmp (2);
-      system_tmp[0] = &distributed_system;
-      system_tmp[1] = &old_distributed_system;
+      std::vector<LinearAlgebra::BlockVector *> system_tmp
+        = { &distributed_system, &old_distributed_system};
 
       if (parameters.mesh_deformation_enabled)
         system_tmp.push_back(&distributed_mesh_velocity);
@@ -1787,10 +1772,11 @@ namespace aspect
           distributed_initial_topography.reinit(mesh_deformation->mesh_locally_owned,
                                                 mpi_communicator);
 
-          std::vector<LinearAlgebra::Vector *> system_tmp (3);
-          system_tmp[0] = &distributed_mesh_displacements;
-          system_tmp[1] = &distributed_old_mesh_displacements;
-          system_tmp[2] = &distributed_initial_topography;
+          std::vector<LinearAlgebra::Vector *> system_tmp
+          = { &distributed_mesh_displacements,
+              &distributed_old_mesh_displacements,
+              &distributed_initial_topography
+            };
 
           mesh_deformation_trans->interpolate (system_tmp);
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -37,7 +37,7 @@
 
 #include <netcdf.h>
 #define AssertThrowNetCDF(error_code) \
-  AssertThrow(error_code == NC_NOERR, dealii::ExcMessage("A NetCDF Error with code " + std::to_string(error_code) + " occured."))
+  AssertThrow(error_code == NC_NOERR, dealii::ExcMessage("A NetCDF Error with code " + std::to_string(error_code) + " occurred."))
 
 #else
 
@@ -192,23 +192,12 @@ namespace aspect
                                       const MPI_Comm &mpi_communicator,
                                       const unsigned int root_process)
     {
-#if DEAL_II_VERSION_GTE(9,4,0)
-      const bool supports_shared_data = true;
-#else
-      const bool supports_shared_data = false;
-#endif
-
       // If this is the root process, or if the user did not request
-      // sharing, or if we don't support data sharing,
-      // then set up the various member variables we need to compute
-      // from the input data
-      if ((supports_shared_data == false)
+      // sharing, set up the various member variables we need to compute
+      // from the input data:
+      if ((root_process == numbers::invalid_unsigned_int)
           ||
-          (root_process == numbers::invalid_unsigned_int)
-          ||
-          ((supports_shared_data == true)
-           &&
-           (root_process != numbers::invalid_unsigned_int)
+          ((root_process != numbers::invalid_unsigned_int)
            &&
            (Utilities::MPI::this_mpi_process(mpi_communicator) == root_process)))
         {
@@ -248,16 +237,12 @@ namespace aspect
           coordinate_values_are_equidistant = data_is_equidistant<dim> (coordinate_values);
         }
 
-      // If deal.II is new enough to support sharing data, and if the
-      // caller of this function has actually requested this, then we have
+      // If the caller of this function requested it, then we have
       // set up member variables on the root process, but not on any of
       // the other processes. Broadcast the data to the remaining
       // processes
-      if ((supports_shared_data == true)
-          &&
-          (root_process != numbers::invalid_unsigned_int))
+      if (root_process != numbers::invalid_unsigned_int)
         {
-#if DEAL_II_VERSION_GTE(9,4,0)
           coordinate_values                 = Utilities::MPI::broadcast (mpi_communicator,
                                                                          coordinate_values,
                                                                          root_process);
@@ -282,7 +267,6 @@ namespace aspect
           for (unsigned int c = 0; c < components; ++c)
             data_table[c].replicate_across_communicator (mpi_communicator,
                                                          root_process);
-#endif
         }
 
       Assert(data_table.size() == components,
@@ -351,42 +335,26 @@ namespace aspect
     StructuredDataLookup<dim>::load_file(const std::string &filename,
                                          const MPI_Comm &comm)
     {
-#if DEAL_II_VERSION_GTE(9,4,0)
-      const bool supports_shared_data = true;
       const unsigned int root_process = 0;
-#else
-      const bool supports_shared_data = false;
-      const unsigned int root_process = numbers::invalid_unsigned_int;
-#endif
 
       std::vector<std::string> column_names;
       std::vector<Table<dim,double>> data_tables;
       std::vector<std::vector<double>> coordinate_values(dim);
 
-      // If this is the root process, or if we don't support data sharing,
-      // then set up the various member variables we need to compute
+      // If this is the root process, set up the various member variables we need to compute
       // from the input data
-      if ((supports_shared_data == false)
-          ||
-          ((supports_shared_data == true)
-           &&
-           (Utilities::MPI::this_mpi_process(comm) == root_process)))
+      if (Utilities::MPI::this_mpi_process(comm) == root_process)
         {
           // Grab the values already stored in this class (if they exist), this way we can
           // check if somebody changes the size of the table over time and error out (see below)
           TableIndices<dim> new_table_points = this->table_points;
 
-          // Read data from disk and distribute among processes. We only have to
-          // do the distributing if every process is supposed to read and parse
-          // the data (namely, if supports_shared_data==false), and so we only
-          // have to pass the 'real' communicator in that case; if we want
-          // to do the data sharing later on, just pass MPI_COMM_SELF (i.e.,
-          // a communicator with just a single MPI process) and in that case
-          // no sharing will happen.
+          // We do not need to distribute the contents as we are using shared data
+          // to place it later. Therefore, just pass MPI_COMM_SELF (i.e.,
+          // a communicator with just a single MPI process) and no distribution
+          // will happen.
           std::stringstream in(read_and_distribute_file_content(filename,
-                                                                (supports_shared_data==false ?
-                                                                 comm :
-                                                                 MPI_COMM_SELF)));
+                                                                MPI_COMM_SELF));
 
           // Read header lines and table size
           while (in.peek() == '#')
@@ -580,37 +548,33 @@ namespace aspect
                                   "lines against the POINTS header in the file."));
         }
 
-      // If deal.II is new enough to support sharing data, then we have
+      // If deal.II is new enough to support sharing data (since 9.4), then we have
       // set up member variables on the root process, but not on any of
       // the other processes. So broadcast the data to the remaining
       // processes -- the code above really only wrote into one
       // member variable ('components'), so that is the only one we
       // have to broadcast.
       //
-      // If data sharing is possible (deal.II version >= 9.3), then
-      // the first three arguments to the call to reinit() below will
+      // The first three arguments to the call to reinit() below will
       // only be read on the root process, and so it is totally ok
       // that we are passing empty tables on all other processes. In
       // the case of 'data_table', we do have to make sure that it is
       // an array of the right size, though, even though the array
       // contains only empty tables.
-      if (supports_shared_data == true)
-        {
-#if DEAL_II_VERSION_GTE(9,4,0)
-          components = Utilities::MPI::broadcast (comm,
-                                                  components,
+      {
+        components = Utilities::MPI::broadcast (comm,
+                                                components,
+                                                root_process);
+        coordinate_values = Utilities::MPI::broadcast (comm,
+                                                       coordinate_values,
+                                                       root_process);
+        column_names = Utilities::MPI::broadcast (comm,
+                                                  column_names,
                                                   root_process);
-          coordinate_values = Utilities::MPI::broadcast (comm,
-                                                         coordinate_values,
-                                                         root_process);
-          column_names = Utilities::MPI::broadcast (comm,
-                                                    column_names,
-                                                    root_process);
 
-          if (Utilities::MPI::this_mpi_process(comm) != root_process)
-            data_tables.resize (components);
-#endif
-        }
+        if (Utilities::MPI::this_mpi_process(comm) != root_process)
+          data_tables.resize (components);
+      }
 
       // Finally create the data. We want to call the move-version of reinit() so
       // that the data doesn't have to be copied, so use std::move on all big
@@ -657,7 +621,7 @@ namespace aspect
       // use variables with dim dimensions (our template argument) and
       // only those that all use the same dimids inside the netcdf
       // file.
-      int dimids_to_use[dim]; // dimids of the coordinate columns to use
+      int dimids_to_use[dim] = {}; // dimids of the coordinate columns to use
       std::vector<int> varids_to_use; // all netCDF varids of the data columns
 
       if (data_column_names.empty())
@@ -740,27 +704,27 @@ namespace aspect
                   if (varid < ndims)
                     continue;
 
+                  char  var_name[NC_MAX_NAME];
                   nc_type xtype;
-                  int ndims;
-                  int dimids[NC_MAX_VAR_DIMS];
-                  char  name[NC_MAX_NAME];
-                  int natts;
+                  int var_ndims;
+                  int var_dimids[NC_MAX_VAR_DIMS];
+                  int var_natts;
 
-                  status = nc_inq_var (ncid, varid, name, &xtype, &ndims, dimids,
-                                       &natts);
+                  status = nc_inq_var (ncid, varid, var_name, &xtype, &var_ndims, var_dimids,
+                                       &var_natts);
                   AssertThrowNetCDF(status);
-                  if (cur_name != name)
+                  if (cur_name != var_name)
                     continue;
 
                   found = true;
 
-                  if (ndims == dim)
+                  if (var_ndims == dim)
                     {
                       bool use = true;
                       if (varids_to_use.size()>0)
                         {
                           for (int i=0; i<dim; ++i)
-                            if (dimids_to_use[i]!=dimids[i])
+                            if (dimids_to_use[i]!=var_dimids[i])
                               {
                                 use=false;
                                 break;
@@ -771,8 +735,8 @@ namespace aspect
                           for (int i=0; i<dim; ++i)
                             {
                               size_t length;
-                              status = nc_inq_dim(ncid, dimids[i], nullptr, &length);
-                              dimids_to_use[i] = dimids[i];
+                              status = nc_inq_dim(ncid, var_dimids[i], nullptr, &length);
+                              dimids_to_use[i] = var_dimids[i];
                               // dimensions are specified in reverse order in the nc file:
                               new_table_points[dim-1-i] = length;
                             }
@@ -1023,7 +987,7 @@ namespace aspect
                             << filename << '.' << std::endl << std::endl;
 
 
-          AssertThrow(Utilities::fexists(filename) || filename_is_url(filename),
+          AssertThrow(Utilities::fexists(filename, this->get_mpi_communicator()) || filename_is_url(filename),
                       ExcMessage (std::string("Ascii data file <")
                                   +
                                   filename
@@ -1045,7 +1009,7 @@ namespace aspect
                 current_file_number + 1;
 
               const std::string filename (create_filename (next_file_number, boundary_id));
-              if (Utilities::fexists(filename))
+              if (Utilities::fexists(filename, this->get_mpi_communicator()))
                 {
                   this->get_pcout() << std::endl << "   Also loading next Ascii data boundary file "
                                     << filename << '.' << std::endl << std::endl;
@@ -1105,7 +1069,7 @@ namespace aspect
       const std::string boundary_name = this->get_geometry_model().translate_id_to_symbol_name(boundary_id);
 
       const std::string result = replace_placeholders(templ, boundary_name, filenumber);
-      if (fexists(result))
+      if (fexists(result, this->get_mpi_communicator()))
         return result;
 
       // Backwards compatibility check: people might still be using the old
@@ -1115,13 +1079,13 @@ namespace aspect
       if (boundary_name == "top")
         {
           compatible_result = replace_placeholders(templ, "surface", filenumber);
-          if (!fexists(compatible_result))
+          if (!fexists(compatible_result, this->get_mpi_communicator()))
             compatible_result = replace_placeholders(templ, "outer", filenumber);
         }
       else if (boundary_name == "bottom")
         compatible_result = replace_placeholders(templ, "inner", filenumber);
 
-      if (!fexists(result) && fexists(compatible_result))
+      if (!fexists(result, this->get_mpi_communicator()) && fexists(compatible_result, this->get_mpi_communicator()))
         {
           this->get_pcout() << "WARNING: Filename convention concerning geometry boundary "
                             "names changed. Please rename '" << compatible_result << "'"
@@ -1204,7 +1168,7 @@ namespace aspect
           const std::string filename (create_filename (current_file_number,boundary_id));
           this->get_pcout() << std::endl << "   Loading Ascii data boundary file "
                             << filename << '.' << std::endl << std::endl;
-          if (Utilities::fexists(filename))
+          if (Utilities::fexists(filename, this->get_mpi_communicator()))
             {
               lookups.find(boundary_id)->second.swap(old_lookups.find(boundary_id)->second);
               lookups.find(boundary_id)->second->load_file(filename,this->get_mpi_communicator());
@@ -1225,7 +1189,7 @@ namespace aspect
       const std::string filename (create_filename (next_file_number,boundary_id));
       this->get_pcout() << std::endl << "   Loading Ascii data boundary file "
                         << filename << '.' << std::endl << std::endl;
-      if (Utilities::fexists(filename))
+      if (Utilities::fexists(filename, this->get_mpi_communicator()))
         {
           lookups.find(boundary_id)->second.swap(old_lookups.find(boundary_id)->second);
           lookups.find(boundary_id)->second->load_file(filename,this->get_mpi_communicator());
@@ -1470,7 +1434,7 @@ namespace aspect
                                Patterns::Double (0.),
                                "The `First data file model time' parameter "
                                "has been deactivated and will be removed in a future release. "
-                               "Do not use this paramter and instead provide data files "
+                               "Do not use this parameter and instead provide data files "
                                "starting from the model start time.");
             prm.declare_entry ("First data file number", "0",
                                Patterns::Integer (),
@@ -1566,7 +1530,7 @@ namespace aspect
       for (unsigned int i=0; i<number_of_layer_boundaries; ++i)
         {
           const std::string filename = data_directory + data_file_names[i];
-          AssertThrow(Utilities::fexists(filename) || filename_is_url(filename),
+          AssertThrow(Utilities::fexists(filename, this->get_mpi_communicator()) || filename_is_url(filename),
                       ExcMessage (std::string("Ascii data file <")
                                   +
                                   filename
@@ -1719,7 +1683,7 @@ namespace aspect
                         << filename << '.' << std::endl << std::endl;
 
 
-      AssertThrow(Utilities::fexists(filename) || filename_is_url(filename),
+      AssertThrow(Utilities::fexists(filename, this->get_mpi_communicator()) || filename_is_url(filename),
                   ExcMessage (std::string("Ascii data file <")
                               +
                               filename
@@ -1873,7 +1837,7 @@ namespace aspect
 
       const std::string filename = this->data_directory + this->data_file_name;
 
-      AssertThrow(Utilities::fexists(filename) || filename_is_url(filename),
+      AssertThrow(Utilities::fexists(filename, communicator) || filename_is_url(filename),
                   ExcMessage (std::string("Ascii data file <")
                               +
                               filename

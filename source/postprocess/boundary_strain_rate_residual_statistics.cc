@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -327,6 +327,6 @@ namespace aspect
                                   "is the difference between the second invariant of the model strain rate and "
                                   "the second strain rate invariant read from the input data file. "
                                   "Currently, the strain residual statistics, i.e., min, max and the rms magnitude, "
-                                  "are computed at the top suface.")
+                                  "are computed at the top surface.")
   }
 }
