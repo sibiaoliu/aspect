@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -551,9 +551,32 @@ namespace aspect
     /**
      * Checks whether a file named @p filename exists and is readable.
      *
+     * Note: This function performs file access on all MPI ranks that
+     * call it. Only use this function if
+     * the file access is performed on all MPI ranks
+     * and on a reasonably fast file system.
+     *
+     * @return True if the file exists and is readable on all MPI ranks
+     * that call this function.
      * @param filename File to check existence
      */
     bool fexists(const std::string &filename);
+
+    /**
+     * Check whether a file named @p filename exists and is readable
+     * on MPI rank 0. Then, broadcast the result to all MPI ranks.
+     *
+     * Note that in contrast to the other fexists() function, this function
+     * only checks for the existence of the file on a single process.
+     * This is useful to avoid overloading the file system and is sufficient
+     * if the subsequent file access is also only performed on MPI rank 0.
+     *
+     * @return True if the file exists and is readable on MPI rank 0.
+     * @param filename File to check existence
+     * @param comm MPI communicator to use.
+     */
+    bool fexists(const std::string &filename,
+                 MPI_Comm comm);
 
     /**
      * Checks to see if the user is trying to use data from a url.
@@ -565,7 +588,9 @@ namespace aspect
     /**
      * Reads the content of the ascii file @p filename on process 0 and
      * distributes the content by MPI_Bcast to all processes. The function
-     * returns the content of the file on all processes.
+     * returns the content of the file on all processes. The purpose of this
+     * function is to reduce parallel file access to a single file access on
+     * process 0.
      *
      * @param [in] filename The name of the ascii file to load. If the
      *  file name ends in `.gz`, then the function assumes that the file
@@ -582,6 +607,23 @@ namespace aspect
     std::string
     read_and_distribute_file_content(const std::string &filename,
                                      const MPI_Comm &comm);
+
+    /**
+     * Collect the content of @p file_content using MPI_Gather to process 0.
+     * Then write the content to the file @p filename on process 0.
+     * The purpose of this function is to reduce parallel file access to
+     * process 0. Note that this function assumes that the content from
+     * all processes fits into the memory of process 0.
+     *
+     * @param [in] filename The name of the file to write.
+     * @param [in] file_content The content that should be written to file.
+     * @param [in] comm The MPI communicator from which the content is
+     * collected.
+     */
+    void
+    collect_and_write_file_content(const std::string &filename,
+                                   const std::string &file_content,
+                                   const MPI_Comm &comm);
 
     /**
      * Creates a path as if created by the shell command "mkdir -p", therefore
@@ -670,48 +712,7 @@ namespace aspect
     void
     extract_composition_values_at_q_point (const std::vector<std::vector<double>> &composition_values,
                                            const unsigned int q,
-                                           std::vector<double> &composition_values_at_q_point)
-    {
-      Assert(q<composition_values.size(), ExcInternalError());
-      Assert(composition_values_at_q_point.size() > 0,
-             ExcInternalError());
-
-      for (unsigned int k=0; k < composition_values_at_q_point.size(); ++k)
-        {
-          Assert(composition_values[k].size() == composition_values_at_q_point.size(),
-                 ExcInternalError());
-          composition_values_at_q_point[k] = composition_values[k][q];
-        }
-    }
-
-    template <typename T>
-    inline
-    std::vector<T>
-    possibly_extend_from_1_to_N (const std::vector<T> &values,
-                                 const unsigned int N,
-                                 const std::string &id_text)
-    {
-      if (values.size() == 1)
-        {
-          return std::vector<T> (N, values[0]);
-        }
-      else if (values.size() == N)
-        {
-          return values;
-        }
-      else
-        {
-          // Non-specified behavior
-          AssertThrow(false,
-                      ExcMessage("Length of " + id_text + " list must be " +
-                                 "either one or " + Utilities::to_string(N) +
-                                 ". Currently it is " + Utilities::to_string(values.size()) + "."));
-        }
-
-      // This should never happen, but return an empty vector so the compiler
-      // will be happy
-      return std::vector<T> ();
-    }
+                                           std::vector<double> &composition_values_at_q_point);
 
     /**
      * Replace the string <tt>\$ASPECT_SOURCE_DIR</tt> in @p location by the current
@@ -1067,11 +1068,105 @@ namespace aspect
     };
 
     /**
-     * Create a permutation vector which can be used by the apply_permutation function
-     * to put the vector in sorted order.
+     * Create and return a permutation vector which can be used by the
+     * apply_permutation() function to put the vector in sorted order.
      *
      * @param vector vector to sort
      */
+    template <typename T>
+    inline
+    std::vector<std::size_t>
+    compute_sorting_permutation(const std::vector<T> &vector);
+
+    /**
+     * Applies a permutation vector to another vector and return the resulting vector.
+     *
+     * @param vector vector to sort
+     * @param permutation_vector The permutation vector used to sort the input vector.
+     * @return The permuted input vector.
+     */
+    template <typename T>
+    inline
+    std::vector<T>
+    apply_permutation(
+      const std::vector<T> &vector,
+      const std::vector<std::size_t> &permutation_vector);
+
+    /**
+     * Get volume weighted rotation matrices, using random draws to convert
+     * to a discrete number of orientations, weighted by volume.
+     * The input is a vector of volume fractions and a vector of rotation matrices.
+     * The vectors need to have the same length.
+     *
+     * @param volume_fractions a vector of doubles representing the volume fraction of each grain
+     * @param rotation_matrices a vector of 2nd order 3D tensors representing the rotation matrix of each grain
+     * @param n_output_matrices The number of rotation matrices which are output by this function. This can be
+     * different from the number of entries in the volume fraction and rotation matrices vectors.
+     * @param random_number_generator a reference to a mt19937 random number generator.
+     */
+    std::vector<Tensor<2,3>>
+    rotation_matrices_random_draw_volume_weighting(const std::vector<double> volume_fractions,
+                                                   const std::vector<Tensor<2,3>> rotation_matrices,
+                                                   const unsigned int n_output_matrices,
+                                                   std::mt19937 &random_number_generator);
+  }
+}
+
+
+// inline implementations:
+#ifndef DOXYGEN
+namespace aspect
+{
+  namespace Utilities
+  {
+
+    template <typename T>
+    inline
+    std::vector<T>
+    possibly_extend_from_1_to_N (const std::vector<T> &values,
+                                 const unsigned int N,
+                                 const std::string &id_text)
+    {
+      if (values.size() == 1)
+        {
+          return std::vector<T> (N, values[0]);
+        }
+      else if (values.size() == N)
+        {
+          return values;
+        }
+      else
+        {
+          // Non-specified behavior
+          AssertThrow(false,
+                      ExcMessage("Length of " + id_text + " list must be " +
+                                 "either one or " + Utilities::to_string(N) +
+                                 ". Currently it is " + Utilities::to_string(values.size()) + "."));
+        }
+
+      // This should never happen, but return an empty vector so the compiler
+      // will be happy
+      return std::vector<T> ();
+    }
+
+    inline
+    void
+    extract_composition_values_at_q_point (const std::vector<std::vector<double>> &composition_values,
+                                           const unsigned int q,
+                                           std::vector<double> &composition_values_at_q_point)
+    {
+      Assert(q<composition_values.size(), ExcInternalError());
+      Assert(composition_values_at_q_point.size() > 0,
+             ExcInternalError());
+
+      for (unsigned int k=0; k < composition_values_at_q_point.size(); ++k)
+        {
+          Assert(composition_values[k].size() == composition_values_at_q_point.size(),
+                 ExcInternalError());
+          composition_values_at_q_point[k] = composition_values[k][q];
+        }
+    }
+
     template <typename T>
     inline
     std::vector<std::size_t>
@@ -1087,13 +1182,6 @@ namespace aspect
       return p;
     }
 
-    /**
-     * Applies a permutation vector to another vector and retuns the resulting vector.
-     *
-     * @param vector vector to sort
-     * @param permutation_vector The permutation vector used to sort the input vector.
-     * @return std::vector<T>
-     */
     template <typename T>
     inline
     std::vector<T>
@@ -1110,24 +1198,8 @@ namespace aspect
       return sorted_vec;
     }
 
-    /**
-     * Get volume weighted rotation matrices, using random draws to convert
-     * to a discrete number of orientations, weighted by volume.
-     * The input is a vector of volume fractions and a vector of rotation matrices.
-     * The vectors need to have the same length.
-     *
-     * @param volume_fraction a vector of doubles representing the volume fraction of each grain
-     * @param rotation_matrices a vector of 2nd order 3D tensors representing the rotation matrix of each grain
-     * @param n_output_matrices The number of rotation matrices which are output by this function. This can be
-     * different from the number of entries in the volume fraction and rotation matrices vectors.
-     * @param random_number_generator a reference to a mt19937 random number generator.
-     */
-    std::vector<Tensor<2,3>>
-    rotation_matrices_random_draw_volume_weighting(const std::vector<double> volume_fractions,
-                                                   const std::vector<Tensor<2,3>> rotation_matrices,
-                                                   const unsigned int n_output_matrices,
-                                                   std::mt19937 &random_number_generator);
   }
 }
+#endif
 
 #endif

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2018 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -70,8 +70,8 @@ namespace aspect
     class TosiMaterial : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
           /**
            * As described in Tosi et al (2015), the viscosity \eta is computed as the
@@ -203,7 +203,7 @@ namespace aspect
          * (compressible Stokes) or as $\nabla \cdot \mathbf{u}=0$
          * (incompressible Stokes).
          */
-        virtual bool is_compressible () const;
+        bool is_compressible () const override;
         /**
          * @}
          */
@@ -217,9 +217,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
       private:
 
@@ -453,7 +452,7 @@ namespace aspect
                              "as used in equation (8) of the paper.");
           prm.declare_entry ("Use analytical derivative", "false",
                              Patterns::Bool (),
-                             "Wether to use the analytical or the finite difference derivative for the Newton method.");
+                             "Whether to use the analytical or the finite difference derivative for the Newton method.");
         }
         prm.leave_subsection();
       }

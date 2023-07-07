@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -145,7 +145,7 @@ namespace aspect
                            "\\item ``function'': Specify the friction angle as a function of space and time "
                            "for each compositional field.");
 
-        // Dynamic friction paramters
+        // Dynamic friction parameters
         prm.declare_entry ("Dynamic characteristic strain rate", "1e-12",
                            Patterns::Double (0),
                            "The characteristic strain rate value at which the angle of friction is "

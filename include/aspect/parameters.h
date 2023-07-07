@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -379,8 +379,8 @@ namespace aspect
     };
 
     /**
-    Use the struct aspect::CompositionalFieldDescription
-    */
+     * Use the struct aspect::CompositionalFieldDescription
+     */
     using CompositionalFieldDescription DEAL_II_DEPRECATED = aspect::CompositionalFieldDescription;
 
     /**

@@ -26,7 +26,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y software-properties-common
-        sudo add-apt-repository ppa:ginggs/deal.ii-9.3.2-backports
+        sudo add-apt-repository ppa:ginggs/deal.ii-9.4.0-backports
         sudo apt-get update
         sudo apt-get install -yq --no-install-recommends libdeal.ii-dev
     - name: compile
@@ -38,7 +38,7 @@ jobs:
         ./aspect --test
 
   linux:
-    #linux build including indent and documentation
+    #linux build including indent, examples and documentation
     name: indent+documentation
     runs-on: [ubuntu-20.04]
 
@@ -48,7 +48,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y software-properties-common
-        sudo add-apt-repository ppa:ginggs/deal.ii-9.3.2-backports
+        sudo add-apt-repository ppa:ginggs/deal.ii-9.4.0-backports
         sudo apt-get update
         sudo apt-get install -yq --no-install-recommends texlive-plain-generic texlive-base texlive-latex-recommended texlive-latex-base texlive-fonts-recommended texlive-bibtex-extra lmodern texlive-latex-extra texlive-science graphviz python3-pip python-setuptools libdeal.ii-dev doxygen latexmk biber inkscape
         doxygen --version
@@ -82,7 +82,8 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -D ASPECT_PRECOMPILE_HEADERS=ON -D ASPECT_UNITY_BUILD=ON -D CMAKE_CXX_FLAGS='-Werror' ..
+        cmake -D ASPECT_PRECOMPILE_HEADERS=ON -D ASPECT_UNITY_BUILD=ON \
+        -D CMAKE_CXX_FLAGS='-Werror' -D ASPECT_INSTALL_EXAMPLES=ON ..
         make -j 2
         ./aspect --test
     - name: doc
@@ -105,14 +106,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: "geodynamics/aspect-tester:focal-dealii-9.3-v4"
-            run-tests: "ON"
-            compare-tests: "ON"
-            result-file: "changes-test-results-9.3.diff"
-            container-options: '--name container'
           - image: "geodynamics/aspect-tester:focal-dealii-9.4-v3"
             run-tests: "ON"
-            compare-tests: "OFF"
+            compare-tests: "ON"
             result-file: "changes-test-results-9.4.diff"
             container-options: '--name container'
           - image: "geodynamics/aspect-tester:focal-dealii-master"

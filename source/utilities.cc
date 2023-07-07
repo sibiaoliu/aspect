@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -1331,6 +1331,24 @@ namespace aspect
 
 
     bool
+    fexists(const std::string &filename,
+            MPI_Comm comm)
+    {
+      bool file_exists = false;
+      if (Utilities::MPI::this_mpi_process(comm) == 0)
+        {
+          std::ifstream ifile(filename.c_str());
+
+          // return whether construction of the input file has succeeded;
+          // success requires the file to exist and to be readable
+          file_exists = static_cast<bool>(ifile);
+        }
+      return Utilities::MPI::broadcast(comm, file_exists);
+    }
+
+
+
+    bool
     filename_is_url(const std::string &filename)
     {
       if (filename.find("http://") == 0 || filename.find("https://") == 0 || filename.find("file://") == 0)
@@ -1531,6 +1549,55 @@ namespace aspect
         }
 
       return data_string;
+    }
+
+
+
+    void
+    collect_and_write_file_content(const std::string &filename,
+                                   const std::string &file_content,
+                                   const MPI_Comm &comm)
+    {
+      const std::vector<std::string> collected_content = Utilities::MPI::gather(comm, file_content);
+
+      if (Utilities::MPI::this_mpi_process(comm) == 0)
+        {
+          std::ofstream filestream;
+          filestream.open(filename.c_str());
+
+          AssertThrow (filestream.good(),
+                       ExcMessage (std::string("Could not open file <") + filename + ">."));
+
+          try
+            {
+              for (const auto &content : collected_content)
+                filestream << content;
+
+              bool success = filestream.good();
+              const int ierr = MPI_Bcast(&success, 1, Utilities::internal::MPI::mpi_type_id(&success), 0, comm);
+              AssertThrowMPI(ierr);
+            }
+          catch (const std::ios::failure &)
+            {
+              // broadcast failure state, then throw
+              bool success = false;
+              const int ierr = MPI_Bcast(&success, 1, Utilities::internal::MPI::mpi_type_id(&success), 0, comm);
+              AssertThrowMPI(ierr);
+              AssertThrow (false,
+                           ExcMessage (std::string("Could not write content to file <") + filename + ">."));
+            }
+
+          filestream.close();
+        }
+      else
+        {
+          // Check that the file was written successfully
+          bool success;
+          int ierr = MPI_Bcast(&success, 1, Utilities::internal::MPI::mpi_type_id(&success), 0, comm);
+          AssertThrowMPI(ierr);
+          if (success == false)
+            throw QuietException();
+        }
     }
 
 
@@ -2083,6 +2150,16 @@ namespace aspect
     std::string
     expand_ASPECT_SOURCE_DIR (const std::string &location)
     {
+      // Check for environment variable override to ASPECT_SOURCE_DIR
+      char const *ASPECT_SOURCE_DIR_env = getenv("ASPECT_SOURCE_DIR");
+      if (ASPECT_SOURCE_DIR_env != NULL)
+        {
+          return Utilities::replace_in_string(location,
+                                              "$ASPECT_SOURCE_DIR",
+                                              ASPECT_SOURCE_DIR_env);
+        }
+
+      // Otherwise, use the default define from config.h
       return Utilities::replace_in_string(location,
                                           "$ASPECT_SOURCE_DIR",
                                           ASPECT_SOURCE_DIR);

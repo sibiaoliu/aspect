@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -503,11 +503,12 @@ namespace aspect
       /**
        * Compute the factor by which we scale the second of
        * the Stokes equations (the "pressure scaling factor").
-       * We do this for the current time step by taking the logarithmic
-       * average of the viscosities we find on the cells in this domain.
+       * We compute the factor by taking the logarithmic
+       * average of the viscosities we find on the cells in
+       * this domain and dividing this average by a reference
+       * length scale provided by the used geometry model.
        *
-       * This function then returns the pressure_scaling variable using
-       * this computed reference viscosity.
+       * This function returns the pressure scaling variable.
        *
        * This function is implemented in
        * <code>source/simulator/helper_functions.cc</code>.
@@ -720,7 +721,7 @@ namespace aspect
 
       /**
        * Initiate the assembly of the Stokes preconditioner matrix via
-       * assemble_stokes_preconditoner(), then set up the data structures to
+       * assemble_stokes_preconditioner(), then set up the data structures to
        * actually build a preconditioner from this matrix.
        *
        * This function is implemented in

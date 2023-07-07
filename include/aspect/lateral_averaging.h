@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -111,7 +111,7 @@ namespace aspect
   {
     public:
       /**
-       * @deprecated: This function is deprecated and only maintained for backward compatibilty.
+       * @deprecated: This function is deprecated and only maintained for backward compatibility.
        * Use the function compute_lateral_averages() with the same arguments instead.
        */
       DEAL_II_DEPRECATED

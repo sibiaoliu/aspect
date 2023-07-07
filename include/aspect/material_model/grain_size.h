@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -176,7 +176,7 @@ namespace aspect
 
         /**
          * The index of the compositional field that represents the grain size.
-        */
+         */
         unsigned int grain_size_index;
 
         /**

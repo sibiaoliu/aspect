@@ -16,7 +16,11 @@ corresponding .cc file(s) located in a subdirectory of the cookbooks folder
 corresponding to the individual cookbook.
 
 :::{toctree}
+---
+maxdepth: 1
+---
 parameter-file.md
 plugins.md
 manual-section.md
+quickref.md
 :::

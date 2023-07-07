@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -590,7 +590,7 @@ namespace aspect
 
 
         std::list<std::string>
-        required_other_postprocessors() const
+        required_other_postprocessors() const override
         {
           return std::list<std::string> (1, "dynamic topography");
         }

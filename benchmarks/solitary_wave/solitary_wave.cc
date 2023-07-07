@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -158,12 +158,11 @@ namespace aspect
        *
        * @param filename Name of the input file.
        */
-      void read_solitary_wave_solution (const std::string &filename)
+      void read_solitary_wave_solution (const std::string &filename,
+                                        MPI_Comm comm)
       {
         std::string temp;
-        std::ifstream in(filename.c_str(), std::ios::in);
-        AssertThrow (in,
-                     ExcMessage (std::string("Couldn't open file <") + filename + std::string(">")));
+        std::stringstream in(Utilities::read_and_distribute_file_content(filename, comm));
 
         while (!in.eof())
           {
@@ -195,13 +194,14 @@ namespace aspect
                              const double /*offset*/,
                              const double compaction_length,
                              const bool read_solution,
-                             const std::string file_name)
+                             const std::string file_name,
+                             MPI_Comm comm)
       {
         // non-dimensionalize the amplitude
         const double non_dim_amplitude = amplitude / background_porosity;
 
         if (read_solution)
-          read_solitary_wave_solution(file_name);
+          read_solitary_wave_solution(file_name, comm);
         else
           {
             porosity.resize(max_points);
@@ -327,22 +327,20 @@ namespace aspect
          * compute the analytical solution for the shape of the solitary wave.
          */
         void
-        initialize ();
+        initialize () override;
 
         /**
          * Return the boundary velocity as a function of position.
          */
-        virtual
         double
-        initial_composition (const Point<dim> &position, const unsigned int n_comp) const;
+        initial_composition (const Point<dim> &position, const unsigned int n_comp) const override;
 
         static
         void
         declare_parameters (ParameterHandler &prm);
 
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         double
         get_amplitude () const;
@@ -374,12 +372,12 @@ namespace aspect
     class SolitaryWaveMaterial : public MaterialModel::MeltInterface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
-        virtual bool is_compressible () const
+        bool is_compressible () const override
         {
           return false;
         }
 
-        virtual double reference_darcy_coefficient () const
+        double reference_darcy_coefficient () const override
         {
           // Make sure we keep track of the initial composition manager and
           // that it continues to live beyond the time when the simulator
@@ -420,12 +418,11 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
-        virtual void evaluate(const typename MaterialModel::Interface<dim>::MaterialModelInputs &in,
-                              typename MaterialModel::Interface<dim>::MaterialModelOutputs &out) const
+        void evaluate(const typename MaterialModel::Interface<dim>::MaterialModelInputs &in,
+                      typename MaterialModel::Interface<dim>::MaterialModelOutputs &out) const override
         {
           const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
 
@@ -582,7 +579,8 @@ namespace aspect
                                           offset,
                                           compaction_length,
                                           read_solution,
-                                          file_name);
+                                          file_name,
+                                          this->get_mpi_communicator());
     }
 
 
@@ -814,8 +812,11 @@ namespace aspect
               // interpolate between the values we have
               unsigned int k = i-1;
               while (initial_pressure[k] == 0.0)
-                k--;
-              Assert(k >= 0, ExcInternalError());
+                {
+                  Assert(k > 0, ExcInternalError());
+                  k--;
+                }
+
               unsigned int j = i+1;
               while (initial_pressure[j] == 0.0)
                 j++;

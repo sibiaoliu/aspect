@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2022 by the authors of the ASPECT code.
+  Copyright (C) 2022 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,11 +34,11 @@ namespace aspect
     {
       public:
 
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const;
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
         static void declare_parameters (ParameterHandler &prm);
-        virtual void parse_parameters (ParameterHandler &prm);
+        void parse_parameters (ParameterHandler &prm) override;
 
       private:
         std::vector<double> reversal_times;

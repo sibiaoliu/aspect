@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -24,8 +24,6 @@
 #include <aspect/utilities.h>
 
 #include <deal.II/base/table.h>
-#include <fstream>
-#include <iostream>
 
 
 namespace aspect

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -1374,14 +1374,7 @@ namespace aspect
 
           // parameters for reading in tables with material properties
           datadirectory        = prm.get ("Data directory");
-          {
-            const std::string subst_text = "$ASPECT_SOURCE_DIR";
-            std::string::size_type position;
-            while (position = datadirectory.find (subst_text),  position!=std::string::npos)
-              datadirectory.replace (datadirectory.begin()+position,
-                                     datadirectory.begin()+position+subst_text.size(),
-                                     ASPECT_SOURCE_DIR);
-          }
+          datadirectory = Utilities::expand_ASPECT_SOURCE_DIR(datadirectory);
           material_file_names  = Utilities::split_string_list
                                  (prm.get ("Material file names"));
           derivatives_file_names = Utilities::split_string_list
