@@ -361,6 +361,14 @@ namespace aspect
     }
 
     template <int dim>
+    double
+    PrescribedDilation<dim>::
+    reference_viscosity () const
+    {
+      return base_model->reference_viscosity();
+    }
+
+    template <int dim>
     void
     PrescribedDilation<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
