@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -605,6 +605,7 @@ namespace aspect
     bool                           include_melt_transport;
     bool                           enable_additional_stokes_rhs;
     bool                           enable_prescribed_dilation;
+    bool                           enable_dike_injection;
 
     /**
      * Map from boundary id to a pair "components", "traction boundary type",

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -59,11 +59,15 @@ namespace aspect
                        "upon starting up the program. The names of these files can contain absolute "
                        "or relative paths (relative to the directory in which you call ASPECT). "
                        "In fact, file names that do not contain any directory "
-                       "information (i.e., only the name of a file such as <myplugin.so> "
+                       "information (i.e., only the name of a file such as <libmyplugin.so> "
                        "will not be found if they are not located in one of the directories "
                        "listed in the \\texttt{LD_LIBRARY_PATH} environment variable. In order "
-                       "to load a library in the current directory, use <./myplugin.so> "
+                       "to load a library in the current directory, use <./libmyplugin.so> "
                        "instead."
+                       "\n\n"
+                       "If you specify <./libmyplugin.so>, ASPECT will open either "
+                       "<./libmyplugin.debug.so> or <./libmyplugin.release.so> "
+                       "depending on the current ASPECT build type."
                        "\n\n"
                        "The typical use of this parameter is so that you can implement "
                        "additional plugins in your own directories, rather than in the ASPECT "
@@ -169,7 +173,7 @@ namespace aspect
 
     prm.declare_entry ("Maximum relative increase in time step", boost::lexical_cast<std::string>(std::numeric_limits<int>::max()),
                        Patterns::Double (0.),
-                       "Set a percentage with which the the time step is limited to increase. Generally the "
+                       "Set a percentage with which the time step is limited to increase. Generally the "
                        "time step based on the CFL number should be sufficient, but for complicated models "
                        "which may suddenly drastically change behavior, it may be useful to limit the increase "
                        "in the time step, without limiting the time step size of the whole simulation to a "
@@ -567,7 +571,7 @@ namespace aspect
       {
         prm.declare_entry ("Diffusion length scale", "1.e4",
                            Patterns::Double (0.),
-                           "Set a length scale for the diffusion of compositional fields if the "
+                           "Set a length scale for the diffusion of advection fields if the "
                            "``prescribed field with diffusion'' method is selected for a field. "
                            "More precisely, this length scale represents the square root of the "
                            "product of diffusivity and time in the diffusion equation, and controls "
@@ -634,6 +638,11 @@ namespace aspect
                          "Whether to include additional terms on the right-hand side of "
                          "the Stokes equation to set a given compression term specified in the "
                          "MaterialModel output PrescribedPlasticDilation.");
+      prm.declare_entry ("Enable dike injection", "false",
+                         Patterns::Bool (),
+                         "Whether to allow injection only in the horizontal direction by including "
+                         "add additional terms to the prescrbed dilaton specified in the "
+                         "MaterialModel output PrescribedPlasticDilation.");                         
     }
     prm.leave_subsection();
 
@@ -776,7 +785,16 @@ namespace aspect
                          Patterns::Integer (0),
                          "The number of global refinement steps performed on "
                          "the initial coarse mesh, before the problem is first "
-                         "solved there.");
+                         "solved there."
+                         "\n\n"
+                         "Note that it is possible to supply conflicting refinement "
+                         "and coarsening settings, such as an 'Initial global refinement' "
+                         "of 4 and a 'Maximum refinement function' strategy that limits "
+                         "the refinement locally to 2. In this case, the tagging strategies "
+                         "such as the 'Maximum refinement function' will remove refinement "
+                         "flags in each initial global refinement step, such that the "
+                         "resulting mesh is not necessarily uniform or of the level "
+                         "given by the 'Initial global refinement' parameter.");
       prm.declare_entry ("Initial adaptive refinement", "0",
                          Patterns::Integer (0),
                          "The number of adaptive refinement steps performed after "
@@ -963,17 +981,17 @@ namespace aspect
                          "violating this condition is that the pressure may show "
                          "oscillations and not converge to the correct pressure."
                          "\n\n"
-                         "That said, people have often used $Q_1$ elements for both the"
+                         "That said, people have often used $Q_1$ elements for both the "
                          "velocity and pressure anyway. This is commonly referred to as "
-                         "using the Q1-Q1 method. It is, by default, not stable as "
-                         "mentioned above, but it can be made stable by adding small "
+                         "using the $Q_1-Q_1$ method. It is, by default, not stable as "
+                         "mentioned above, but it can be made stable by adding a small "
                          "amount of compressibility to the model. There are numerous "
                          "ways to do that. Today, the way that is generally considered "
                          "to be the best approach is the one by Dohrmann and Bochev "
                          "\\cite{DohrmannBochev2004}."
                          "\n\n"
                          "When this parameter is set to ``true'', then \\aspect{} "
-                         "will use this method by using $Q_k\times Q_k$ elements for "
+                         "will use this method by using $Q_k\\times Q_k$ elements for "
                          "velocity and pressure, respectively, where $k$ is the value "
                          "provided for the parameter ``Stokes velocity polynomial "
                          "degree''."
@@ -981,7 +999,8 @@ namespace aspect
                          "\\note{While \\aspect{} \\textit{allows} you to use this "
                          "  method, it is generally understood that this is not a "
                          "  great idea as it leads to rather low accuracy in "
-                         "  general. It also leads to substantial problems when "
+                         "  general as documented in \\cite{thba22}. "
+                         "  It also leads to substantial problems when "
                          "  using free surfaces. As a consequence, the presence "
                          "  of this parameter should not be seen as an "
                          "  endorsement of the method, or a suggestion to "
@@ -1568,6 +1587,7 @@ namespace aspect
       enable_additional_stokes_rhs = prm.get_bool ("Enable additional Stokes RHS");
       enable_elasticity = prm.get_bool("Enable elasticity");
       enable_prescribed_dilation = prm.get_bool("Enable prescribed dilation");
+      enable_dike_injection = prm.get_bool("Enable dike injection");
     }
     prm.leave_subsection ();
 
