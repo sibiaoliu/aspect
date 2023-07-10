@@ -40,8 +40,8 @@ namespace aspect
    * based on the given set of @p parameters.
    */
   template <int dim>
-  std::vector<VariableDeclaration<dim> >
-  construct_default_variables (const Parameters<dim> &parameters);
+  std::vector<VariableDeclaration<dim>>
+                                     construct_default_variables (const Parameters<dim> &parameters);
 
 
 
@@ -69,7 +69,7 @@ namespace aspect
       /**
        * Constructor.
        */
-      Introspection (const std::vector<VariableDeclaration<dim> > &variables,
+      Introspection (const std::vector<VariableDeclaration<dim>> &variables,
                      const Parameters<dim> &parameters);
 
       /**
@@ -354,6 +354,42 @@ namespace aspect
       get_composition_names () const;
 
       /**
+       * A function that returns the full vector of compositional
+       * field descriptions.
+       */
+      const std::vector<typename Parameters<dim>::CompositionalFieldDescription> &
+      get_composition_descriptions () const;
+
+
+      /**
+       * A function that gets the type of a compositional field as an input
+       * parameter and returns if any compositional field of that type is
+       * used in this simulation.
+       *
+       * @param type The type of compositional field (as specified in the
+       * input file)
+       */
+      bool
+      composition_type_exists (const typename Parameters<dim>::CompositionalFieldDescription::Type &type) const;
+
+
+
+      /**
+       * A function that gets the type of a compositional field as an input
+       * parameter and returns the index of the first compositional field of
+       * this type used in this simulation. If no such field is found, the
+       * function returns the number of compositional fields.
+       *
+       * @param type The type of compositional field (as specified in the
+       * input file)
+       */
+      unsigned int
+      find_composition_type (const typename Parameters<dim>::CompositionalFieldDescription::Type &type) const;
+
+
+
+
+      /**
        * A function that gets the name of a compositional field as an input
        * parameter and returns if the compositional field is used in this
        * simulation.
@@ -380,6 +416,13 @@ namespace aspect
        * be used in the simulation.
        */
       std::vector<std::string> composition_names;
+
+      /**
+       * A vector that stores descriptions of each compositional field,
+       * including its type (i.e. whether the compositional field corresponds
+       * to chemical composition, porosity etc.).
+       */
+      std::vector<typename Parameters<dim>::CompositionalFieldDescription> composition_descriptions;
 
   };
 }

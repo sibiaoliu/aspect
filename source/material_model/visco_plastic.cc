@@ -243,7 +243,7 @@ namespace aspect
 
               // Compute viscosity derivatives if they are requested
               if (MaterialModel::MaterialModelDerivatives<dim> *derivatives =
-                    out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim> >())
+                    out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>())
                 rheology->compute_viscosity_derivatives(i, volume_fractions, isostrain_viscosities.composition_viscosities, in, out, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
             }
 
@@ -255,7 +255,7 @@ namespace aspect
           rheology->strain_rheology.fill_reaction_outputs(in, i, rheology->min_strain_rate, plastic_yielding, out);
 
           // Fill plastic outputs if they exist.
-          rheology->fill_plastic_outputs(i,volume_fractions,plastic_yielding,in,out);
+          rheology->fill_plastic_outputs(i,volume_fractions,plastic_yielding,in,out, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
           if (rheology->use_elasticity)
             {
@@ -265,7 +265,7 @@ namespace aspect
                                                                                  rheology->viscosity_averaging);
 
               // Fill the material properties that are part of the elastic additional outputs
-              if (ElasticAdditionalOutputs<dim> *elastic_out = out.template get_additional_output<ElasticAdditionalOutputs<dim> >())
+              if (ElasticAdditionalOutputs<dim> *elastic_out = out.template get_additional_output<ElasticAdditionalOutputs<dim>>())
                 {
                   elastic_out->elastic_shear_moduli[i] = average_elastic_shear_moduli[i];
                 }
@@ -379,7 +379,7 @@ namespace aspect
           // Equation of state parameters
           equation_of_state.initialize_simulator (this->get_simulator());
           equation_of_state.parse_parameters (prm,
-                                              std::make_shared<std::vector<unsigned int>>(n_phase_transitions_for_each_composition));
+                                              std::make_unique<std::vector<unsigned int>>(n_phase_transitions_for_each_composition));
 
 
           thermal_diffusivities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Thermal diffusivities"))),
@@ -392,10 +392,9 @@ namespace aspect
                                                                            n_fields,
                                                                            "Thermal conductivities");
 
-          rheology = std_cxx14::make_unique<Rheology::ViscoPlastic<dim>>();
+          rheology = std::make_unique<Rheology::ViscoPlastic<dim>>();
           rheology->initialize_simulator (this->get_simulator());
-          rheology->parse_parameters(prm, std::make_shared<std::vector<unsigned int>>(n_phase_transitions_for_each_composition));
-
+          rheology->parse_parameters(prm, std::make_unique<std::vector<unsigned int>>(n_phase_transitions_for_each_composition));
         }
         prm.leave_subsection();
       }

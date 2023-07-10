@@ -42,10 +42,10 @@ namespace aspect
       }
 
       template <int dim>
-      std::vector<std::pair<std::string, unsigned int> >
-      Function<dim>::get_property_information() const
+      std::vector<std::pair<std::string, unsigned int>>
+                                                     Function<dim>::get_property_information() const
       {
-        const std::vector<std::pair<std::string,unsigned int> > property_information (1,std::make_pair("function",n_components));
+        const std::vector<std::pair<std::string,unsigned int>> property_information (1,std::make_pair("function",n_components));
         return property_information;
       }
 
@@ -86,7 +86,7 @@ namespace aspect
             n_components = prm.get_integer ("Number of components");
             try
               {
-                function = std_cxx14::make_unique<Functions::ParsedFunction<dim>>(n_components);
+                function = std::make_unique<Functions::ParsedFunction<dim>>(n_components);
                 function->parse_parameters (prm);
               }
             catch (...)

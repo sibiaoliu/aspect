@@ -18,9 +18,9 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#include <aspect/simulator.h>
-#include <aspect/postprocess/boundary_velocity_residual_statistics.h>
 #include <aspect/postprocess/visualization/boundary_velocity_residual.h>
+#include <aspect/postprocess/boundary_velocity_residual_statistics.h>
+#include <aspect/simulator.h>
 
 namespace aspect
 {
@@ -42,14 +42,10 @@ namespace aspect
       void
       BoundaryVelocityResidual<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         Assert ((computed_quantities[0].size() == dim), ExcInternalError());
-#if DEAL_II_VERSION_GTE(9,3,0)
         auto cell = input_data.template get_cell<dim>();
-#else
-        auto cell = input_data.template get_cell<DoFHandler<dim> >();
-#endif
 
         for (unsigned int q=0; q<computed_quantities.size(); ++q)
           for (unsigned int d = 0; d < dim; ++d)
@@ -59,12 +55,12 @@ namespace aspect
           this->convert_output_to_years() ? year_in_seconds : 1.0;
 
         const Postprocess::BoundaryVelocityResidualStatistics<dim> &boundary_velocity_residual_statistics =
-          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::BoundaryVelocityResidualStatistics<dim> >();
+          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::BoundaryVelocityResidualStatistics<dim>>();
 
         // We only want the output at the top boundary, so only compute it if the current cell
         // has a face at the top boundary.
         bool cell_at_top_boundary = false;
-        for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+        for (const unsigned int f : cell->face_indices())
           if (cell->at_boundary(f) &&
               (this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "top"))
             cell_at_top_boundary = true;

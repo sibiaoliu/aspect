@@ -105,9 +105,9 @@ namespace aspect
 
 
     template <int dim>
-    std::shared_ptr<FiniteElement<dim> >
-    new_FE_Q_or_DGP(const bool discontinuous,
-                    const unsigned int degree)
+    std::shared_ptr<FiniteElement<dim>>
+                                     new_FE_Q_or_DGP(const bool discontinuous,
+                                                     const unsigned int degree)
     {
       if (discontinuous)
         return std::make_shared<FE_DGP<dim>>(degree);
@@ -118,9 +118,9 @@ namespace aspect
 
 
     template <int dim>
-    std::shared_ptr<FiniteElement<dim> >
-    new_FE_Q_or_DGQ(const bool discontinuous,
-                    const unsigned int degree)
+    std::shared_ptr<FiniteElement<dim>>
+                                     new_FE_Q_or_DGQ(const bool discontinuous,
+                                                     const unsigned int degree)
     {
       if (discontinuous)
         return std::make_shared<FE_DGQ<dim>>(degree);
@@ -133,10 +133,10 @@ namespace aspect
 
 
   template <int dim>
-  std::vector<VariableDeclaration<dim> >
-  construct_default_variables (const Parameters<dim> &parameters)
+  std::vector<VariableDeclaration<dim>>
+                                     construct_default_variables (const Parameters<dim> &parameters)
   {
-    std::vector<VariableDeclaration<dim> > variables;
+    std::vector<VariableDeclaration<dim>> variables;
 
     const unsigned int n_velocity_blocks = parameters.use_direct_stokes_solver ? 0 : 1;
     variables.push_back(
@@ -157,7 +157,7 @@ namespace aspect
       variables.push_back(
         VariableDeclaration<dim>(
           "pressure",
-          std::shared_ptr<FiniteElement<dim> >(new FE_Q<dim>(parameters.stokes_velocity_degree)),
+          std::shared_ptr<FiniteElement<dim>>(new FE_Q<dim>(parameters.stokes_velocity_degree)),
           1,
           1));
 
@@ -183,7 +183,7 @@ namespace aspect
 
 
   template <int dim>
-  Introspection<dim>::Introspection(const std::vector<VariableDeclaration<dim> > &variable_definition,
+  Introspection<dim>::Introspection(const std::vector<VariableDeclaration<dim>> &variable_definition,
                                     const Parameters<dim> &parameters
                                    )
     :
@@ -201,7 +201,8 @@ namespace aspect
     component_masks (*this),
     system_dofs_per_block (n_blocks),
     compositional_field_methods(parameters.compositional_field_methods),
-    composition_names(parameters.names_of_compositional_fields)
+    composition_names(parameters.names_of_compositional_fields),
+    composition_descriptions(parameters.composition_descriptions)
   {}
 
 
@@ -300,6 +301,41 @@ namespace aspect
     return composition_names;
   }
 
+
+
+  template <int dim>
+  const std::vector<typename Parameters<dim>::CompositionalFieldDescription> &
+  Introspection<dim>::get_composition_descriptions () const
+  {
+    return composition_descriptions;
+  }
+
+
+
+  template <int dim>
+  bool
+  Introspection<dim>::composition_type_exists (const typename Parameters<dim>::CompositionalFieldDescription::Type &type) const
+  {
+    for (unsigned int c=0; c<composition_descriptions.size(); ++c)
+      if (composition_descriptions[c].type == type)
+        return true;
+    return false;
+  }
+
+
+
+  template <int dim>
+  unsigned int
+  Introspection<dim>::find_composition_type (const typename Parameters<dim>::CompositionalFieldDescription::Type &type) const
+  {
+    for (unsigned int c=0; c<composition_descriptions.size(); ++c)
+      if (composition_descriptions[c].type == type)
+        return c;
+    return composition_descriptions.size();
+  }
+
+
+
   template <int dim>
   bool
   Introspection<dim>::compositional_name_exists (const std::string &name) const
@@ -337,7 +373,7 @@ namespace aspect
 #define INSTANTIATE(dim) \
   template struct Introspection<dim>; \
   template \
-  std::vector<VariableDeclaration<dim> > \
+  std::vector<VariableDeclaration<dim>> \
   construct_default_variables (const Parameters<dim> &parameters);
 
   ASPECT_INSTANTIATE(INSTANTIATE)

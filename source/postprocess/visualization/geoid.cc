@@ -53,9 +53,9 @@ namespace aspect
       void
       Geoid<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
-        AssertThrow (Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim> >(this->get_geometry_model()),
+        AssertThrow (Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>>(this->get_geometry_model()),
                      ExcMessage("The geoid postprocessor is currently only implemented for "
                                 "the spherical shell geometry model."));
 
@@ -63,16 +63,12 @@ namespace aspect
           computed_quantities[q](0) = 0;
 
         const Postprocess::Geoid<dim> &geoid =
-          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Geoid<dim> >();
+          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Geoid<dim>>();
 
-#if DEAL_II_VERSION_GTE(9,3,0)
         auto cell = input_data.template get_cell<dim>();
-#else
-        auto cell = input_data.template get_cell<DoFHandler<dim> >();
-#endif
 
         bool cell_at_top_boundary = false;
-        for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+        for (const unsigned int f : cell->face_indices())
           if (cell->at_boundary(f) &&
               this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "top")
             cell_at_top_boundary = true;

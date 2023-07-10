@@ -64,8 +64,7 @@ namespace aspect
            */
           void
           parse_parameters (ParameterHandler &prm,
-                            const std::shared_ptr<std::vector<unsigned int>> &expected_n_phases_per_composition =
-                              std::shared_ptr<std::vector<unsigned int>>());
+                            const std::unique_ptr<std::vector<unsigned int>> &expected_n_phases_per_composition = nullptr);
 
           /**
            * Compute the viscosity based on the composite viscous creep law.
@@ -112,7 +111,6 @@ namespace aspect
           compute_strain_rate_and_derivative (const double creep_stress,
                                               const double pressure,
                                               const double temperature,
-                                              const unsigned int composition,
                                               const DiffusionCreepParameters diffusion_creep_parameters,
                                               const DislocationCreepParameters dislocation_creep_parameters,
                                               const PeierlsCreepParameters peierls_creep_parameters,
@@ -140,8 +138,8 @@ namespace aspect
           DruckerPragerParameters drucker_prager_parameters;
 
           unsigned int number_of_compositions;
-          double min_viscosity;
-          double max_viscosity;
+          double minimum_viscosity;
+          double maximum_viscosity;
 
           double min_strain_rate;
           double strain_rate_residual_threshold;

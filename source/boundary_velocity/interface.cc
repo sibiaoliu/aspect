@@ -34,11 +34,6 @@ namespace aspect
   namespace BoundaryVelocity
   {
     template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-
-    template <int dim>
     void
     Interface<dim>::initialize ()
     {}
@@ -92,8 +87,8 @@ namespace aspect
       std::tuple
       <void *,
       void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -117,7 +112,7 @@ namespace aspect
     Manager<dim>::boundary_velocity (const types::boundary_id boundary_indicator,
                                      const Point<dim> &position) const
     {
-      typename std::map<types::boundary_id,std::vector<std::unique_ptr<BoundaryVelocity::Interface<dim> > > >::const_iterator boundary_plugins =
+      typename std::map<types::boundary_id,std::vector<std::unique_ptr<BoundaryVelocity::Interface<dim>>>>::const_iterator boundary_plugins =
         boundary_velocity_objects.find(boundary_indicator);
 
       Assert(boundary_plugins != boundary_velocity_objects.end(),
@@ -137,7 +132,7 @@ namespace aspect
 
 
     template <int dim>
-    const std::map<types::boundary_id, std::pair<std::string,std::vector<std::string> > > &
+    const std::map<types::boundary_id, std::pair<std::string,std::vector<std::string>>> &
     Manager<dim>::get_active_boundary_velocity_names () const
     {
       return boundary_velocity_indicators;
@@ -146,7 +141,7 @@ namespace aspect
 
 
     template <int dim>
-    const std::map<types::boundary_id,std::vector<std::unique_ptr<BoundaryVelocity::Interface<dim> > > > &
+    const std::map<types::boundary_id,std::vector<std::unique_ptr<BoundaryVelocity::Interface<dim>>>> &
     Manager<dim>::get_active_boundary_velocity_conditions () const
     {
       return boundary_velocity_objects;
@@ -268,7 +263,7 @@ namespace aspect
           {
             AssertThrow (false, ExcMessage ("While parsing the entry <Boundary velocity model/Zero velocity "
                                             "boundary indicators>, there was an error. Specifically, "
-                                            "the conversion function complained as follows: "
+                                            "the conversion function complained as follows:\n\n"
                                             + error));
           }
 
@@ -285,7 +280,7 @@ namespace aspect
           {
             AssertThrow (false, ExcMessage ("While parsing the entry <Boundary velocity model/Tangential velocity "
                                             "boundary indicators>, there was an error. Specifically, "
-                                            "the conversion function complained as follows: "
+                                            "the conversion function complained as follows:\n\n"
                                             + error));
           }
 
@@ -364,7 +359,7 @@ namespace aspect
               {
                 AssertThrow (false, ExcMessage ("While parsing the entry <Boundary velocity model/Prescribed "
                                                 "velocity indicators>, there was an error. Specifically, "
-                                                "the conversion function complained as follows: "
+                                                "the conversion function complained as follows:\n\n"
                                                 + error));
               }
 
@@ -393,9 +388,9 @@ namespace aspect
           for (const auto &name : boundary_id.second.second)
             {
               boundary_velocity_objects[boundary_id.first].push_back(
-                std::unique_ptr<Interface<dim> > (std::get<dim>(registered_plugins)
-                                                  .create_plugin (name,
-                                                                  "Boundary velocity::Model names")));
+                std::unique_ptr<Interface<dim>> (std::get<dim>(registered_plugins)
+                                                 .create_plugin (name,
+                                                                 "Boundary velocity::Model names")));
 
               if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(boundary_velocity_objects[boundary_id.first].back().get()))
                 sim->initialize_simulator (this->get_simulator());
@@ -426,11 +421,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<BoundaryVelocity::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<2>>::PluginInfo> *
+                                                                           internal::Plugins::PluginList<BoundaryVelocity::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<BoundaryVelocity::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<3>>::PluginInfo> *
+                                                                           internal::Plugins::PluginList<BoundaryVelocity::Interface<3>>::plugins = nullptr;
     }
   }
 

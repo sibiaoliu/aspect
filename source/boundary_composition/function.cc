@@ -35,7 +35,7 @@ namespace aspect
                           const Point<dim> &position,
                           const unsigned int compositional_field) const
     {
-      Utilities::NaturalCoordinate<dim> point =
+      const Utilities::NaturalCoordinate<dim> point =
         this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system);
       return function->value(Utilities::convert_array_to_point<dim>(point.get_coordinates()), compositional_field);
     }
@@ -96,7 +96,7 @@ namespace aspect
           try
             {
               function
-                = std_cxx14::make_unique<Functions::ParsedFunction<dim>>(this->n_compositional_fields());
+                = std::make_unique<Functions::ParsedFunction<dim>>(this->n_compositional_fields());
               function->parse_parameters (prm);
             }
           catch (...)

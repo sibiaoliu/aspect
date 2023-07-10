@@ -33,8 +33,8 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 
-#include <math.h>
-#include <stdio.h>
+#include <cmath>
+#include <cstdio>
 #include <unistd.h>
 
 #include <algorithm>
@@ -61,7 +61,7 @@ namespace aspect
 
           void
           evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                                std::vector<Vector<double> > &computed_quantities) const override
+                                std::vector<Vector<double>> &computed_quantities) const override
           {
             const double velocity_scaling_factor =
               this->convert_output_to_years() ? year_in_seconds : 1.0;
@@ -128,6 +128,38 @@ namespace aspect
       };
 
       /**
+       * This Postprocessor will generate the output variables of velocity,
+       * pressure, temperature, and compositional fields on the surface of the
+       * domain.
+       */
+      template <int dim>
+      class SurfaceBaseVariablePostprocessor: public VisualizationPostprocessors::SurfaceOnlyVisualization<dim>, public BaseVariablePostprocessor< dim >
+      {
+        public:
+
+          std::vector<std::string> get_names () const override
+          {
+            std::vector<std::string> solution_names (dim, "surface_velocity");
+
+            if (this->include_melt_transport())
+              {
+                solution_names.emplace_back("surface_p_f");
+                solution_names.emplace_back("surface_p_c_bar");
+                for (unsigned int i=0; i<dim; ++i)
+                  solution_names.emplace_back("surface_u_f");
+              }
+            solution_names.emplace_back("surface_p");
+
+            solution_names.emplace_back("surface_T");
+            for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+              solution_names.push_back ("surface_" + this->introspection().name_for_compositional_index(c));
+
+            return solution_names;
+          }
+
+      };
+
+      /**
        * This Postprocessor will generate the output variables of mesh velocity
        * for when a deforming mesh is used.
        */
@@ -142,7 +174,7 @@ namespace aspect
 
           void
           evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                                std::vector<Vector<double> > &computed_quantities) const override
+                                std::vector<Vector<double>> &computed_quantities) const override
           {
             // check that the first quadrature point has dim components
             Assert( computed_quantities[0].size() == dim,
@@ -160,13 +192,6 @@ namespace aspect
 
     namespace VisualizationPostprocessors
     {
-
-
-      template <int dim>
-      Interface<dim>::~Interface ()
-      {}
-
-
       template <int dim>
       void
       Interface<dim>::initialize ()
@@ -364,7 +389,7 @@ namespace aspect
       std::ofstream global_visit_master ((this->get_output_directory() +
                                           (is_cell_data_output ? "solution.visit" : "solution_surface.visit")).c_str());
 
-      std::vector<std::pair<double, std::vector<std::string> > > times_and_output_file_names;
+      std::vector<std::pair<double, std::vector<std::string>>> times_and_output_file_names;
       for (unsigned int timestep=0; timestep<output_history.times_and_pvtu_names.size(); ++timestep)
         times_and_output_file_names.push_back(std::make_pair(output_history.times_and_pvtu_names[timestep].first,
                                                              output_history.output_file_names_by_timestep[timestep]));
@@ -606,13 +631,19 @@ namespace aspect
       internal::BaseVariablePostprocessor<dim> base_variables;
       base_variables.initialize_simulator (this->get_simulator());
 
+      internal::SurfaceBaseVariablePostprocessor<dim> surface_base_variables;
+      if (output_base_variables_on_mesh_surface)
+        surface_base_variables.initialize_simulator (this->get_simulator());
+
       // Keep a list of the names of all output variables, to ensure unique names
       std::set<std::string> visualization_field_names;
 
       // Insert base variable names into set of all output field names
       add_data_names_to_set(base_variables.get_names(), visualization_field_names);
+      if (output_base_variables_on_mesh_surface)
+        add_data_names_to_set(surface_base_variables.get_names(), visualization_field_names);
 
-      std::unique_ptr<internal::MeshDeformationPostprocessor<dim> > mesh_deformation_variables;
+      std::unique_ptr<internal::MeshDeformationPostprocessor<dim>> mesh_deformation_variables;
 
       DataOut<dim> data_out;
       data_out.attach_dof_handler (this->get_dof_handler());
@@ -620,25 +651,17 @@ namespace aspect
                                 base_variables);
 
       // Also create an object for outputting information that lives on
-      // the faces of the mesh. If there are postprocessors derived from
-      // the VisualizationPostprocessors::SurfaceOnlyVisualization class, then
-      // we will use this object for viz purposes.
+      // the faces of the mesh.
       DataOutFaces<dim> data_out_faces;
       data_out_faces.attach_dof_handler (this->get_dof_handler());
-      const bool have_face_viz_postprocessors
-        = (std::find_if (postprocessors.begin(),
-                         postprocessors.end(),
-                         [](const std::unique_ptr<VisualizationPostprocessors::Interface<dim> > &p)
-      {
-        return (dynamic_cast<const VisualizationPostprocessors::SurfaceOnlyVisualization<dim>*>
-                (p.get()) != nullptr);
-      })
-      != postprocessors.end());
+      if (output_base_variables_on_mesh_surface)
+        data_out_faces.add_data_vector (this->get_solution(),
+                                        surface_base_variables);
 
       // If there is a deforming mesh, also attach the mesh velocity object
       if ( this->get_parameters().mesh_deformation_enabled && output_mesh_velocity)
         {
-          mesh_deformation_variables = std_cxx14::make_unique<internal::MeshDeformationPostprocessor<dim>>();
+          mesh_deformation_variables = std::make_unique<internal::MeshDeformationPostprocessor<dim>>();
           mesh_deformation_variables->initialize_simulator(this->get_simulator());
 
           // Insert mesh deformation variable names into set of all output field names
@@ -648,11 +671,13 @@ namespace aspect
                                     *mesh_deformation_variables);
         }
 
+      bool have_face_viz_postprocessors = false;
+
       // then for each additional selected output variable
       // add the computed quantity as well. keep a list of
       // pointers to data vectors created by cell data visualization
       // postprocessors that will later be deleted
-      std::list<std::unique_ptr<Vector<float> > > cell_data_vectors;
+      std::list<std::unique_ptr<Vector<float>>> cell_data_vectors;
       for (const auto &p : postprocessors)
         {
           try
@@ -676,8 +701,11 @@ namespace aspect
                     data_out.add_data_vector (this->get_solution(),
                                               *viz_postprocessor);
                   else
-                    data_out_faces.add_data_vector (this->get_solution(),
-                                                    *viz_postprocessor);
+                    {
+                      data_out_faces.add_data_vector (this->get_solution(),
+                                                      *viz_postprocessor);
+                      have_face_viz_postprocessors = true;
+                    }
                 }
               else if (const VisualizationPostprocessors::CellDataVectorCreator<dim> *
                        cell_data_creator
@@ -696,7 +724,7 @@ namespace aspect
                   add_data_names_to_set(std::vector<std::string>(1,cell_data.first), visualization_field_names);
 
                   // store the pointer, then attach the vector to the DataOut object
-                  cell_data_vectors.push_back (std::unique_ptr<Vector<float> >
+                  cell_data_vectors.push_back (std::unique_ptr<Vector<float>>
                                                (cell_data.second));
 
                   if (dynamic_cast<const VisualizationPostprocessors::SurfaceOnlyVisualization<dim>*>
@@ -705,9 +733,12 @@ namespace aspect
                                               cell_data.first,
                                               DataOut<dim>::type_cell_data);
                   else
-                    data_out_faces.add_data_vector (*cell_data.second,
-                                                    cell_data.first,
-                                                    DataOutFaces<dim>::type_cell_data);
+                    {
+                      data_out_faces.add_data_vector (*cell_data.second,
+                                                      cell_data.first,
+                                                      DataOutFaces<dim>::type_cell_data);
+                      have_face_viz_postprocessors = true;
+                    }
                 }
               else
                 // A viz postprocessor not derived from either DataPostprocessor
@@ -796,7 +827,7 @@ namespace aspect
       // Then do the same again for the face data case. We won't print the
       // output file name to screen (too much clutter on the screen already)
       // but still put it into the statistics file
-      if (have_face_viz_postprocessors)
+      if (output_base_variables_on_mesh_surface || have_face_viz_postprocessors)
         {
           data_out_faces.build_patches (this->get_mapping(),
                                         subdivisions);
@@ -899,8 +930,8 @@ namespace aspect
       std::tuple
       <void *,
       void *,
-      aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<2> >,
-      aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<3> > > registered_visualization_plugins;
+      aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<2>>,
+      aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<3>>> registered_visualization_plugins;
     }
 
 
@@ -1052,6 +1083,13 @@ namespace aspect
                              "has its own velocity field.  This may be written as an output field "
                              "by setting this parameter to true.");
 
+          prm.declare_entry ("Output base variables on mesh surface", "false",
+                             Patterns::Bool(),
+                             "Whether or not to also output the base variables velocity, pressure, "
+                             "temperature and compositional fields (when present) on the surface "
+                             "of the mesh. The mesh surface includes not only the top boundary, "
+                             "but all boundaries of the domain. ");
+
           // Finally also construct a string for Patterns::MultipleSelection that
           // contains the names of all registered visualization postprocessors.
           // Also add a number of removed plugins that are now combined in 'material properties'
@@ -1156,6 +1194,8 @@ namespace aspect
 
           output_mesh_velocity = prm.get_bool("Output mesh velocity");
 
+          output_base_variables_on_mesh_surface = prm.get_bool("Output base variables on mesh surface");
+
           // now also see which derived quantities we are to compute
           viz_names = Utilities::split_string_list(prm.get("List of output variables"));
           AssertThrow(Utilities::has_unique_entries(viz_names),
@@ -1170,7 +1210,7 @@ namespace aspect
                          "all") != viz_names.end())
             {
               viz_names.clear();
-              for (typename std::list<typename aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<dim> >::PluginInfo>::const_iterator
+              for (typename std::list<typename aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<dim>>::PluginInfo>::const_iterator
                    p = std::get<dim>(registered_visualization_plugins).plugins->begin();
                    p != std::get<dim>(registered_visualization_plugins).plugins->end(); ++p)
                 viz_names.push_back (std::get<0>(*p));
@@ -1250,7 +1290,7 @@ namespace aspect
                               "dealii::DataPostprocessor or "
                               "VisualizationPostprocessors::CellDataVectorCreator!?"));
 
-          postprocessors.push_back (std::unique_ptr<VisualizationPostprocessors::Interface<dim> >
+          postprocessors.push_back (std::unique_ptr<VisualizationPostprocessors::Interface<dim>>
                                     (viz_postprocessor));
 
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*postprocessors.back()))
@@ -1423,11 +1463,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<2>>::PluginInfo> *
+          internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<3>>::PluginInfo> *
+          internal::Plugins::PluginList<Postprocess::VisualizationPostprocessors::Interface<3>>::plugins = nullptr;
     }
   }
 

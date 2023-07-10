@@ -23,6 +23,7 @@
 
 #include <aspect/global.h>
 #include <aspect/material_model/utilities.h>
+#include <aspect/material_model/interface.h>
 
 
 
@@ -97,6 +98,8 @@ namespace aspect
        */
       std::vector<double> entropy_derivative_temperature;
     };
+
+
 
     /**
      * This function takes the output of an equation of state @p eos_outputs_all_phases,

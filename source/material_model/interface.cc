@@ -34,7 +34,7 @@
 
 #ifdef DEBUG
 #ifdef ASPECT_USE_FP_EXCEPTIONS
-#include <fenv.h>
+#include <cfenv>
 #endif
 #endif
 
@@ -69,12 +69,6 @@ namespace aspect
         thermal_conductivity (uninitialized)
       {}
     }
-
-
-
-    template <int dim>
-    Interface<dim>::~Interface ()
-    {}
 
 
 
@@ -114,8 +108,8 @@ namespace aspect
       std::tuple
       <void *,
       void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -260,50 +254,49 @@ namespace aspect
     MaterialModelInputs<dim>::MaterialModelInputs(const unsigned int n_points,
                                                   const unsigned int n_comp)
       :
-      position(n_points, Point<dim>(numbers::signaling_nan<Tensor<1,dim> >())),
+      position(n_points, Point<dim>(numbers::signaling_nan<Tensor<1,dim>>())),
       temperature(n_points, numbers::signaling_nan<double>()),
       pressure(n_points, numbers::signaling_nan<double>()),
-      pressure_gradient(n_points, numbers::signaling_nan<Tensor<1,dim> >()),
-      velocity(n_points, numbers::signaling_nan<Tensor<1,dim> >()),
+      pressure_gradient(n_points, numbers::signaling_nan<Tensor<1,dim>>()),
+      velocity(n_points, numbers::signaling_nan<Tensor<1,dim>>()),
       composition(n_points, std::vector<double>(n_comp, numbers::signaling_nan<double>())),
-      strain_rate(n_points, numbers::signaling_nan<SymmetricTensor<2,dim> >()),
+      strain_rate(n_points, numbers::signaling_nan<SymmetricTensor<2,dim>>()),
       current_cell(),
       requested_properties(MaterialProperties::all_properties)
     {}
 
+
+
     template <int dim>
     MaterialModelInputs<dim>::MaterialModelInputs(const DataPostprocessorInputs::Vector<dim> &input_data,
                                                   const Introspection<dim> &introspection,
-                                                  const bool use_strain_rate)
+                                                  const bool compute_strain_rate)
       :
       position(input_data.evaluation_points),
       temperature(input_data.solution_values.size(), numbers::signaling_nan<double>()),
       pressure(input_data.solution_values.size(), numbers::signaling_nan<double>()),
-      pressure_gradient(input_data.solution_values.size(), numbers::signaling_nan<Tensor<1,dim> >()),
-      velocity(input_data.solution_values.size(), numbers::signaling_nan<Tensor<1,dim> >()),
+      pressure_gradient(input_data.solution_values.size(), numbers::signaling_nan<Tensor<1,dim>>()),
+      velocity(input_data.solution_values.size(), numbers::signaling_nan<Tensor<1,dim>>()),
       composition(input_data.solution_values.size(), std::vector<double>(introspection.n_compositional_fields, numbers::signaling_nan<double>())),
-      strain_rate(input_data.solution_values.size(), numbers::signaling_nan<SymmetricTensor<2,dim> >()),
-#if DEAL_II_VERSION_GTE(9,3,0)
+      strain_rate(input_data.solution_values.size(), numbers::signaling_nan<SymmetricTensor<2,dim>>()),
       current_cell(input_data.template get_cell<dim>()),
-#else
-      current_cell(input_data.template get_cell<DoFHandler<dim> >()),
-#endif
       requested_properties(MaterialProperties::all_properties)
     {
+      if (compute_strain_rate == false)
+        this->strain_rate.resize(0);
+
       for (unsigned int q=0; q<input_data.solution_values.size(); ++q)
         {
           Tensor<2,dim> grad_u;
           for (unsigned int d=0; d<dim; ++d)
             {
-              grad_u[d] = input_data.solution_gradients[q][d];
+              grad_u[d] = input_data.solution_gradients[q][introspection.component_indices.velocities[d]];
               this->velocity[q][d] = input_data.solution_values[q][introspection.component_indices.velocities[d]];
               this->pressure_gradient[q][d] = input_data.solution_gradients[q][introspection.component_indices.pressure][d];
             }
 
-          if (use_strain_rate)
+          if (compute_strain_rate)
             this->strain_rate[q] = symmetrize (grad_u);
-          else
-            this->strain_rate.resize(0);
 
           this->pressure[q] = input_data.solution_values[q][introspection.component_indices.pressure];
           this->temperature[q] = input_data.solution_values[q][introspection.component_indices.temperature];
@@ -313,25 +306,27 @@ namespace aspect
         }
     }
 
+
+
     template <int dim>
     MaterialModelInputs<dim>::MaterialModelInputs(const FEValuesBase<dim,dim> &fe_values,
                                                   const typename DoFHandler<dim>::active_cell_iterator &cell_x,
                                                   const Introspection<dim> &introspection,
                                                   const LinearAlgebra::BlockVector &solution_vector,
-                                                  const bool use_strain_rate)
+                                                  const bool compute_strain_rate)
       :
       position(fe_values.get_quadrature_points()),
       temperature(fe_values.n_quadrature_points, numbers::signaling_nan<double>()),
       pressure(fe_values.n_quadrature_points, numbers::signaling_nan<double>()),
-      pressure_gradient(fe_values.n_quadrature_points, numbers::signaling_nan<Tensor<1,dim> >()),
-      velocity(fe_values.n_quadrature_points, numbers::signaling_nan<Tensor<1,dim> >()),
+      pressure_gradient(fe_values.n_quadrature_points, numbers::signaling_nan<Tensor<1,dim>>()),
+      velocity(fe_values.n_quadrature_points, numbers::signaling_nan<Tensor<1,dim>>()),
       composition(fe_values.n_quadrature_points, std::vector<double>(introspection.n_compositional_fields, numbers::signaling_nan<double>())),
-      strain_rate(fe_values.n_quadrature_points, numbers::signaling_nan<SymmetricTensor<2,dim> >()),
+      strain_rate(fe_values.n_quadrature_points, numbers::signaling_nan<SymmetricTensor<2,dim>>()),
       current_cell (cell_x),
       requested_properties(MaterialProperties::all_properties)
     {
       // Call the function reinit to populate the new arrays.
-      this->reinit(fe_values, current_cell, introspection, solution_vector, use_strain_rate);
+      this->reinit(fe_values, current_cell, introspection, solution_vector, compute_strain_rate);
     }
 
 
@@ -362,20 +357,20 @@ namespace aspect
                                      const typename DoFHandler<dim>::active_cell_iterator &cell_x,
                                      const Introspection<dim> &introspection,
                                      const LinearAlgebra::BlockVector &solution_vector,
-                                     const bool use_strain_rate)
+                                     const bool compute_strain_rate)
     {
       // Populate the newly allocated arrays
       fe_values[introspection.extractors.temperature].get_function_values (solution_vector, this->temperature);
       fe_values[introspection.extractors.velocities].get_function_values (solution_vector, this->velocity);
       fe_values[introspection.extractors.pressure].get_function_values (solution_vector, this->pressure);
       fe_values[introspection.extractors.pressure].get_function_gradients (solution_vector, this->pressure_gradient);
-      if (use_strain_rate)
+      if (compute_strain_rate)
         fe_values[introspection.extractors.velocities].get_function_symmetric_gradients (solution_vector,this->strain_rate);
       else
         this->strain_rate.resize(0);
 
       // Vectors for evaluating the compositional field parts of the finite element solution
-      std::vector<std::vector<double> > composition_values (introspection.n_compositional_fields, std::vector<double> (fe_values.n_quadrature_points));
+      std::vector<std::vector<double>> composition_values (introspection.n_compositional_fields, std::vector<double> (fe_values.n_quadrature_points));
       for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
         {
           fe_values[introspection.extractors.compositional_fields[c]].get_function_values(solution_vector,composition_values[c]);
@@ -471,7 +466,7 @@ namespace aspect
     {
       std::string get_averaging_operation_names ()
       {
-        return "none|arithmetic average|harmonic average|geometric average|pick largest|project to Q1|log average|harmonic average only viscosity|project to Q1 only viscosity";
+        return "none|arithmetic average|harmonic average|geometric average|pick largest|project to Q1|log average|harmonic average only viscosity|geometric average only viscosity|project to Q1 only viscosity";
       }
 
 
@@ -493,6 +488,8 @@ namespace aspect
           return log_average;
         else if (s == "harmonic average only viscosity")
           return harmonic_average_only_viscosity;
+        else if (s == "geometric average only viscosity")
+          return geometric_average_only_viscosity;
         else if (s == "project to Q1 only viscosity")
           return project_to_Q1_only_viscosity;
         else
@@ -827,6 +824,13 @@ namespace aspect
             return;
           }
 
+        if (operation == geometric_average_only_viscosity)
+          {
+            average_property (geometric_average, projection_matrix, expansion_matrix,
+                              values_out.viscosities);
+            return;
+          }
+
         if (operation == project_to_Q1_only_viscosity)
           {
             average_property (project_to_Q1, projection_matrix, expansion_matrix,
@@ -1028,6 +1032,26 @@ namespace aspect
 
 
 
+    namespace
+    {
+      std::vector<std::string> make_phase_outputs_names()
+      {
+        std::vector<std::string> names;
+        names.emplace_back("phase");
+        return names;
+      }
+    }
+
+
+
+    template <int dim>
+    PhaseOutputs<dim>::PhaseOutputs (const unsigned int n_points)
+      :
+      NamedAdditionalMaterialOutputs<dim>(make_phase_outputs_names(), n_points)
+    {}
+
+
+
     template<int dim>
     PrescribedFieldOutputs<dim>::PrescribedFieldOutputs (const unsigned int n_points,
                                                          const unsigned int n_comp)
@@ -1082,12 +1106,12 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<MaterialModel::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<MaterialModel::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<MaterialModel::Interface<2>>::PluginInfo> *
+                                                                        internal::Plugins::PluginList<MaterialModel::Interface<2>>::plugins = nullptr;
 
       template <>
-      std::list<internal::Plugins::PluginList<MaterialModel::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<MaterialModel::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<MaterialModel::Interface<3>>::PluginInfo> *
+                                                                        internal::Plugins::PluginList<MaterialModel::Interface<3>>::plugins = nullptr;
     }
   }
 
@@ -1134,6 +1158,8 @@ namespace aspect
   template class SeismicAdditionalOutputs<dim>; \
   \
   template class ReactionRateOutputs<dim>; \
+  \
+  template class PhaseOutputs<dim>; \
   \
   template class PrescribedPlasticDilation<dim>; \
   \

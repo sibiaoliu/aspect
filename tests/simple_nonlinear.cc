@@ -8,7 +8,7 @@
 
 #include <aspect/utilities.h>
 
-#include "../benchmarks/nonlinear_channel_flow/simple_nonlinear.cc"
+#include "../benchmarks/newton_solver_benchmark_set/nonlinear_channel_flow/simple_nonlinear.cc"
 
 template<int dim>
 int f(double parameter)
@@ -118,7 +118,7 @@ int f(double parameter)
   if (out_base.template get_additional_output<MaterialModelDerivatives<dim> >() != nullptr)
     throw "error";
 
-  out_base.additional_outputs.push_back(std_cxx14::make_unique<MaterialModelDerivatives<dim> > (5));
+  out_base.additional_outputs.push_back(std::make_unique<MaterialModelDerivatives<dim> > (5));
 
   // initialize the material we want to test.
   SimpleNonlinear<dim> mat;

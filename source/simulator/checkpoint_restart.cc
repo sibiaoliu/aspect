@@ -209,15 +209,20 @@ namespace aspect
       // the change would then lead to a jump in pressure from one time step
       // to the next when we, for example, change from requiring the *surface*
       // average to be zero, to requiring the *domain* average to be zero.
-      // That's unlikely what the user really wanted.
+      // That's unlikely what the user really wanted. However, we do allow
+      // disabling the pressure normalization in case the user wants to enable
+      // a free surface boundary.
       std::string pressure_normalization;
       ia >> pressure_normalization;
-      AssertThrow (pressure_normalization == parameters.pressure_normalization,
+      AssertThrow (pressure_normalization == parameters.pressure_normalization ||
+                   parameters.pressure_normalization == "no",
                    ExcMessage ("The pressure normalization method that was stored "
                                "in the checkpoint file is not the same as the one "
-                               "you currently set in your input file. "
-                               "These need to be the same during restarting "
-                               "from a checkpoint."));
+                               "you currently set in your input file and your new "
+                               "pressure normalization method is not 'no'. "
+                               "The only allowed change for the pressure "
+                               "normalization method during a restart is to "
+                               "disable normalization."));
 
       unsigned int n_compositional_fields;
       ia >> n_compositional_fields;
@@ -263,6 +268,11 @@ namespace aspect
   void Simulator<dim>::create_snapshot()
   {
     TimerOutput::Scope timer (computing_timer, "Create snapshot");
+
+    // Take elapsed time from timer so that we can serialize it:
+    total_walltime_until_last_snapshot += wall_timer.wall_time();
+    wall_timer.restart();
+
     const unsigned int my_id = Utilities::MPI::this_mpi_process (mpi_communicator);
 
     // save Triangulation and Solution vectors:
@@ -285,11 +295,11 @@ namespace aspect
       // If we are deforming the mesh, also serialize the mesh vertices vector, which
       // uses its own dof handler
       std::vector<const LinearAlgebra::Vector *> x_fs_system (2);
-      std::unique_ptr<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector> > mesh_deformation_trans;
+      std::unique_ptr<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>> mesh_deformation_trans;
       if (parameters.mesh_deformation_enabled)
         {
           mesh_deformation_trans
-            = std_cxx14::make_unique<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>>
+            = std::make_unique<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>>
               (mesh_deformation->mesh_deformation_dof_handler);
 
           x_fs_system[0] = &mesh_deformation->mesh_displacements;
@@ -333,9 +343,9 @@ namespace aspect
           // build compression header
           const uint32_t compression_header[4]
             = { 1,                                   /* number of blocks */
-                (uint32_t)oss.str().length(), /* size of block */
-                (uint32_t)oss.str().length(), /* size of last block */
-                (uint32_t)compressed_data_length
+                static_cast<uint32_t>(oss.str().length()), /* size of block */
+                static_cast<uint32_t>(oss.str().length()), /* size of last block */
+                static_cast<uint32_t>(compressed_data_length)
               }; /* list of compressed sizes of blocks */
 
           std::ofstream f ((parameters.output_directory + "restart.resume.z.new").c_str());
@@ -449,6 +459,58 @@ namespace aspect
 
     pcout << "*** Resuming from snapshot!" << std::endl << std::endl;
 
+    // read resume.z to set up the state of the model
+    try
+      {
+#ifdef DEAL_II_WITH_ZLIB
+        const std::string restart_data
+          = Utilities::read_and_distribute_file_content (parameters.output_directory + "restart.resume.z",
+                                                         mpi_communicator);
+
+        std::istringstream ifs (restart_data);
+
+        uint32_t compression_header[4];
+        ifs.read((char *)compression_header, 4 * sizeof(compression_header[0]));
+        Assert(compression_header[0]==1, ExcInternalError());
+
+        std::vector<char> compressed(compression_header[3]);
+        std::vector<char> uncompressed(compression_header[1]);
+        ifs.read(&compressed[0],compression_header[3]);
+        uLongf uncompressed_size = compression_header[1];
+
+        const int err = uncompress((Bytef *)&uncompressed[0], &uncompressed_size,
+                                   (Bytef *)&compressed[0], compression_header[3]);
+        AssertThrow (err == Z_OK,
+                     ExcMessage (std::string("Uncompressing the data buffer resulted in an error with code <")
+                                 +
+                                 Utilities::int_to_string(err)));
+
+        {
+          std::istringstream ss;
+          ss.str(std::string (&uncompressed[0], uncompressed_size));
+
+          aspect::iarchive ia (ss);
+          load_and_check_critical_parameters(this->parameters, ia);
+          ia >> (*this);
+        }
+#else
+        AssertThrow (false,
+                     ExcMessage ("You need to have deal.II configured with the `libz' "
+                                 "option to support checkpoint/restart, but deal.II "
+                                 "did not detect its presence when you called `cmake'."));
+#endif
+      }
+    catch (std::exception &e)
+      {
+        AssertThrow (false,
+                     ExcMessage (std::string("Cannot seem to deserialize the data previously stored!\n")
+                                 +
+                                 "Some part of the machinery generated an exception that says:\n"
+                                 +
+                                 e.what()));
+      }
+
+    // now that we have resumed from the snapshot load the mesh and solution vectors
     try
       {
         triangulation.load ((parameters.output_directory + "restart.mesh").c_str());
@@ -460,11 +522,7 @@ namespace aspect
 
     // if using a cached mapping, update the cache with the new triangulation
     if (MappingQCache<dim> *map = dynamic_cast<MappingQCache<dim>*>(&(*mapping)))
-#if DEAL_II_VERSION_GTE(9,3,0)
       map->initialize(MappingQGeneric<dim>(4), triangulation);
-#else
-      map->initialize(triangulation, MappingQGeneric<dim>(4));
-#endif
 
     setup_dofs();
     global_volume = GridTools::volume (triangulation, *mapping);
@@ -517,57 +575,7 @@ namespace aspect
         mesh_deformation->initial_topography = distributed_initial_topography;
       }
 
-    // read zlib compressed resume.z
-    try
-      {
-#ifdef DEAL_II_WITH_ZLIB
-        std::ifstream ifs ((parameters.output_directory + "restart.resume.z").c_str());
-        AssertThrow(ifs.is_open(),
-                    ExcMessage("Cannot open snapshot resume file."));
-
-        uint32_t compression_header[4];
-        ifs.read((char *)compression_header, 4 * sizeof(compression_header[0]));
-        Assert(compression_header[0]==1, ExcInternalError());
-
-        std::vector<char> compressed(compression_header[3]);
-        std::vector<char> uncompressed(compression_header[1]);
-        ifs.read(&compressed[0],compression_header[3]);
-        uLongf uncompressed_size = compression_header[1];
-
-        const int err = uncompress((Bytef *)&uncompressed[0], &uncompressed_size,
-                                   (Bytef *)&compressed[0], compression_header[3]);
-        AssertThrow (err == Z_OK,
-                     ExcMessage (std::string("Uncompressing the data buffer resulted in an error with code <")
-                                 +
-                                 Utilities::int_to_string(err)));
-
-        {
-          std::istringstream ss;
-          ss.str(std::string (&uncompressed[0], uncompressed_size));
-
-          aspect::iarchive ia (ss);
-          load_and_check_critical_parameters(this->parameters, ia);
-          ia >> (*this);
-        }
-#else
-        AssertThrow (false,
-                     ExcMessage ("You need to have deal.II configured with the `libz' "
-                                 "option to support checkpoint/restart, but deal.II "
-                                 "did not detect its presence when you called `cmake'."));
-#endif
-        signals.post_resume_load_user_data(triangulation);
-      }
-    catch (std::exception &e)
-      {
-        AssertThrow (false,
-                     ExcMessage (std::string("Cannot seem to deserialize the data previously stored!\n")
-                                 +
-                                 "Some part of the machinery generated an exception that says <"
-                                 +
-                                 e.what()
-                                 +
-                                 ">"));
-      }
+    signals.post_resume_load_user_data(triangulation);
 
     // Overwrite the existing statistics file with the one that would have
     // been current at the time of the snapshot we just read back in. We
@@ -606,6 +614,7 @@ namespace aspect
     ar &timestep_number;
     ar &pre_refinement_step;
     ar &last_pressure_normalization_adjustment;
+    ar &total_walltime_until_last_snapshot;
 
     ar &postprocess_manager;
 

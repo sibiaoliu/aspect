@@ -79,12 +79,12 @@ namespace aspect
      * setup based on parameters followed by a signal to allow modifications.
      */
     template <int dim>
-    std::vector<VariableDeclaration<dim> > construct_variables(const Parameters<dim> &parameters,
-                                                               SimulatorSignals<dim> &signals,
-                                                               std::unique_ptr<MeltHandler<dim> > &melt_handler)
+    std::vector<VariableDeclaration<dim>> construct_variables(const Parameters<dim> &parameters,
+                                                              SimulatorSignals<dim> &signals,
+                                                              std::unique_ptr<MeltHandler<dim>> &melt_handler)
     {
-      std::vector<VariableDeclaration<dim> > variables
-        = construct_default_variables (parameters);
+      std::vector<VariableDeclaration<dim>> variables
+                                         = construct_default_variables (parameters);
       if (melt_handler)
         melt_handler->edit_finite_element_variables (parameters, variables);
 
@@ -107,11 +107,11 @@ namespace aspect
                                                  const InitialTopographyModel::Interface<dim> &initial_topography_model)
     {
       if (geometry_model.has_curved_elements())
-        return std_cxx14::make_unique<MappingQCache<dim>>(4);
+        return std::make_unique<MappingQCache<dim>>(4);
       if (Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(initial_topography_model))
-        return std_cxx14::make_unique<MappingCartesian<dim>>();
+        return std::make_unique<MappingCartesian<dim>>();
 
-      return std_cxx14::make_unique<MappingQ1<dim>>();
+      return std::make_unique<MappingQ1<dim>>();
     }
   }
 
@@ -138,19 +138,19 @@ namespace aspect
                              ParameterHandler &prm)
     :
     simulator_is_past_initialization (false),
-    assemblers (std_cxx14::make_unique<Assemblers::Manager<dim>>()),
+    assemblers (std::make_unique<Assemblers::Manager<dim>>()),
     parameters (prm, mpi_communicator_),
     melt_handler (parameters.include_melt_transport ?
-                  std_cxx14::make_unique<MeltHandler<dim>>(prm) :
+                  std::make_unique<MeltHandler<dim>>(prm) :
                   nullptr),
     newton_handler (Parameters<dim>::is_defect_correction(parameters.nonlinear_solver) ?
-                    std_cxx14::make_unique<NewtonHandler<dim>>() :
+                    std::make_unique<NewtonHandler<dim>>() :
                     nullptr),
     post_signal_creation(
       std::bind (&internals::SimulatorSignals::call_connector_functions<dim>,
                  std::ref(signals))),
     volume_of_fluid_handler (parameters.volume_of_fluid_tracking_enabled ?
-                             std_cxx14::make_unique<VolumeOfFluidHandler<dim>> (*this, prm) :
+                             std::make_unique<VolumeOfFluidHandler<dim>> (*this, prm) :
                              nullptr),
     introspection (construct_variables<dim>(parameters, signals, melt_handler), parameters),
     mpi_communicator (Utilities::MPI::duplicate_communicator (mpi_communicator_)),
@@ -168,6 +168,7 @@ namespace aspect
                      pcout,
                      TimerOutput::never,
                      TimerOutput::wall_times),
+    total_walltime_until_last_snapshot(0.),
     initial_topography_model(InitialTopographyModel::create_initial_topography_model<dim>(prm)),
     geometry_model (GeometryModel::create_geometry_model<dim>(prm)),
     // make sure the parameters object gets a chance to
@@ -183,7 +184,7 @@ namespace aspect
     adiabatic_conditions (AdiabaticConditions::create_adiabatic_conditions<dim>(prm)),
 #ifdef ASPECT_WITH_WORLD_BUILDER
     world_builder (parameters.world_builder_file != "" ?
-                   std_cxx14::make_unique<WorldBuilder::World>(parameters.world_builder_file) :
+                   std::make_unique<WorldBuilder::World>(parameters.world_builder_file) :
                    nullptr),
 #endif
     boundary_heat_flux (BoundaryHeatFlux::create_boundary_heat_flux<dim>(prm)),
@@ -237,6 +238,8 @@ namespace aspect
                                    false),
     rebuild_stokes_preconditioner (true)
   {
+    wall_timer.start();
+
     if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
       {
         // only open the log file on processor 0, the other processors won't be
@@ -363,7 +366,7 @@ namespace aspect
         parameters.use_full_A_block_preconditioner = true;
 
         // Allocate the MeshDeformationHandler object
-        mesh_deformation = std_cxx14::make_unique<MeshDeformation::MeshDeformationHandler<dim>>(*this);
+        mesh_deformation = std::make_unique<MeshDeformation::MeshDeformationHandler<dim>>(*this);
         mesh_deformation->initialize_simulator(*this);
         mesh_deformation->parse_parameters(prm);
         mesh_deformation->initialize();
@@ -394,10 +397,10 @@ namespace aspect
         switch (parameters.stokes_velocity_degree)
           {
             case 2:
-              stokes_matrix_free = std_cxx14::make_unique<StokesMatrixFreeHandlerImplementation<dim,2>>(*this, prm);
+              stokes_matrix_free = std::make_unique<StokesMatrixFreeHandlerImplementation<dim,2>>(*this, prm);
               break;
             case 3:
-              stokes_matrix_free = std_cxx14::make_unique<StokesMatrixFreeHandlerImplementation<dim,3>>(*this, prm);
+              stokes_matrix_free = std::make_unique<StokesMatrixFreeHandlerImplementation<dim,3>>(*this, prm);
               break;
             default:
               AssertThrow(false, ExcMessage("The finite element degree for the Stokes system you selected is not supported yet."));
@@ -408,7 +411,7 @@ namespace aspect
     postprocess_manager.initialize_simulator (*this);
     postprocess_manager.parse_parameters (prm);
 
-    if (postprocess_manager.template has_matching_postprocessor<Postprocess::Particles<dim> >())
+    if (postprocess_manager.template has_matching_postprocessor<Postprocess::Particles<dim>>())
       {
         particle_world.reset(new Particle::World<dim>());
         if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(particle_world.get()))
@@ -434,15 +437,22 @@ namespace aspect
     lateral_averaging.initialize_simulator (*this);
 
     geometry_model->create_coarse_mesh (triangulation);
+    Assert (triangulation.all_reference_cells_are_hyper_cube(),
+            ExcMessage ("ASPECT only supports meshes that are composed of quadrilateral "
+                        "or hexahedral cells."))
     global_Omega_diameter = GridTools::diameter (triangulation);
 
     // After creating the coarse mesh, initialize mapping cache if one is used
     if (MappingQCache<dim> *map = dynamic_cast<MappingQCache<dim>*>(&(*mapping)))
-#if DEAL_II_VERSION_GTE(9,3,0)
       map->initialize(MappingQGeneric<dim>(4), triangulation);
-#else
-      map->initialize(triangulation, MappingQGeneric<dim>(4));
-#endif
+
+    // Check that DG limiters are only used with cartesian mapping
+    if (parameters.use_limiter_for_discontinuous_temperature_solution ||
+        parameters.use_limiter_for_discontinuous_composition_solution)
+      AssertThrow(geometry_model->natural_coordinate_system() == Utilities::Coordinates::CoordinateSystem::cartesian,
+                  ExcMessage("The limiter for the discontinuous temperature and composition solutions "
+                             "has not been tested in non-Cartesian geometries and currently requires "
+                             "the use of a Cartesian geometry model."));
 
     for (const auto &p : parameters.prescribed_traction_boundary_indicators)
       {
@@ -464,6 +474,16 @@ namespace aspect
       open_velocity_boundary_indicators.erase (p);
     for (const auto p : boundary_velocity_manager.get_tangential_boundary_velocity_indicators())
       open_velocity_boundary_indicators.erase (p);
+
+    // Make sure that we do the pressure right-hand side modification correctly for periodic boundaries
+    using periodic_boundary_set
+      = std::set< std::pair< std::pair< types::boundary_id, types::boundary_id>, unsigned int>>;
+    periodic_boundary_set pbs = geometry_model->get_periodic_boundary_pairs();
+    for (periodic_boundary_set::iterator p = pbs.begin(); p != pbs.end(); ++p)
+      {
+        open_velocity_boundary_indicators.erase ((*p).first.first);
+        open_velocity_boundary_indicators.erase ((*p).first.second);
+      }
 
     // We need to do the RHS compatibility modification, if the model is
     // compressible or compatible (in the case of melt transport), and
@@ -656,15 +676,13 @@ namespace aspect
         // there
         for (const auto p : boundary_temperature_manager.get_fixed_temperature_boundary_indicators())
           {
-            auto lambda = [&] (const dealii::Point<dim> &x) -> double
+            VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
+              [&] (const dealii::Point<dim> &x) -> double
             {
               return boundary_temperature_manager.boundary_temperature(p, x);
-            };
-
-            VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
-              lambda,
-              introspection.component_masks.temperature.first_selected_component(),
-              introspection.n_components);
+            },
+            introspection.component_masks.temperature.first_selected_component(),
+            introspection.n_components);
 
             VectorTools::interpolate_boundary_values (*mapping,
                                                       dof_handler,
@@ -697,15 +715,13 @@ namespace aspect
         for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
           for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
             {
-              auto lambda = [&] (const Point<dim> &x) -> double
+              VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
+                [&] (const Point<dim> &x) -> double
               {
                 return boundary_composition_manager.boundary_composition(p, x, c);
-              };
-
-              VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
-                lambda,
-                introspection.component_masks.compositional_fields[c].first_selected_component(),
-                introspection.n_components);
+              },
+              introspection.component_masks.compositional_fields[c].first_selected_component(),
+              introspection.n_components);
 
               VectorTools::interpolate_boundary_values (*mapping,
                                                         dof_handler,
@@ -813,7 +829,7 @@ namespace aspect
     template <int dim>
     bool solver_scheme_solves_stokes_equations(const Parameters<dim> &parameters)
     {
-      // Check if we use a solver scheme that solves the advection equations
+      // Check if we use a solver scheme that solves the Stokes equations
       switch (parameters.nonlinear_solver)
         {
           case Parameters<dim>::NonlinearSolver::Kind::single_Advection_single_Stokes:
@@ -958,7 +974,9 @@ namespace aspect
     // Only enable temperature coupling if temperature block is needed
     if (solver_scheme_solves_advection_equations(parameters)
         &&
-        parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+        parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::prescribed_field
+        &&
+        parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::static_field)
       coupling[x.temperature][x.temperature] = DoFTools::always;
 
     // Only enable composition coupling if a composition block is needed
@@ -1014,7 +1032,8 @@ namespace aspect
           = introspection.component_indices;
         if (parameters.use_discontinuous_temperature_discretization &&
             solver_scheme_solves_advection_equations(parameters) &&
-            parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::prescribed_field)
+            parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::prescribed_field &&
+            parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::static_field)
           face_coupling[x.temperature][x.temperature] = DoFTools::always;
 
         if (parameters.use_discontinuous_composition_discretization &&
@@ -1476,8 +1495,8 @@ namespace aspect
 
     // run all the postprocessing routines and then write
     // the current state of the statistics table to a file
-    std::list<std::pair<std::string,std::string> >
-    output_list = postprocess_manager.execute (statistics);
+    std::list<std::pair<std::string,std::string>>
+                                               output_list = postprocess_manager.execute (statistics);
 
     // if we are on processor zero, print to screen
     // whatever the postprocessors have generated
@@ -1495,7 +1514,7 @@ namespace aspect
                   << std::left
                   << std::setw(width)
                   << p.first
-                  << " "
+                  << ' '
                   << p.second
                   << std::endl;
         }
@@ -1514,8 +1533,8 @@ namespace aspect
     parallel::distributed::SolutionTransfer<dim,LinearAlgebra::BlockVector>
     system_trans(dof_handler);
 
-    std::unique_ptr<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector> >
-    mesh_deformation_trans;
+    std::unique_ptr<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>>
+        mesh_deformation_trans;
 
     {
       TimerOutput::Scope timer (computing_timer, "Refine mesh structure, part 1");
@@ -1585,7 +1604,7 @@ namespace aspect
           x_fs_system[1] = &mesh_deformation->old_mesh_displacements;
           x_fs_system[2] = &mesh_deformation->initial_topography;
           mesh_deformation_trans
-            = std_cxx14::make_unique<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>>
+            = std::make_unique<parallel::distributed::SolutionTransfer<dim,LinearAlgebra::Vector>>
               (mesh_deformation->mesh_deformation_dof_handler);
         }
 
@@ -1631,11 +1650,7 @@ namespace aspect
 
       triangulation.execute_coarsening_and_refinement ();
       if (MappingQCache<dim> *map = dynamic_cast<MappingQCache<dim>*>(&(*mapping)))
-#if DEAL_II_VERSION_GTE(9,3,0)
         map->initialize(MappingQGeneric<dim>(4), triangulation);
-#else
-        map->initialize(triangulation, MappingQGeneric<dim>(4));
-#endif
     } // leave the timed section
 
     setup_dofs ();
@@ -1884,11 +1899,7 @@ namespace aspect
             mesh_refinement_manager.tag_additional_cells ();
             triangulation.execute_coarsening_and_refinement();
             if (MappingQCache<dim> *map = dynamic_cast<MappingQCache<dim>*>(&(*mapping)))
-#if DEAL_II_VERSION_GTE(9,3,0)
               map->initialize(MappingQGeneric<dim>(4), triangulation);
-#else
-              map->initialize(triangulation, MappingQGeneric<dim>(4));
-#endif
           }
 
         setup_dofs();
@@ -2020,6 +2031,10 @@ namespace aspect
     // we disable automatic summary printing so that it won't happen when
     // throwing an exception. Therefore, we have to do this manually here:
     computing_timer.print_summary ();
+
+    pcout << "-- Total wallclock time elapsed including restarts:"
+          << round(wall_timer.wall_time()+total_walltime_until_last_snapshot)
+          << 's' << std::endl;
 
     CitationInfo::print_info_block (pcout);
 

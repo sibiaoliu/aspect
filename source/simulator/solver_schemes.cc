@@ -163,6 +163,7 @@ namespace aspect
             return current_residual / *initial_residual;
           break;
         }
+
         case Parameters<dim>::AdvectionFieldMethod::prescribed_field:
         {
           const AdvectionField adv_field (AdvectionField::temperature());
@@ -179,6 +180,20 @@ namespace aspect
                                         dummy);
           break;
         }
+
+        case Parameters<dim>::AdvectionFieldMethod::static_field:
+        {
+          const AdvectionField adv_field (AdvectionField::temperature());
+          // Do nothing here, but at least call the signal in case the
+          // user wants to do something with the variable:
+          SolverControl dummy;
+          signals.post_advection_solver(*this,
+                                        adv_field.is_temperature(),
+                                        adv_field.compositional_variable,
+                                        dummy);
+          break;
+        }
+
         default:
           AssertThrow(false,ExcNotImplemented());
       }
@@ -392,11 +407,6 @@ namespace aspect
   void Simulator<dim>::assemble_and_solve_defect_correction_Stokes(DefectCorrectionResiduals &dcr,
                                                                    const bool use_picard)
   {
-    // The matrix-free GMG Stokes preconditioner is currently not implemented for the Newton solver.
-    if (stokes_matrix_free)
-      AssertThrow(newton_handler->parameters.newton_derivative_scaling_factor==0,
-                  ExcNotImplemented());
-
     /**
      * copied from solver.cc
      */
@@ -501,7 +511,7 @@ namespace aspect
                       << Newton::to_string(newton_handler->parameters.preconditioner_stabilization)
                       << " and A block is "
                       << Newton::to_string(newton_handler->parameters.velocity_block_stabilization)
-                      << ".";
+                      << '.';
               }
             pcout << std::endl;
           }
@@ -1397,16 +1407,14 @@ namespace aspect
       // Assign Stokes solution
       LinearAlgebra::BlockVector distributed_stokes_solution (introspection.index_sets.system_partitioning, mpi_communicator);
 
-      auto lambda = [&](const Point<dim> &p, Vector<double> &result)
+      VectorFunctionFromVectorFunctionObject<dim> func(
+        [&](const Point<dim> &p, Vector<double> &result)
       {
         prescribed_stokes_solution->stokes_solution(p, result);
-      };
-
-      VectorFunctionFromVectorFunctionObject<dim> func(
-        lambda,
-        0,
-        parameters.include_melt_transport ? 2*dim+3 : dim+1, // velocity and pressure
-        introspection.n_components);
+      },
+      0,
+      parameters.include_melt_transport ? 2*dim+3 : dim+1, // velocity and pressure
+      introspection.n_components);
 
       VectorTools::interpolate (*mapping, dof_handler, func, distributed_stokes_solution);
 

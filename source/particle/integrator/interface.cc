@@ -30,7 +30,8 @@ namespace aspect
     namespace Integrator
     {
       template <int dim>
-      Interface<dim>::~Interface ()
+      void
+      Interface<dim>::initialize ()
       {}
 
 
@@ -95,8 +96,8 @@ namespace aspect
         std::tuple
         <void *,
         void *,
-        aspect::internal::Plugins::PluginList<Interface<2> >,
-        aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+        aspect::internal::Plugins::PluginList<Interface<2>>,
+        aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
       }
 
 
@@ -182,11 +183,11 @@ namespace aspect
                                "solves. If, for example, we call the numerical solution "
                                "of the ODE $\\tilde{\\mathbf x}_{k,h}(t)$, then the "
                                "error will typically satisfy a relationship like "
-                               "$$"
+                               "\\["
                                "  \\| \\tilde{\\mathbf x}_k(T) - \\tilde{\\mathbf x}_{k,h}(T) \\|"
                                "  \\le"
                                "  C(T) \\Delta t^p"
-                               "$$ "
+                               "\\] "
                                "where $\\Delta t$ is the time step and $p$ the convergence order "
                                "of the method, and $C(T)$ is a (generally unknown) constant "
                                "that depends on the end time $T$ at which one compares the "
@@ -196,13 +197,13 @@ namespace aspect
                                "$\\| \\mathbf x_k(T) - \\tilde{\\mathbf x}_{k,h}(T) \\|$, "
                                "but this quantity will, in the best case, only satisfy an "
                                "estimate of the form "
-                               "$$"
+                               "\\["
                                "  \\| \\mathbf x_k(T) - \\tilde{\\mathbf x}_{k,h}(T) \\|"
                                "  \\le"
                                "  C_1(T) \\Delta t^p"
                                "  + C_2(T) \\| \\mathbf u-\\mathbf u_h \\|"
                                "  + C_3(T) \\| \\mathbf u_h-\\tilde{\\mathbf u}_h \\|"
-                               "$$ "
+                               "\\] "
                                "with appropriately chosen norms for the second and third "
                                "term. These second and third terms typically converge to "
                                "zero at relatively low rates (compared to the order $p$ of "
@@ -242,11 +243,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<Particle::Integrator::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<Particle::Integrator::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<Particle::Integrator::Interface<2>>::PluginInfo> *
+                                                                               internal::Plugins::PluginList<Particle::Integrator::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<Particle::Integrator::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<Particle::Integrator::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<Particle::Integrator::Interface<3>>::PluginInfo> *
+                                                                               internal::Plugins::PluginList<Particle::Integrator::Interface<3>>::plugins = nullptr;
     }
   }
 

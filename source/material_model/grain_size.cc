@@ -90,12 +90,12 @@ namespace aspect
         {
           if (material_file_format == perplex)
             material_lookup
-            .push_back(std_cxx14::make_unique<MaterialModel::MaterialUtilities::Lookup::PerplexReader>(datadirectory+material_file_names[i],
+            .push_back(std::make_unique<MaterialModel::MaterialUtilities::Lookup::PerplexReader>(datadirectory+material_file_names[i],
                        use_bilinear_interpolation,
                        this->get_mpi_communicator()));
           else if (material_file_format == hefesto)
             material_lookup
-            .push_back(std_cxx14::make_unique<MaterialModel::MaterialUtilities::Lookup::HeFESToReader>(datadirectory+material_file_names[i],
+            .push_back(std::make_unique<MaterialModel::MaterialUtilities::Lookup::HeFESToReader>(datadirectory+material_file_names[i],
                        datadirectory+derivatives_file_names[i],
                        use_bilinear_interpolation,
                        this->get_mpi_communicator()));
@@ -711,25 +711,44 @@ namespace aspect
       if (in.current_cell.state() == IteratorState::valid)
         {
           // get the pressures and temperatures at the vertices of the cell
-#if DEAL_II_VERSION_GTE(9,3,0)
           const QTrapezoid<dim> quadrature_formula;
-#else
-          const QTrapez<dim> quadrature_formula;
-#endif
 
-          const unsigned int n_q_points = quadrature_formula.size();
-          FEValues<dim> fe_values (this->get_mapping(),
-                                   this->get_fe(),
-                                   quadrature_formula,
-                                   update_values);
+          std::vector<double> solution_values(this->get_fe().dofs_per_cell);
+          in.current_cell->get_dof_values(this->get_current_linearization_point(),
+                                          solution_values.begin(),
+                                          solution_values.end());
 
-          std::vector<double> temperatures(n_q_points), pressures(n_q_points);
-          fe_values.reinit (in.current_cell);
+          // Only create the evaluator the first time we get here
+          if (!temperature_evaluator)
+            temperature_evaluator.reset(new FEPointEvaluation<1,dim>(this->get_mapping(),
+                                                                     this->get_fe(),
+                                                                     update_values,
+                                                                     this->introspection().component_indices.temperature));
+          if (!pressure_evaluator)
+            pressure_evaluator.reset(new FEPointEvaluation<1,dim>(this->get_mapping(),
+                                                                  this->get_fe(),
+                                                                  update_values,
+                                                                  this->introspection().component_indices.pressure));
 
-          fe_values[this->introspection().extractors.temperature]
-          .get_function_values (this->get_current_linearization_point(), temperatures);
-          fe_values[this->introspection().extractors.pressure]
-          .get_function_values (this->get_current_linearization_point(), pressures);
+
+          // Initialize the evaluator for the temperature
+          temperature_evaluator->reinit(in.current_cell, quadrature_formula.get_points());
+          temperature_evaluator->evaluate(solution_values,
+                                          EvaluationFlags::values);
+
+          // Initialize the evaluator for the pressure
+          pressure_evaluator->reinit(in.current_cell, quadrature_formula.get_points());
+          pressure_evaluator->evaluate(solution_values,
+                                       EvaluationFlags::values);
+
+          std::vector<double> temperatures(quadrature_formula.size());
+          std::vector<double> pressures(quadrature_formula.size());
+
+          for (unsigned int i=0; i<quadrature_formula.size(); ++i)
+            {
+              temperatures[i] = temperature_evaluator->get_value(i);
+              pressures[i] = pressure_evaluator->get_value(i);
+            }
 
           AssertThrow (material_lookup.size() == 1,
                        ExcMessage("This formalism is only implemented for one material "
@@ -841,7 +860,7 @@ namespace aspect
 
               out.viscosities[i] = std::min(std::max(min_eta,effective_viscosity),max_eta);
 
-              if (DislocationViscosityOutputs<dim> *disl_viscosities_out = out.template get_additional_output<DislocationViscosityOutputs<dim> >())
+              if (DislocationViscosityOutputs<dim> *disl_viscosities_out = out.template get_additional_output<DislocationViscosityOutputs<dim>>())
                 disl_viscosities_out->dislocation_viscosities[i] = std::min(std::max(min_eta,disl_viscosity),1e300);
             }
 
@@ -849,7 +868,7 @@ namespace aspect
           out.thermal_conductivities[i] = k_value;
           out.compressibilities[i] = compressibility(in.temperature[i], pressure, composition, in.position[i]);
 
-          if (DislocationViscosityOutputs<dim> *disl_viscosities_out = out.template get_additional_output<DislocationViscosityOutputs<dim> >())
+          if (DislocationViscosityOutputs<dim> *disl_viscosities_out = out.template get_additional_output<DislocationViscosityOutputs<dim>>())
             disl_viscosities_out->boundary_area_change_work_fractions[i] =
               boundary_area_change_work_fraction[get_phase_index(in.position[i],in.temperature[i],pressure)];
 
@@ -869,7 +888,7 @@ namespace aspect
 
           // fill seismic velocities outputs if they exist
           if (use_table_properties)
-            if (SeismicAdditionalOutputs<dim> *seismic_out = out.template get_additional_output<SeismicAdditionalOutputs<dim> >())
+            if (SeismicAdditionalOutputs<dim> *seismic_out = out.template get_additional_output<SeismicAdditionalOutputs<dim>>())
               {
                 seismic_out->vp[i] = seismic_Vp(in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
                 seismic_out->vs[i] = seismic_Vs(in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
@@ -1452,19 +1471,19 @@ namespace aspect
       // These properties are useful as output, but will also be used by the
       // heating model to reduce shear heating by the amount of work done to
       // reduce grain size.
-      if (out.template get_additional_output<DislocationViscosityOutputs<dim> >() == nullptr)
+      if (out.template get_additional_output<DislocationViscosityOutputs<dim>>() == nullptr)
         {
           const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(
-            std_cxx14::make_unique<MaterialModel::DislocationViscosityOutputs<dim>> (n_points));
+            std::make_unique<MaterialModel::DislocationViscosityOutputs<dim>> (n_points));
         }
 
       // These properties are only output properties.
-      if (out.template get_additional_output<SeismicAdditionalOutputs<dim> >() == nullptr)
+      if (out.template get_additional_output<SeismicAdditionalOutputs<dim>>() == nullptr)
         {
           const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(
-            std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_points));
+            std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_points));
         }
     }
   }

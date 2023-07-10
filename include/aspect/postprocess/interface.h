@@ -75,8 +75,7 @@ namespace aspect
          * Destructor. Does nothing but is virtual so that derived classes
          * destructors are also virtual.
          */
-        virtual
-        ~Interface ();
+        virtual ~Interface () = default;
 
         /**
          * Initialize function.
@@ -226,8 +225,8 @@ namespace aspect
          * The function returns a concatenation of the text returned by the
          * individual postprocessors.
          */
-        std::list<std::pair<std::string,std::string> >
-        execute (TableHandler &statistics);
+        std::list<std::pair<std::string,std::string>>
+                                                   execute (TableHandler &statistics);
 
         /**
          * Go through the list of all postprocessors that have been selected
@@ -351,7 +350,7 @@ namespace aspect
          * A list of postprocessor objects that have been requested in the
          * parameter file.
          */
-        std::vector<std::unique_ptr<Interface<dim> > > postprocessors;
+        std::vector<std::unique_ptr<Interface<dim>>> postprocessors;
     };
 
 
@@ -431,7 +430,7 @@ namespace aspect
                              "that could not be found in the current model. Activate this "
                              "postprocessor in the input file."));
 
-      typename std::vector<std::unique_ptr<Interface<dim> > >::const_iterator postprocessor;
+      typename std::vector<std::unique_ptr<Interface<dim>>>::const_iterator postprocessor;
       for (const auto &p : postprocessors)
         if (Plugins::plugin_type_matches<PostprocessorType>(*p))
           return Plugins::get_plugin_as_type<PostprocessorType>(*p);
@@ -453,12 +452,12 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_POSTPROCESSOR_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<2>,classname<2> > \
-    dummy_ ## classname ## _2d (&aspect::Postprocess::Manager<2>::register_postprocessor, \
-                                name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<3>,classname<3> > \
-    dummy_ ## classname ## _3d (&aspect::Postprocess::Manager<3>::register_postprocessor, \
-                                name, description); \
+    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<2>,classname<2>> \
+        dummy_ ## classname ## _2d (&aspect::Postprocess::Manager<2>::register_postprocessor, \
+                                    name, description); \
+    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<3>,classname<3>> \
+        dummy_ ## classname ## _3d (&aspect::Postprocess::Manager<3>::register_postprocessor, \
+                                    name, description); \
   }
   }
 }

@@ -430,7 +430,7 @@ namespace aspect
           // We are in the case of a Neumann temperature boundary.
           // Impose the Neumann value weakly using a RHS term.
 
-          std::vector<Tensor<1,dim> > heat_flux(n_face_q_points);
+          std::vector<Tensor<1,dim>> heat_flux(n_face_q_points);
           heat_flux = this->get_boundary_heat_flux().heat_flux(
                         face->boundary_id(),
                         scratch.face_material_model_inputs,
@@ -732,11 +732,7 @@ namespace aspect
       if (!neighbor->has_children())
         {
           if (neighbor->level () == cell->level () &&
-#if DEAL_II_VERSION_GTE(9,2,0)
               neighbor->is_active() &&
-#else
-              neighbor->active() &&
-#endif
               (((neighbor->is_locally_owned()) && (cell->index() < neighbor->index()))
                ||
                ((!neighbor->is_locally_owned()) && (cell->subdomain_id() < neighbor->subdomain_id()))))

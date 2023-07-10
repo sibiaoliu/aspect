@@ -57,7 +57,7 @@ namespace aspect
                                         update_normal_vectors    |
                                         update_quadrature_points | update_JxW_values);
 
-      std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
+      std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
 
       std::map<types::boundary_id, double> local_boundary_fluxes;
 
@@ -70,7 +70,7 @@ namespace aspect
       //   j =  \rho * v * n
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned())
-          for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+          for (const unsigned int f : cell->face_indices())
             if (cell->at_boundary(f))
               {
                 fe_face_values.reinit (cell, f);
@@ -142,7 +142,7 @@ namespace aspect
 
           // finally have something for the screen
           screen_text.precision(4);
-          screen_text << p->second << " " << unit
+          screen_text << p->second << ' ' << unit
                       << (index == global_boundary_fluxes.size()-1 ? "" : ", ");
         }
 

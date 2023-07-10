@@ -60,7 +60,7 @@ namespace aspect
         MaterialModel::MaterialModelInputs<dim> in(n_q_points, this->n_compositional_fields());
         MaterialModel::MaterialModelOutputs<dim> out(n_q_points, this->n_compositional_fields());
 
-        std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
+        std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
 
         switch (average_velocity_scheme)
           {
@@ -78,7 +78,7 @@ namespace aspect
                     in.reinit(fe_values, cell, this->introspection(), this->get_solution(), false);
 
                     out.additional_outputs.push_back(
-                      std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
                     this->get_material_model().evaluate(in, out);
 
 
@@ -89,17 +89,17 @@ namespace aspect
                     in.pressure[0]=this->get_adiabatic_conditions().pressure(in.position[0]);
 
                     adiabatic_out.additional_outputs.push_back(
-                      std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
                     this->get_material_model().evaluate(in, adiabatic_out);
 
 
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *seismic_outputs
-                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >();
+                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>();
                     const double Vs = seismic_outputs->vs[0];
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *adiabatic_seismic_outputs
-                      = adiabatic_out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >();
+                      = adiabatic_out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>();
                     const double adiabatic_Vs = adiabatic_seismic_outputs->vs[0];
 
                     // Compute the percentage deviation from the average
@@ -134,38 +134,14 @@ namespace aspect
                     // Get the pressure, temperature and composition in the cell
                     fe_values.reinit (cell);
 
-                    // get the various components of the solution, then
-                    // evaluate the material properties there
-                    fe_values[this->introspection().extractors.temperature].get_function_values (this->get_solution(),
-                                                                                                 in.temperature);
-                    fe_values[this->introspection().extractors.pressure].get_function_values (this->get_solution(),
-                                                                                              in.pressure);
-                    fe_values[this->introspection().extractors.velocities].get_function_values (this->get_solution(),
-                                                                                                in.velocity);
-                    fe_values[this->introspection().extractors.pressure].get_function_gradients (this->get_solution(),
-                                                                                                 in.pressure_gradient);
-                    in.position = fe_values.get_quadrature_points();
-
-                    // we do not need the strain rate
-                    in.strain_rate.resize(0);
-
-                    // Loop over compositional fields to get composition values
-                    for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-                      fe_values[this->introspection().extractors.compositional_fields[c]].get_function_values(this->get_solution(),
-                          composition_values[c]);
-                    for (unsigned int i=0; i<fe_values.n_quadrature_points; ++i)
-                      {
-                        for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-                          in.composition[i][c] = composition_values[c][i];
-                      }
-                    in.current_cell = cell;
+                    in.reinit (fe_values, cell, this->introspection(), this->get_solution(), /* compute_strain_rate = */ false);
 
                     out.additional_outputs.push_back(
-                      std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
                     this->get_material_model().evaluate(in, out);
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *seismic_outputs
-                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >();
+                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>();
                     const double Vs = seismic_outputs->vs[0];
 
                     // Find the depth of the zeroth quadrature point in the cell and work out
@@ -219,7 +195,7 @@ namespace aspect
         MaterialModel::MaterialModelInputs<dim> in(n_q_points, this->n_compositional_fields());
         MaterialModel::MaterialModelOutputs<dim> out(n_q_points, this->n_compositional_fields());
 
-        std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
+        std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
 
         switch (average_velocity_scheme)
           {
@@ -237,7 +213,7 @@ namespace aspect
                     in.reinit(fe_values, cell, this->introspection(), this->get_solution(), false);
 
                     out.additional_outputs.push_back(
-                      std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>>(n_q_points));
+                      std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>>(n_q_points));
                     this->get_material_model().evaluate(in, out);
 
                     // Substitute the adiabatic reference state for temperature and pressure,
@@ -246,17 +222,17 @@ namespace aspect
                     in.pressure[0]=this->get_adiabatic_conditions().pressure(in.position[0]);
 
                     adiabatic_out.additional_outputs.push_back(
-                      std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
                     this->get_material_model().evaluate(in, adiabatic_out);
 
 
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *seismic_outputs
-                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >();
+                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>();
                     const double Vp = seismic_outputs->vp[0];
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *adiabatic_seismic_outputs
-                      = adiabatic_out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >();
+                      = adiabatic_out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>();
                     const double adiabatic_Vp = adiabatic_seismic_outputs->vp[0];
 
                     // Compute the percentage deviation from the average
@@ -319,11 +295,11 @@ namespace aspect
                     in.current_cell = cell;
 
                     out.additional_outputs.push_back(
-                      std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
+                      std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_q_points));
                     this->get_material_model().evaluate(in, out);
 
                     MaterialModel::SeismicAdditionalOutputs<dim> *seismic_outputs
-                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >();
+                      = out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>();
                     const double Vp = seismic_outputs->vs[0];
 
                     // Find the depth of the zeroth quadrature point in the cell and work out
@@ -398,7 +374,7 @@ namespace aspect
         this->get_material_model().create_additional_named_outputs(out);
 
         const bool material_model_provides_seismic_output =
-          (out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >() != nullptr);
+          (out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>() != nullptr);
 
         AssertThrow(material_model_provides_seismic_output,
                     ExcMessage("You requested the 'Vs anomaly' postprocessor, "
@@ -477,7 +453,7 @@ namespace aspect
         this->get_material_model().create_additional_named_outputs(out);
 
         const bool material_model_provides_seismic_output =
-          (out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim> >() != nullptr);
+          (out.template get_additional_output<MaterialModel::SeismicAdditionalOutputs<dim>>() != nullptr);
 
         AssertThrow(material_model_provides_seismic_output,
                     ExcMessage("You requested the 'Vp anomaly' postprocessor, "

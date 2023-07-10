@@ -45,7 +45,7 @@ namespace aspect
       void
       SPD_Factor<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,                             ExcInternalError());
@@ -59,11 +59,11 @@ namespace aspect
                                                      this->n_compositional_fields());
 
         out.additional_outputs.push_back(
-          std_cxx14::make_unique<MaterialModel::MaterialModelDerivatives<dim>> (n_quadrature_points));
+          std::make_unique<MaterialModel::MaterialModelDerivatives<dim>> (n_quadrature_points));
 
         this->get_material_model().evaluate(in, out);
 
-        const MaterialModel::MaterialModelDerivatives<dim> *derivatives = out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim> >();
+        const MaterialModel::MaterialModelDerivatives<dim> *derivatives = out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>();
 
         for (unsigned int q=0; q<n_quadrature_points; ++q)
           {
@@ -72,6 +72,15 @@ namespace aspect
                                                                            derivatives->viscosity_derivative_wrt_strain_rate[q],
                                                                            this->get_newton_handler().parameters.SPD_safety_factor);
           }
+      }
+
+      template <int dim>
+      void
+      SPD_Factor<dim>::parse_parameters (ParameterHandler &/*prm*/)
+      {
+        AssertThrow(Parameters<dim>::is_defect_correction(this->get_parameters().nonlinear_solver),
+                    ExcMessage("The SPD factor plugin can only be used with defect correction type Stokes or Newton Stokes "
+                               "solvers."));
       }
     }
   }

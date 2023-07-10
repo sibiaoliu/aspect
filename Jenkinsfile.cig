@@ -9,8 +9,10 @@ pipeline {
       // the git repo by setting "advanced clone behaviors". If the
       // directory does not exist, this will be ignored.
       args '-v /repos:/repos:ro'
+      additionalBuildArgs '--pull'
     }
   }
+
 
   options {
     timeout(time: 3, unit: 'HOURS')
@@ -30,7 +32,7 @@ pipeline {
     stage ("Check Permissions") {
       when {
         allOf {
-          not {branch 'master'}
+          changeRequest()
           not {changeRequest authorEmail: "rene.gassmoeller@mailbox.org"}
           not {changeRequest authorEmail: "timo.heister@gmail.com"}
           not {changeRequest authorEmail: "bangerth@colostate.edu"}
@@ -83,7 +85,6 @@ pipeline {
         -D ASPECT_TEST_GENERATOR='Ninja' \
         -D ASPECT_PRECOMPILE_HEADERS=ON \
         -D ASPECT_UNITY_BUILD=ON \
-        -D ASPECT_USE_PETSC=OFF \
         -D ASPECT_RUN_ALL_TESTS='ON' \
         ..
         '''

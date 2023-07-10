@@ -74,8 +74,8 @@ namespace aspect
                                                  true);
 
       // Tell p4est about the periodicity of the mesh.
-      std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator> >
-      periodicity_vector;
+      std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator>>
+          periodicity_vector;
       for (int i=0; i<dim; ++i)
         if (periodic[i])
           GridTools::collect_periodic_faces
@@ -157,8 +157,8 @@ namespace aspect
                   std::pair<std::string,types::boundary_id>("top",    3)
                 };
 
-            return std::map<std::string,types::boundary_id> (&mapping[0],
-                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+            return std::map<std::string,types::boundary_id> (std::begin(mapping),
+                                                             std::end(mapping));
           }
 
           case 3:
@@ -172,8 +172,8 @@ namespace aspect
                   std::pair<std::string,types::boundary_id>("top",    5)
                 };
 
-            return std::map<std::string,types::boundary_id> (&mapping[0],
-                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+            return std::map<std::string,types::boundary_id> (std::begin(mapping),
+                                                             std::end(mapping));
           }
         }
 
@@ -183,22 +183,56 @@ namespace aspect
 
 
     template <int dim>
-    std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >
-    Box<dim>::
-    get_periodic_boundary_pairs () const
+    std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int>>
+        Box<dim>::
+        get_periodic_boundary_pairs () const
     {
-      std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> > periodic_boundaries;
+      std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int>> periodic_boundaries;
       for ( unsigned int i=0; i<dim; ++i)
         if (periodic[i])
           periodic_boundaries.insert( std::make_pair( std::pair<types::boundary_id, types::boundary_id>(2*i, 2*i+1), i) );
       return periodic_boundaries;
     }
 
+
+
+    template <int dim>
+    void
+    Box<dim>::adjust_positions_for_periodicity (Point<dim> &position,
+                                                const ArrayView<Point<dim>> &connected_positions) const
+    {
+      for (unsigned int i = 0; i < dim; ++i)
+        if (periodic[i])
+          {
+            if (position[i] < box_origin[i])
+              {
+                position[i] += extents[i];
+                for (auto &connected_position: connected_positions)
+                  connected_position[i] += extents[i];
+              }
+            else if (position[i] > box_origin[i] + extents[i])
+              {
+                position[i] -= extents[i];
+                for (auto &connected_position: connected_positions)
+                  connected_position[i] -= extents[i];
+              }
+          }
+    }
+
+
+
     template <int dim>
     Point<dim>
     Box<dim>::get_extents () const
     {
       return extents;
+    }
+
+    template <int dim>
+    unsigned int
+    Box<dim>::get_repetitions(unsigned int dimension) const
+    {
+      return repetitions[dimension];
     }
 
     template <int dim>
@@ -253,7 +287,14 @@ namespace aspect
 
       // choose a point on the center axis of the domain (without topography)
       Point<dim> p = extents/2+box_origin;
-      p[dim-1] = extents[dim-1]+box_origin[dim-1]-depth;
+
+      // We need a dim-1 point to get the topo value.
+      Point<dim-1> surface_point;
+      for (unsigned int d=0; d<dim-1; ++d)
+        surface_point[d] = p[d];
+
+      const double topo = topo_model->value(surface_point);
+      p[dim-1] = extents[dim-1]+box_origin[dim-1]-depth+topo;
 
       return p;
     }
@@ -281,9 +322,9 @@ namespace aspect
                   this->simulator_is_past_initialization() == false,
                   ExcMessage("After displacement of the free surface, this function can no longer be used to determine whether a point lies in the domain or not."));
 
-      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
-                  ExcMessage("After adding topography, this function can no longer be used "
-                             "to determine whether a point lies in the domain or not."));
+      //AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
+        //          ExcMessage("After adding topography, this function can no longer be used "
+          //                   "to determine whether a point lies in the domain or not."));
 
       for (unsigned int d = 0; d < dim; d++)
         if (point[d] > extents[d]+box_origin[d]+std::numeric_limits<double>::epsilon()*extents[d] ||

@@ -16,11 +16,27 @@
 # along with ASPECT; see the file doc/COPYING.  If not see
 # <http://www.gnu.org/licenses/>.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0)
 
 MESSAGE(STATUS "====================================================")
 MESSAGE(STATUS "============ Configuring ASPECT ====================")
 MESSAGE(STATUS "====================================================")
+
+IF (EXISTS ${CMAKE_SOURCE_DIR}/CMakeCache.txt)
+  MESSAGE(FATAL_ERROR  "Detected the file\n"
+  "${CMAKE_SOURCE_DIR}/CMakeCache.txt\n"
+  "in your source directory, which is a left-over from an in-source build. "
+  "Please delete the file before running cmake from a separate build directory.")
+ENDIF()
+
+IF ("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+  MESSAGE(FATAL_ERROR  "ASPECT does not support in-source builds in ${CMAKE_BINARY_DIR}. "
+  "Please run cmake from a separate build directory."
+  "\n"
+  "Note that CMake created a file called CMakeCache.txt and a folder called "
+  "CMakeFiles in the source directory that you have to remove before you can "
+  "begin a build in a different directory.")
+ENDIF()
 
 # Set the name of the project and target:
 SET(TARGET "aspect")
@@ -60,7 +76,7 @@ LIST(APPEND CMAKE_MODULE_PATH
   ${CMAKE_SOURCE_DIR}/cmake/modules
   )
 
-FIND_PACKAGE(deal.II 9.2.0 QUIET
+FIND_PACKAGE(deal.II 9.3.0 QUIET
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )
 IF(NOT ${deal.II_FOUND})
@@ -79,22 +95,7 @@ IF(NOT DEAL_II_WITH_CXX11)
     "DEAL_II_WITH_CXX11 in deal.II.")
 ENDIF()
 
-
-SET(ASPECT_USE_PETSC OFF CACHE BOOL "Use PETSc instead of Trilinos if set to 'on'.")
-IF(ASPECT_USE_PETSC)
-    MESSAGE(FATAL_ERROR "Using PETSc by setting ASPECT_USE_PETSC to ON is currently not supported, see https://github.com/geodynamics/aspect/issues/3338 for details.")
-ENDIF()
-
-MESSAGE(STATUS "Using ASPECT_USE_PETSC = '${ASPECT_USE_PETSC}'")
-
 SET(_DEALII_GOOD ON)
-
-IF(ASPECT_USE_PETSC AND NOT DEAL_II_WITH_PETSC)
-    MESSAGE(SEND_ERROR
-      "\n-- deal.II was built without support for PETSc!\n"
-      )
-    SET(_DEALII_GOOD OFF)
-ENDIF()
 
 IF(NOT DEAL_II_WITH_P4EST)
     MESSAGE(SEND_ERROR
@@ -103,7 +104,7 @@ IF(NOT DEAL_II_WITH_P4EST)
     SET(_DEALII_GOOD OFF)
 ENDIF()
 
-IF(NOT ASPECT_USE_PETSC AND NOT DEAL_II_WITH_TRILINOS)
+IF(NOT DEAL_II_WITH_TRILINOS)
     MESSAGE(SEND_ERROR
       "\n-- deal.II was built without support for Trilinos!\n"
       )
@@ -112,7 +113,7 @@ ENDIF()
 
 IF (NOT _DEALII_GOOD)
   MESSAGE(FATAL_ERROR
-    "\nASPECT requires a deal.II installation built with support for Trilinos/PETSc and p4est but one or both of these appears to be missing!\n"
+    "\nASPECT requires a deal.II installation built with support for Trilinos and p4est but one or both of these appears to be missing!\n"
     )
 ENDIF()
 
@@ -286,11 +287,13 @@ IF(EXISTS ${CMAKE_SOURCE_DIR}/unit_tests/CMakeLists.txt)
   ADD_DEPENDENCIES(test run_unit_tests)
 ENDIF()
 
-IF(EXISTS ${CMAKE_SOURCE_DIR}/tests/CMakeLists.txt
-  AND ${ASPECT_NEED_TEST_CONFIGURE})
-
+IF(EXISTS ${CMAKE_SOURCE_DIR}/tests/CMakeLists.txt)
   # Hook up the tests:
   FILE(APPEND ${CMAKE_BINARY_DIR}/CTestTestfile.cmake "SUBDIRS(tests)\n")
+ENDIF()
+
+IF(EXISTS ${CMAKE_SOURCE_DIR}/tests/CMakeLists.txt
+  AND ${ASPECT_NEED_TEST_CONFIGURE})
 
   FILE(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/tests)
 
@@ -476,8 +479,28 @@ IF(NOT ASPECT_ADDITIONAL_CXX_FLAGS STREQUAL "")
   MESSAGE(STATUS "  DEAL_II_CXX_FLAGS_RELEASE: ${DEAL_II_CXX_FLAGS_RELEASE}")
 ENDIF()
 
+# Check if a fastscape library is available, if so link it with aspect.
+# If the library is not found, then remove fastscape .cc and .h from list
+# so aspect can still compile.
+# TODO: likely need to switch ENV and normal positions so it checks ENV second.
+FIND_LIBRARY(FASTSCAPE NAMES fastscapelib_fortran PATHS $ENV{FASTSCAPE_DIR} ${FASTSCAPE_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+IF(FASTSCAPE)
+  MESSAGE(STATUS "FastScape found at ${FASTSCAPE}")
+ELSE()
+  FIND_FILE(FASTSCAPE_SRC fastscape.cc HINTS "${CMAKE_SOURCE_DIR}/source/mesh_deformation")
+  LIST(REMOVE_ITEM TARGET_SRC ${FASTSCAPE_SRC})
+  MESSAGE(STATUS "FastScape library not found")
+ENDIF()
+
 ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
 DEAL_II_SETUP_TARGET(${TARGET})
+
+# Library needs to be linked after executable is added, but if fastscape isn't found
+# then the .cc files need to be removed before.
+# TODO: find a way to do this where they don't have to be separated.
+IF(FASTSCAPE)
+  TARGET_LINK_LIBRARIES(${TARGET} ${FASTSCAPE})
+ENDIF()
 
 # deal.II does not define NDEBUG, but the world builder relies on it to disable
 # its asserts in release mode. Set it manually for anything but debug mode.
@@ -485,6 +508,15 @@ DEAL_II_SETUP_TARGET(${TARGET})
 IF (NOT CMAKE_BUILD_TYPE MATCHES Debug)
     ADD_DEFINITIONS("-DNDEBUG")
 ENDIF()
+
+# find zlib if it is installed in a non-standard location
+SET(ZLIB_DIR "" CACHE PATH "An optional hint to a ZLIB installation")
+IF("${ZLIB_DIR}" STREQUAL "")
+  SET(ZLIB_DIR "$ENV{ZLIB_DIR}" CACHE PATH "An optional hint to a ZLIB installation" FORCE)
+ENDIF()
+FIND_PACKAGE(ZLIB)
+INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(${TARGET} ${ZLIB_LIBRARY})
 
 FIND_PACKAGE(PerpleX QUIET
   HINTS ./contrib/perplex/install/ ../ ../../ ${PERPLEX_DIR} $ENV{PERPLEX_DIR})
@@ -601,6 +633,12 @@ ELSE()
   SET(ASPECT_UNITY_BUILD OFF CACHE BOOL "Combine source files into less compile targets to speedup compile time. Currently only supported for cmake 3.16 and newer versions." FORCE)
 ENDIF()
 
+IF (ASPECT_PRECOMPILE_HEADERS AND CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+  # Intel 19.1 produces internal compiler errors inside bundled boost with
+  # precompiled headers, so we deactive it:
+  SET(ASPECT_PRECOMPILE_HEADERS OFF CACHE BOOL "" FORCE)
+ENDIF()
+
 IF (ASPECT_PRECOMPILE_HEADERS)
   IF (CMAKE_VERSION VERSION_LESS 3.9)
     MESSAGE(STATUS "Enabling cotire to precompile external header files.")
@@ -698,7 +736,7 @@ INSTALL(TARGETS aspect
 SET_PROPERTY(TARGET aspect PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # headers:
-INSTALL(DIRECTORY include/
+INSTALL(DIRECTORY include/ ${CMAKE_BINARY_DIR}/include/
   DESTINATION include
   COMPONENT includes
   FILES_MATCHING PATTERN "*.h")

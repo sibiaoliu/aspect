@@ -49,8 +49,6 @@ namespace aspect
         // Set up material models
         MaterialModel::MaterialModelInputs<dim> in(n_q_points,
                                                    this->n_compositional_fields());
-        MaterialModel::MaterialModelOutputs<dim> out(n_q_points,
-                                                     this->n_compositional_fields());
 
         // Loop over cells and calculate theta in each one
         // Note that we start after timestep 0 because we need the strain rate,
@@ -64,8 +62,8 @@ namespace aspect
               in.reinit(fe_values, cell, this->introspection(),
                         this->get_solution(), true);
               // Also get velocity gradients
-              std::vector<Tensor<2, dim> > velocity_gradient(n_q_points,
-                                                             Tensor<2, dim>());
+              std::vector<Tensor<2, dim>> velocity_gradient(n_q_points,
+                                                            Tensor<2, dim>());
               fe_values[this->introspection().extractors.velocities].get_function_gradients(
                 this->get_solution(), velocity_gradient);
 
@@ -156,7 +154,7 @@ namespace aspect
                                                   "A visualization output object that generates output "
                                                   "showing the angle between the ~infinite strain axis "
                                                   "and the flow velocity. Kaminski and Ribe "
-                                                  "(2002, Gcubed) call this quantity $\\Theta$ and "
+                                                  "(see \\cite{Kaminski2002}) call this quantity $\\Theta$ and "
                                                   "define it as "
                                                   "$\\Theta = \\cos^{-1}(\\hat{u}\\cdot\\hat{e})$ "
                                                   " where $\\hat{u}=\\vec{u}/|{u}|$, $\\vec{u}$ "

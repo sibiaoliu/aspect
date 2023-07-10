@@ -20,9 +20,7 @@
 
 #include <aspect/particle/generator/uniform_box.h>
 
-DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
-#include <boost/random.hpp>
-DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
+#include <random>
 
 #include <array>
 #include <deal.II/base/exceptions.h>
@@ -36,7 +34,7 @@ namespace aspect
     {
       template <int dim>
       void
-      UniformBox<dim>::generate_particles(std::multimap<Particles::internal::LevelInd, Particle<dim> > &particles)
+      UniformBox<dim>::generate_particles(std::multimap<Particles::internal::LevelInd, Particle<dim>> &particles)
       {
         const Tensor<1,dim> P_diff = P_max - P_min;
 

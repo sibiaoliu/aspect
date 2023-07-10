@@ -1,7 +1,7 @@
 ASPECT - Advanced Solver for Problems in Earth's ConvecTion
 ===========================================================
-[![License GPL2:](https://img.shields.io/cran/l/devtools.svg)](https://github.com/geodynamics/aspect/blob/master/LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3924604.svg)](https://doi.org/10.5281/zenodo.3924604)
+[![License GPL2+:](https://img.shields.io/badge/License-GPL%202%2B-red)](https://github.com/geodynamics/aspect/blob/main/LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5131909.svg)](https://doi.org/10.5281/zenodo.5131909)
 [![pdf manual](https://img.shields.io/badge/get-PDF-green.svg)](https://doi.org/10.6084/m9.figshare.4865333)
 
 About
@@ -27,9 +27,9 @@ problems or specific instructions for MacOS users, before asking your question
 on the mailing list.
 
 In short, ASPECT is configured using CMake and has the following requirements:
-- CMake 2.8.12
-- GCC, Clang, or Intel compiler with C++11 support
-- [deal.II](https://github.com/dealii/dealii) 9.2 or newer configured with:
+- CMake 3.1.0
+- GCC, Clang, or Intel compiler with C++14 support
+- [deal.II](https://github.com/dealii/dealii) 9.3 or newer configured with:
   - MPI, Trilinos, p4est (required)
   - BLAS/LAPACK, zlib (strongly recommended)
   - HDF5 (optional)
@@ -79,6 +79,7 @@ For more information see:
      - Rene Gassmoeller: rene.gassmoeller@mailbox.org
      - Anne Glerum: acglerum@gfz-potsdam.de
      - Timo Heister: heister@clemson.edu
+     - Bob Myhill: bob.myhill@bristol.ac.uk
      - John Naliboff: john.naliboff@nmt.edu
 
  - The following people have significantly contributed and furthered ASPECT's goals and are therefore Principal Developers:
@@ -92,6 +93,7 @@ For more information see:
    - Timo Heister
    - Bob Myhill
    - John Naliboff
+   - Cedric Thieulot
 
  - A complete and growing list of the many authors that have contributed over the years can be found at [GitHub contributors](https://github.com/geodynamics/aspect/graphs/contributors).
  - If you have specific questions about ASPECT that are not suitable for public and archived mailing lists, feel free to contact the maintainers or principal developers.

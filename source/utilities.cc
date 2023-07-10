@@ -42,12 +42,12 @@
 
 
 
-#include <fstream>
-#include <string>
-#include <locale>
+#include <cerrno>
 #include <dirent.h>
+#include <fstream>
+#include <locale>
+#include <string>
 #include <sys/stat.h>
-#include <errno.h>
 
 #include <boost/math/special_functions/spherical_harmonic.hpp>
 #include <boost/lexical_cast.hpp>
@@ -60,6 +60,154 @@ namespace aspect
    */
   namespace Utilities
   {
+    namespace internal
+    {
+      namespace MPI
+      {
+        // --------------------------------------------------------------------
+        // The following is copied from deal.II's mpi.templates.h file.
+        // We should instead import it from deal.II's header files directly
+        // if that information is made available via one of the existing .h
+        // files.
+        // --------------------------------------------------------------------
+#ifdef DEAL_II_WITH_MPI
+        /**
+         * Return the corresponding MPI data type id for the argument given.
+         */
+        inline MPI_Datatype
+        mpi_type_id(const bool *)
+        {
+#  if DEAL_II_MPI_VERSION_GTE(2, 2)
+          return MPI_CXX_BOOL;
+#  else
+          return MPI_C_BOOL;
+#  endif
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const char *)
+        {
+          return MPI_CHAR;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const signed char *)
+        {
+          return MPI_SIGNED_CHAR;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const short *)
+        {
+          return MPI_SHORT;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const int *)
+        {
+          return MPI_INT;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const long int *)
+        {
+          return MPI_LONG;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const unsigned char *)
+        {
+          return MPI_UNSIGNED_CHAR;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const unsigned short *)
+        {
+          return MPI_UNSIGNED_SHORT;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const unsigned int *)
+        {
+          return MPI_UNSIGNED;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const unsigned long int *)
+        {
+          return MPI_UNSIGNED_LONG;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const unsigned long long int *)
+        {
+          return MPI_UNSIGNED_LONG_LONG;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const float *)
+        {
+          return MPI_FLOAT;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const double *)
+        {
+          return MPI_DOUBLE;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const long double *)
+        {
+          return MPI_LONG_DOUBLE;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const std::complex<float> *)
+        {
+          return MPI_COMPLEX;
+        }
+
+
+
+        inline MPI_Datatype
+        mpi_type_id(const std::complex<double> *)
+        {
+          return MPI_DOUBLE_COMPLEX;
+        }
+#endif
+      }
+    }
+
+
     template <typename T>
     Table<2,T>
     parse_input_table (const std::string &input_string,
@@ -186,11 +334,19 @@ namespace aspect
           {
             // No Patterns matches were found!
             AssertThrow (false,
-                         ExcMessage ("The required format for property <"
+                         ExcMessage ("The string for property <"
                                      + property_name
-                                     + "> was not found. Specify a comma separated "
-                                     + "list of `<double>' or `<key1> : <double>|<double>|..., "
-                                     + "<key2> : <double>|... , ... '."));
+                                     + "> does not have the expected format. "
+                                     + "Check that the string is either a "
+                                     + "comma separated list of `<double>' or "
+                                     + "`<key1> : <double>|<double>|..., "
+                                     + "<key2> : <double>|... , ... '. "
+                                     + "If the string looks correct, "
+                                     + "it is likely that the length of the "
+                                     + "list of keys passed to "
+                                     + "parse_map_to_double_array does not "
+                                     + "match the length of the "
+                                     + "comma separated property list."));
           }
 
         return parsed_map;
@@ -204,7 +360,7 @@ namespace aspect
                                const bool expects_background_field,
                                const std::string &property_name,
                                const bool allow_multiple_values_per_key,
-                               const std::shared_ptr<std::vector<unsigned int> > &n_values_per_key,
+                               const std::unique_ptr<std::vector<unsigned int>> &n_values_per_key,
                                const bool allow_missing_keys)
     {
       std::vector<std::string> field_names = list_of_keys;
@@ -321,27 +477,6 @@ namespace aspect
     }
 
 
-#if !DEAL_II_VERSION_GTE(9,2,0)
-    /**
-     * Split the set of DoFs (typically locally owned or relevant) in @p whole_set into blocks
-     * given by the @p dofs_per_block structure.
-     */
-    void split_by_block (const std::vector<types::global_dof_index> &dofs_per_block,
-                         const IndexSet &whole_set,
-                         std::vector<IndexSet> &partitioned)
-    {
-      const unsigned int n_blocks = dofs_per_block.size();
-      partitioned.clear();
-
-      partitioned.resize(n_blocks);
-      types::global_dof_index start = 0;
-      for (unsigned int i=0; i<n_blocks; ++i)
-        {
-          partitioned[i] = whole_set.get_view(start, start + dofs_per_block[i]);
-          start += dofs_per_block[i];
-        }
-    }
-#endif
 
     template <int dim>
     std::vector<std::string>
@@ -447,6 +582,46 @@ namespace aspect
           }
 
       return ret;
+    }
+
+
+
+    template <int dim>
+    std::vector<Point<dim>> get_unit_support_points(const SimulatorAccess<dim> &simulator_access)
+    {
+      if ( !simulator_access.get_parameters().use_locally_conservative_discretization )
+        {
+          return simulator_access.get_fe().get_unit_support_points();
+        }
+      else
+        {
+          //special case for discontinuous pressure elements, which lack unit support points
+          const unsigned int dofs_per_cell = simulator_access.get_fe().dofs_per_cell;
+          std::vector<Point<dim>> unit_support_points;
+          unit_support_points.reserve(dofs_per_cell);
+
+          for (unsigned int dof=0; dof < dofs_per_cell; ++dof)
+            {
+              // base will hold element, base_index holds node/shape function within that element
+              const unsigned int base       = simulator_access.get_fe().system_to_base_index(dof).first.first;
+              const unsigned int base_index = simulator_access.get_fe().system_to_base_index(dof).second;
+              // get the unit support points for the relevant element
+              const std::vector<Point<dim>> &my_support_points = simulator_access.get_fe().base_element(base).get_unit_support_points();
+              if ( my_support_points.size() == 0 )
+                {
+                  //manufacture a support point, arbitrarily at cell center
+                  if (dim==2)
+                    unit_support_points.push_back(Point<dim> (0.5,0.5));
+                  if (dim==3)
+                    unit_support_points.push_back(Point<dim> (0.5,0.5,0.5));
+                }
+              else
+                {
+                  unit_support_points.push_back(my_support_points[base_index]);
+                }
+            }
+          return unit_support_points;
+        }
     }
 
 
@@ -664,7 +839,7 @@ namespace aspect
 
     template <int dim>
     bool
-    polygon_contains_point(const std::vector<Point<2> > &point_list,
+    polygon_contains_point(const std::vector<Point<2>> &point_list,
                            const dealii::Point<2> &point)
     {
       /**
@@ -764,7 +939,7 @@ namespace aspect
 
     template <int dim>
     double
-    signed_distance_to_polygon(const std::vector<Point<2> > &point_list,
+    signed_distance_to_polygon(const std::vector<Point<2>> &point_list,
                                const dealii::Point<2> &point)
     {
       // If the point lies outside polygon, we give it a negative sign,
@@ -791,7 +966,7 @@ namespace aspect
       std::vector<double> distances(n_poly_points, 1e23);
 
       // Create another polygon but with all points shifted 1 position to the right
-      std::vector<Point<2> > shifted_point_list(n_poly_points);
+      std::vector<Point<2>> shifted_point_list(n_poly_points);
       shifted_point_list[0] = point_list[n_poly_points-1];
 
       for (unsigned int i = 0; i < n_poly_points-1; ++i)
@@ -915,6 +1090,98 @@ namespace aspect
     }
 
 
+
+    Tensor<2,3>
+    rotation_matrix_from_axis (const Tensor<1,3> &rotation_axis,
+                               const double rotation_angle)
+    {
+      Tensor<2,3> rotation_matrix;
+      rotation_matrix[0][0] = (1-std::cos(rotation_angle)) * rotation_axis[0]*rotation_axis[0] + std::cos(rotation_angle);
+      rotation_matrix[0][1] = (1-std::cos(rotation_angle)) * rotation_axis[0]*rotation_axis[1] - rotation_axis[2] * std::sin(rotation_angle);
+      rotation_matrix[0][2] = (1-std::cos(rotation_angle)) * rotation_axis[0]*rotation_axis[2] + rotation_axis[1] * std::sin(rotation_angle);
+      rotation_matrix[1][0] = (1-std::cos(rotation_angle)) * rotation_axis[1]*rotation_axis[0] + rotation_axis[2] * std::sin(rotation_angle);
+      rotation_matrix[1][1] = (1-std::cos(rotation_angle)) * rotation_axis[1]*rotation_axis[1] + std::cos(rotation_angle);
+      rotation_matrix[1][2] = (1-std::cos(rotation_angle)) * rotation_axis[1]*rotation_axis[2] - rotation_axis[0] * std::sin(rotation_angle);
+      rotation_matrix[2][0] = (1-std::cos(rotation_angle)) * rotation_axis[2]*rotation_axis[0] - rotation_axis[1] * std::sin(rotation_angle);
+      rotation_matrix[2][1] = (1-std::cos(rotation_angle)) * rotation_axis[2]*rotation_axis[1] + rotation_axis[0] * std::sin(rotation_angle);
+      rotation_matrix[2][2] = (1-std::cos(rotation_angle)) * rotation_axis[2]*rotation_axis[2] + std::cos(rotation_angle);
+      return rotation_matrix;
+    }
+
+
+
+    Tensor<2,3>
+    compute_rotation_matrix_for_slice (const Tensor<1,3> &point_one,
+                                       const Tensor<1,3> &point_two)
+    {
+      AssertThrow(point_one.norm() > std::numeric_limits<double>::min()
+                  && point_two.norm() > std::numeric_limits<double>::min(),
+                  ExcMessage("The points that are used to define the slice that "
+                             "should be rotated onto the x-y-plane can not lie "
+                             "at the origin of the coordinate system."));
+
+      // Set up the normal vector of an unrotated 2D spherical shell
+      // that by default lies in the x-y plane.
+      const Tensor<1,3> unrotated_normal_vector ({0.0,0.0,1.0});
+
+      // Compute the normal vector of the plane that contains
+      // the origin and the two points specified as the function arguments.
+      Tensor<1,3> rotated_normal_vector = cross_product_3d(point_one, point_two);
+
+      AssertThrow(rotated_normal_vector.norm() > std::numeric_limits<double>::min(),
+                  ExcMessage("The points that are used to define the slice that "
+                             "should be rotated onto the x-y-plane can not lie "
+                             "along the line that also goes through the origin "
+                             "of the coordinate system."));
+
+      rotated_normal_vector /= rotated_normal_vector.norm();
+
+      Tensor<2,3> rotation_matrix ({{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}});
+
+      // Calculate the crossing line of the two normals,
+      // which will be the rotation axis to transform the one
+      // normal into the other
+      Tensor<1,3> rotation_axis = cross_product_3d(unrotated_normal_vector, rotated_normal_vector);
+
+      // If the normal vector of the slice already points in z-direction, we do not have to
+      // apply the first rotation.
+      if (rotation_axis.norm() > std::numeric_limits<double>::min())
+        {
+          rotation_axis /= rotation_axis.norm();
+
+          // Calculate the rotation angle from the inner product rule
+          const double rotation_angle = std::acos(rotated_normal_vector * unrotated_normal_vector);
+          rotation_matrix = rotation_matrix_from_axis(rotation_axis, rotation_angle);
+        }
+
+      // Now apply the rotation that will project point_one onto the known point
+      // (0,1,0).
+      const Tensor<1,3> normalized_point_one = point_one / point_one.norm();
+      const Tensor<1,3> rotated_point_one = transpose(rotation_matrix) * normalized_point_one;
+      const Tensor<1,3> final_point_one ({0.0,1.0,0.0});
+
+      const double second_rotation_angle = std::acos(rotated_point_one * final_point_one);
+      Tensor<1,3> second_rotation_axis = cross_product_3d(final_point_one, rotated_point_one);
+
+      // If point 1 is already located at (0,1,0) after the first rotation, we do not
+      // have to apply the second rotation.
+      if (second_rotation_axis.norm() > std::numeric_limits<double>::min())
+        {
+          second_rotation_axis /= second_rotation_axis.norm();
+          const Tensor<2,3> second_rotation_matrix = rotation_matrix_from_axis(second_rotation_axis, second_rotation_angle);
+
+          // The final rotation used for the model will be the combined
+          // rotation of the two operations above. This is achieved by a
+          // matrix multiplication of the rotation matrices.
+          // This concatenation of rotations is the reason for using a
+          // rotation matrix instead of a combined rotation_axis + angle.
+          rotation_matrix = rotation_matrix * second_rotation_matrix;
+        }
+      return rotation_matrix;
+    }
+
+
+
     std::pair<double,double> real_spherical_harmonic( const unsigned int l,
                                                       const unsigned int m,
                                                       const double theta,
@@ -958,6 +1225,7 @@ namespace aspect
     }
 
 
+
     std::string
     read_and_distribute_file_content(const std::string &filename,
                                      const MPI_Comm &comm)
@@ -966,15 +1234,15 @@ namespace aspect
 
       if (Utilities::MPI::this_mpi_process(comm) == 0)
         {
-          // set file size to an invalid size (signaling an error if we can not read it)
-          unsigned int filesize = numbers::invalid_unsigned_int;
+          std::size_t filesize;
 
           // Check to see if the prm file will be reading data from disk or
           // from a provided URL
           if (filename_is_url(filename))
             {
 #ifdef ASPECT_WITH_LIBDAP
-              libdap::Connect *url = new libdap::Connect(filename);
+              std::unique_ptr<libdap::Connect> url
+                = std::make_unique<libdap::Connect>(filename);
               libdap::BaseTypeFactory factory;
               libdap::DataDDS dds(&factory);
               libdap::DAS das;
@@ -1030,9 +1298,7 @@ namespace aspect
               std::vector<std::string> points;
               for (libdap::AttrTable::Attr_iter i = das.var_begin(); i != das.var_end(); i++)
                 {
-                  libdap::AttrTable *table;
-
-                  table = das.get_table(i);
+                  libdap::AttrTable *table = das.get_table(i);
                   if (table->get_attr("POINTS") != "")
                     points.push_back(table->get_attr("POINTS"));
                   if (table->get_attr("points") != "")
@@ -1046,7 +1312,7 @@ namespace aspect
               urlString << "# POINTS:";
               for (unsigned int i = 0; i < points.size(); i++)
                 {
-                  urlString << " " << points[i];
+                  urlString << ' ' << points[i];
                 }
               urlString << "\n";
 
@@ -1059,19 +1325,23 @@ namespace aspect
                   for (unsigned int j = 0; j < columns.size(); j++)
                     {
                       urlString << columns[j][i];
-                      urlString << " ";
+                      urlString << ' ';
                     }
                   urlString << "\n";
                 }
 
               data_string = urlString.str();
               filesize = data_string.size();
-              delete url;
+
 #else // ASPECT_WITH_LIBDAP
 
-              // broadcast failure state, then throw
-              const int ierr = MPI_Bcast(&filesize, 1, MPI_UNSIGNED, 0, comm);
-              AssertThrowMPI(ierr);
+              // Broadcast failure state, then throw. We signal the failure by
+              // setting the file size to an invalid size, then trigger an assert.
+              {
+                std::size_t invalid_filesize = numbers::invalid_size_type;
+                const int ierr = MPI_Bcast(&invalid_filesize, 1, Utilities::internal::MPI::mpi_type_id(&filesize), 0, comm);
+                AssertThrowMPI(ierr);
+              }
               AssertThrow(false,
                           ExcMessage(std::string("Reading of file ") + filename + " failed. " +
                                      "Make sure you have the dependencies for reading a url " +
@@ -1086,11 +1356,11 @@ namespace aspect
               if (!filestream)
                 {
                   // broadcast failure state, then throw
-                  const int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  std::size_t invalid_filesize = numbers::invalid_size_type;
+                  const int ierr = MPI_Bcast(&invalid_filesize, 1, Utilities::internal::MPI::mpi_type_id(&filesize), 0, comm);
                   AssertThrowMPI(ierr);
                   AssertThrow (false,
                                ExcMessage (std::string("Could not open file <") + filename + ">."));
-                  return data_string; // never reached
                 }
 
 
@@ -1101,13 +1371,13 @@ namespace aspect
               if (!filestream.eof())
                 {
                   // broadcast failure state, then throw
-                  const int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  std::size_t invalid_filesize = numbers::invalid_size_type;
+                  const int ierr = MPI_Bcast(&invalid_filesize, 1, Utilities::internal::MPI::mpi_type_id(&filesize), 0, comm);
                   AssertThrowMPI(ierr);
                   AssertThrow (false,
                                ExcMessage (std::string("Reading of file ") + filename + " finished " +
                                            "before the end of file was reached. Is the file corrupted or "
                                            "too large for the input buffer?"));
-                  return data_string; // never reached
                 }
 
               data_string = datastream.str();
@@ -1115,29 +1385,43 @@ namespace aspect
             }
 
           // Distribute data_size and data across processes
-          int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+          int ierr = MPI_Bcast(&filesize, 1, Utilities::internal::MPI::mpi_type_id(&filesize), 0, comm);
           AssertThrowMPI(ierr);
-          ierr = MPI_Bcast(&data_string[0],filesize,MPI_CHAR,0,comm);
+
+          AssertThrow (filesize < static_cast<std::size_t>(std::numeric_limits<signed int>::max()),
+                       ExcMessage ("You are trying to broadcast a file that is larger than what "
+                                   "MPI can handle in a single MPI_Bcast call. This is not currently "
+                                   "supported"));
+          ierr = MPI_Bcast(&data_string[0], filesize, MPI_CHAR, 0, comm);
           AssertThrowMPI(ierr);
         }
       else
         {
           // Prepare for receiving data
-          unsigned int filesize;
-          int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+          std::size_t filesize;
+          int ierr = MPI_Bcast(&filesize, 1, Utilities::internal::MPI::mpi_type_id(&filesize), 0, comm);
           AssertThrowMPI(ierr);
-          if (filesize == numbers::invalid_unsigned_int)
+          if (filesize == numbers::invalid_size_type)
             throw QuietException();
 
           data_string.resize(filesize);
 
+          // Check whether the size is small enough to be handled in a single Bcast call.
+          // If not, error out for now. We may fix this later. (We error out by throwing
+          // a quiet exception; the root rank will throw a more information exception,
+          // see above.)
+          if (filesize >= static_cast<std::size_t>(std::numeric_limits<signed int>::max()))
+            throw QuietException();
+
           // Receive and store data
-          ierr = MPI_Bcast(&data_string[0],filesize,MPI_CHAR,0,comm);
+          ierr = MPI_Bcast(&data_string[0], filesize, MPI_CHAR, 0, comm);
           AssertThrowMPI(ierr);
         }
 
       return data_string;
     }
+
+
 
     int
     mkdirp(std::string pathname,const mode_t mode)
@@ -1304,11 +1588,11 @@ namespace aspect
           /**
            * diagonal and off-diagonals above
            */
-          std::vector< std::vector<double> > m_upper;
+          std::vector< std::vector<double>> m_upper;
           /**
            * diagonals below the diagonal
            */
-          std::vector< std::vector<double> > m_lower;
+          std::vector< std::vector<double>> m_lower;
       };
 
       band_matrix::band_matrix(int dim, int n_u, int n_l)
@@ -2130,6 +2414,16 @@ namespace aspect
       return coordinates;
     }
 
+
+
+    template <int dim>
+    const std::array<double,dim> &NaturalCoordinate<dim>::get_coordinates() const
+    {
+      return coordinates;
+    }
+
+
+
     template <>
     std::array<double,1> NaturalCoordinate<2>::get_surface_coordinates() const
     {
@@ -2217,7 +2511,7 @@ namespace aspect
                      const Quadrature<dim>                                     &quadrature,
                      const std::function<void(
                        const typename DoFHandler<dim>::active_cell_iterator &,
-                       const std::vector<Point<dim> > &,
+                       const std::vector<Point<dim>> &,
                        std::vector<double> &)>                                 &function,
                      VectorType                                                &vec_result)
     {
@@ -2334,12 +2628,83 @@ namespace aspect
 
 
 
+    void linear_solver_failed(const std::string &solver_name,
+                              const std::string &function_name,
+                              const std::vector<SolverControl> &solver_controls,
+                              const std::exception &exc,
+                              const MPI_Comm &mpi_communicator,
+                              const std::string &output_filename)
+    {
+      if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
+        {
+          std::ostringstream exception_message;
+          exception_message << std::scientific
+                            << "The " + solver_name
+                            << " in " + function_name
+                            << " did not converge. " << std::endl << std::endl;
+
+          if (solver_controls.front().last_step() != numbers::invalid_unsigned_int)
+            exception_message << "The initial residual was: "
+                              << solver_controls.front().initial_value() << std::endl;
+
+          if (solver_controls.back().last_step() != numbers::invalid_unsigned_int)
+            exception_message << "The final residual is: "
+                              << solver_controls.back().last_value() << std::endl;
+
+          exception_message << "The required residual for convergence is: "
+                            << solver_controls.front().tolerance() << std::endl;
+
+          if (output_filename != "")
+            {
+              // output solver history
+              std::ofstream f((output_filename).c_str());
+
+              for (const auto &solver_control: solver_controls)
+                {
+                  // Skip the output if no iterations were run for this solver
+                  if (solver_control.last_step() == numbers::invalid_unsigned_int)
+                    continue;
+
+                  // Add an empty line between solvers
+                  if (&solver_control != &(solver_controls.front()))
+                    f << std::endl;
+
+                  unsigned int j=0;
+                  for (const auto &residual: solver_control.get_history_data())
+                    f << j++ << ' ' << residual << std::endl;
+                }
+
+              f.close();
+
+              exception_message << "See " << output_filename
+                                << " for the full convergence history." << std::endl;
+            }
+
+          exception_message << std::endl
+                            << "The solver reported the following error:"
+                            << std::endl;
+          exception_message << exc.what();
+
+          AssertThrow (false,
+                       ExcMessage (exception_message.str()));
+        }
+      else
+        throw QuietException();
+    }
+
+
+
 // Explicit instantiations
 
 #define INSTANTIATE(dim) \
   template \
   IndexSet extract_locally_active_dofs_with_component(const DoFHandler<dim> &, \
                                                       const ComponentMask &); \
+  \
+  template \
+  std::vector<Point<dim>> \
+  get_unit_support_points(const SimulatorAccess<dim> &simulator_access); \
+  \
   template \
   std::vector<std::string> \
   expand_dimensional_variable_names<dim> (const std::vector<std::string> &var_declarations); \
@@ -2361,11 +2726,11 @@ namespace aspect
   std::array<double,dim> Coordinates::WGS84_coordinates<dim>(const Point<dim> &position); \
   \
   template \
-  bool polygon_contains_point<dim>(const std::vector<Point<2> > &pointList, \
+  bool polygon_contains_point<dim>(const std::vector<Point<2>> &pointList, \
                                    const dealii::Point<2> &point); \
   \
   template \
-  double signed_distance_to_polygon<dim>(const std::vector<Point<2> > &pointList, \
+  double signed_distance_to_polygon<dim>(const std::vector<Point<2>> &pointList, \
                                          const dealii::Point<2> &point); \
   \
   template \
@@ -2376,7 +2741,7 @@ namespace aspect
   derivative_of_weighted_p_norm_average (const double averaged_parameter, \
                                          const std::vector<double> &weights, \
                                          const std::vector<double> &values, \
-                                         const std::vector<dealii::SymmetricTensor<2, dim, double> > &derivatives, \
+                                         const std::vector<dealii::SymmetricTensor<2, dim, double>> &derivatives, \
                                          const double p); \
   \
   template \
@@ -2405,7 +2770,7 @@ namespace aspect
                    const Quadrature<dim> &quadrature, \
                    const std::function<void( \
                                              const DoFHandler<dim>::active_cell_iterator &, \
-                                             const std::vector<Point<dim> > &, \
+                                             const std::vector<Point<dim>> &, \
                                              std::vector<double> &)> &function, \
                    dealii::LinearAlgebra::distributed::Vector<double> &vec_result); \
   \
@@ -2417,7 +2782,7 @@ namespace aspect
                    const Quadrature<dim> &quadrature, \
                    const std::function<void( \
                                              const DoFHandler<dim>::active_cell_iterator &, \
-                                             const std::vector<Point<dim> > &, \
+                                             const std::vector<Point<dim>> &, \
                                              std::vector<double> &)> &function, \
                    LinearAlgebra::BlockVector &vec_result);
 

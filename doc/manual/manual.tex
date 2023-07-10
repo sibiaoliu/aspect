@@ -78,7 +78,6 @@
 \newcommand{\dealii}{{\textsc{deal.II}}}
 \newcommand{\pfrst}{{\normalfont\textsc{p4est}}}
 \newcommand{\trilinos}{{\textsc{Trilinos}}}
-\newcommand{\petsc}{{\textsc{PETSc}}}
 \newcommand{\aspect}{\textsc{ASPECT}}
 
 \DeclareMathOperator{\erf}{erf}
@@ -170,6 +169,7 @@ COMPUTATIONAL INFRASTRUCTURE FOR GEODYNAMICS (CIG)
           Rene Gassm{\"o}ller \\
           Anne Glerum \\
           Timo Heister \\
+          Bob Myhill \\
           John Naliboff\\}
     }
   \end{textblock*}
@@ -189,30 +189,36 @@ COMPUTATIONAL INFRASTRUCTURE FOR GEODYNAMICS (CIG)
     Jacqueline Austermann,
     Magali Billen,
     Markus B{\"u}rg,
+    Thomas Clevenger,
     Samuel Cox,
     William Durkin,
     Grant Euen,
     Thomas Geenen,
     Ryan Grove,
     Eric Heien,
+    Ludovic Jeanniot,
     Louise Kellogg,
     Scott King,
     Martin Kronbichler,
     Marine Lasbleis,
+    Haoyuan Li,
     Shangxin Liu,
     Hannah Mark,
     Elvira Mulyukova,
-    Bob Myhill,
     Bart Niday,
     Jonathan Perry-Houts,
     Elbridge Gerry Puckett,
     Tahiry Rajaonarison,
+    Fred Richards,
+    Jonathan Robey,
     Ian Rose,
+    Max Rudolph,
+    Stephanie Sparks,
     D.~Sarah Stamps,
     Cedric Thieulot,
     Wanying Wang,
     Iris van Zelst,
-    Siqi Zhang \\
+    Siqi Zhang\\
 \vspace{0.5em}
 }
 
@@ -1526,16 +1532,23 @@ actually have anything to do with quantities that can be considered related to
 compositions. For example, one may define a field that tracks the grain size
 of rocks. If the strain rate is high, then the grain size decreases as the
 rocks break. If the temperature is high enough, then grains heal and their size
-increases again. Such ``damage'' models would then call for an equation of the
-form (assuming one uses only a single compositional field)
+increases again. Such ``damage models'' would then introduce a
+quantity $c(t)$ describing the ``damage'' to the material (here
+assumed to be described by a single scalar field) that 
+satisfies an equation of the form
 \begin{align*}
   \frac{\partial c}{\partial t} + \mathbf u \cdot \nabla c
   = q(T,c),
 \end{align*}
-where in the simplest case one could postulate
+where in the simplest case (much simplified from real models) one
+could postulate
 \begin{align*}
-  q(T,c) = -A c + B \max\{T-T_{\text{healing}},0\} c.
+  q(T,c) =  A \dot\varepsilon - B \max\{T-T_{\text{healing}},0\} c.
 \end{align*}
+Here, $\dot\varepsilon$ is the strain rate that causes damage; the
+first term then leads to growth of damage as strain continues to
+accumulate on the material. The second term \textit{decreases} the
+damage if the temperature is high enough.
 One would then use this compositional field in the definition of the viscosity
 of the material: more damage means lower viscosity because the rocks are weaker.
 
@@ -1547,6 +1560,19 @@ times the time step.  In other words, if you compute a reaction rate inside the 
 Compositional fields have proven to be surprisingly versatile tools to model
 all sorts of components of models that go beyond the simple Stokes plus
 temperature set of equations. Play with them!
+
+\note{As has hopefully become clear from the discussion above, the
+  term ``compositional field'' as used in \aspect{} is by now mostly
+  historic: These fields were meant to track chemical compositions, but
+  are now used to track all sorts of other things as well, or in some
+  cases track nothing at all and just be static fields that
+simply indicate where some
+  features of the model are located.
+
+  It is therefore useful to think of the term ``compositional field''
+  as a \textit{technical term} in which the two words appear
+  together, separate from the original meaning of the word
+  ``compositional''.}
 
 
 \subsection{Constitutive laws}
@@ -3136,8 +3162,8 @@ header files of BLAS, LAPACK and zlib, which is used for compressing
 the output data. To use more than one process for your computations
 you will need to install a MPI library, its headers and the
 necessary executables to run MPI programs. There are some optional packages
-for additional features, like the HDF5 libraries for additional output formats,
-\petsc{} for alternative solvers, and Numdiff for checking \aspect{}'s test
+for additional features, like the HDF5 libraries for additional output formats
+ and Numdiff for checking \aspect{}'s test
 results with reasonable accuracy, but these are not strictly required, and in
 some operating systems they are not available as packages but need to be
 compiled from scratch.
@@ -3170,11 +3196,11 @@ installation). We require at least the packages \pfrst{}, \trilinos{},
 and finally \dealii{}.
 
 At the time of this writing \texttt{candi} will install \pfrst{} 2.2,
-\trilinos{} 12.18.1, and \dealii{} 9.2.0.
+\trilinos{} 12.18.1, and \dealii{} 9.3.0.
 We strive to keep the development version of \aspect{} compatible with
 the latest release of \dealii{} and the current \dealii{} development
 version at any time, and we usually support several older versions of
-\pfrst{}, \trilinos{}, and \petsc{}.
+\pfrst{} and \trilinos{}.
 
 \begin{enumerate}
 \item \textit{Obtaining candi:} Download \texttt{candi} by running
@@ -5621,6 +5647,48 @@ it is possible to produce many interesting flow fields such as the ones visualiz
     \label{fig:prescribed-velocity}
 \end{figure}
 
+\subsubsection{Prescribing internal velocity constraints with ASCII files}
+\label{sec:prescribed-velocities-ascii-data}
+\textit{This section was contributed by Bob Myhill}
+
+Building on \ref{sec:prescribed-velocities}, the \url{cookbooks/prescribed_velocity_ascii_data}
+directory contains a plugin which uses an ASCII data file to specify where to prescribe
+internal velocities. Velocities are prescribed wherever the field value indicated by the ASCII data file
+is greater than 0.5. As before, the plugin is loaded in parameter files as an additional shared library:
+\lstinputlisting[language=prmfile]{cookbooks/prescribed_velocity_ascii_data/doc/prescribed_velocity_ascii_data.prm.0.out}
+
+An example parameter file using this plugin can be found at
+\url{cookbooks/prescribed_velocity_ascii_data/prescribed_velocity_ascii_data.prm}.
+In this file, the velocities are constrained to be zero within the letters ``ASPECT'' (Figure~\ref{fig:prescribed-velocity-ascii-data-init}).
+The part of this file which provides the location of the ASCII file and the
+prescribed velocity field function is:
+\lstinputlisting[language=prmfile]{cookbooks/prescribed_velocity_ascii_data/doc/prescribed_velocity_ascii_data.prm.1.out}
+A temperature gradient is applied within the letters, while the temperature field outside the letters is set to be constant.
+This initial temperature field is specified by another ASCII data file:
+\lstinputlisting[language=prmfile]{cookbooks/prescribed_velocity_ascii_data/doc/prescribed_velocity_ascii_data.prm.2.out}
+These two ASCII data files are generated from \texttt{aspect\_name.png} by the python file \texttt{make\_ascii\_files\_from\_png.py},
+both of which can be found in the same directory as the parameter file.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{cookbooks/prescribed_velocity_ascii_data/doc/prescribed_velocities_ascii_data_initial_conditions.png}
+    \caption{\it Initial composition and temperature conditions for the prescribed velocity ascii data cookbook,
+             as described in Section \ref{sec:prescribed-velocities-ascii-data}.}
+    \label{fig:prescribed-velocity-ascii-data-init}
+\end{figure}
+
+During the simulation, excess heat diffuses out from the tops of the letters, and
+into the bases of the letters. The temperature gradients in the unconstrained
+part of the domain then generate convective flow. Figure~\ref{fig:prescribed-velocity-ascii-data}
+illustrates the resulting flow field.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{cookbooks/prescribed_velocity_ascii_data/doc/prescribed_velocity_ascii_data.png}
+    \caption{\it Convective flow around the letters ASPECT, within which velocities are prescribed to be zero, as described in Section \ref{sec:prescribed-velocities-ascii-data}.}
+    \label{fig:prescribed-velocity-ascii-data}
+\end{figure}
+
+
 \subsubsection{Artificial viscosity smoothing}
 \label{sec:artificial-viscosity-smoothing}
 \textit{This section was contributed by Ryan Grove}
@@ -5844,9 +5912,9 @@ The boundary conditions are insulating (zero flux) side-walls and fixed temperat
 \caption{\it Initial temperature condition for the lazy-expression syntax cookbook. \label{lazy-expression-tempic}}
 \end{figure}
 
-The structure and refinement of the mesh are determined in two subsections of the parameter file. First, because the model domain is not a square, it is necessary to subdivide the domain into sections that are equidimensional (or as close as possible): this is done using the \texttt{repetitions} parameters in the \texttt{Geometry} section. In this case because the model domain has an aspect ratio of 5:1, we use 5 repetitions in the x direction, dividing the domain into 5 equidimensional elements each 1000 by 1000 km.
+The structure and refinement of the mesh are determined in two subsections of the parameter file. First, because the model domain is not a square, it is necessary to subdivide the domain into sections that are equidimensional (or as close as possible): this is done using the \texttt{repetitions} parameters in the \texttt{Geometry} section. In this case because the model domain has an aspect ratio of 5:1, we use 5 repetitions in the $x$ direction, dividing the domain into 5 equidimensional elements each 1000 by 1000 \si{km}.
 \lstinputlisting[language=prmfile]{cookbooks/muparser-temperature-example/doc/repetitions.part.prm.out}
-Further refinements will divide each sub-region multiple times keeping the aspect ratio of the sub-region. In this case, we refine the elements in each subregion 3 more times. We then use the \texttt{minimum refinement function} strategy and use the if-then-else statement in the function expression to refine 4 more times to a refinement level of 7, but only where the depth is less than 150 km. Appropriate values of the minimum refinement level in this function expression could be the sum of initial global refinement level (3) and initial adaptive refinement level (4) in the 'then' statement (i.e., 7 here) and the value of initial global refinement in the 'else' statement.
+Further refinements will divide each sub-region multiple times keeping the aspect ratio of the sub-region. In this case, we refine the elements in each subregion 3 more times. We then use the \texttt{minimum refinement function} strategy and use the \texttt{if-then-else} statement in the function expression to refine 4 more times to a refinement level of 7, but only where the depth is less than \SI{150}{km}. Appropriate values of the minimum refinement level in this function expression could be the sum of initial global refinement level (3) and initial adaptive refinement level (4) in the `\texttt{then}' statement (i.e., 7 here) and the value of initial global refinement in the `\texttt{else}' statement.
 \lstinputlisting[language=prmfile]{cookbooks/muparser-temperature-example/doc/mesh-refinement.part.prm.out}
 Figure \ref{lazy-expression-tempic-zoom} zooms in on the region where the two plates meet and shows the temperature on a wireframe highlighting the element size refinement. Notice that the mesh refinement algorithm automatically adjusts the element size between the region that is specific to be a level 7 and the region at level 3 to create a smooth transition in element size.
 \begin{figure}
@@ -5857,6 +5925,19 @@ Figure \ref{lazy-expression-tempic-zoom} zooms in on the region where the two pl
 
 Finally, in order to just test whether the initial temperature structure has been properly defined, it is helpful to run the model for a single time-step and without actually waiting for the solvers to converge. In order to do this, the \texttt{End time} can be set to zero. If the model is very large (lots of refinement) or there are large viscosity jumps that take longer to converge in the Stokes solver, it can also be useful to set the solver tolerance parameters to large values as noted below. However, remember that in that case the solution will not be converged -- it is only useful for checking that the initial condition is set correctly.
 \lstinputlisting[language=prmfile]{cookbooks/muparser-temperature-example/doc/check-initial-condition.part.prm.out}
+
+\input{cookbooks/christensen_yuen_phase_function/doc/christensen_yuen_phase_function.tex}
+
+
+% cookbooks/phase_diagram/
+\input{cookbooks/visualizing_phase_diagram/doc/visualizing_phase_diagram.tex}
+
+
+\subsubsection{Plume in a 2D chunk}
+\label{sec:plume-2d-chunk}
+
+\input{cookbooks/plume_2D_chunk/doc/plume.tex}
+
 
 \subsection{Geophysical setups}
 \label{sec:cookbooks-geophysical}
@@ -7488,12 +7569,11 @@ We can observe that when the two-layer viscosity model is added, there is only o
 
 Early mantle modeling studies of the 1970s, 1980s and 1990s were often concerned with simple set-ups (Cartesian geometries, incompressible fluid, free slip boundary conditions) and investigated the influence of the Rayleigh number, the heating mode or the temperature dependence of the viscosity on temperature, pressure and/or strain rate \cite{youn74,buss75,buss79,BBC89,BC93,vavy93,burb97}. In this cookbook, we use the `simple' material model to reproduce the set-up in \cite{burb96}, which reported that even modest increases in mantle viscosity with depth could have a marked effect on the style of mantle convection. The prm file corresponding to this cookbook can be found at \url{cookbooks/bunge_et_al_mantle_convection/bunge_et_al.prm}.
 
-Although the original article showcases results obtained in a 3D hollow sphere, we here run the models in an annular domain of inner radius $R_i = 3480$ \si{\kilo\meter} and outer radius  $R_o = 6370$ \si{\kilo\meter}.
-The surface temperature is set to $T{\textsubscript{surf}}$ = 1060 \si{\kelvin} and
-the bottom temperature to $T{\textsubscript{cmb}} = 3450$ \si{\kelvin}. The gravity vector is radial and its magnitude is $g = 10$ \si{\metre\per\second\squared}.
+Although the original article showcases results obtained in a 3D hollow sphere, we here run the models in an annular domain of inner radius $R\textsubscript{inner} = 3480~\si{\km}$ and outer radius  $R\textsubscript{outer} = 6370~\si{\km}$. The surface temperature is set to $T{\textsubscript{surf}}$ = 1060 \si{\kelvin} and
+the bottom temperature to $T{\textsubscript{cmb}} = 3450$ \si{\kelvin}. The gravity vector is radial and its magnitude is $g = 10$ \si{\meter\per\second\squared}.
 
-There is a single incompressible fluid in the domain, characterized by $\rho_0 = 4500$ \si{\kilogram\per\metre\cubed}, $\alpha = 2.5\cdot10^{-5}$ \si{\per\kelvin},
-$k = 4$ \si{\watt\per\metre\per\kelvin},
+There is a single incompressible fluid in the domain, characterized by $\rho_0 = 4500$ \si{\kilogram\per\meter\cubed}, $\alpha = 2.5\cdot10^{-5}$ \si{\per\kelvin},
+$k = 4$ \si{\watt\per\meter\per\kelvin},
 $C_p = 1000$ \si{\joule\per\kilogram\per\kelvin} and
 its internal heating rate is $Q{\textsubscript{int}} = 1\cdot10^{-12}$ \si{\watt\per\kilogram}.
 The interface between the upper mantle (viscosity $\eta\textsubscript{um}$)
@@ -7605,21 +7685,19 @@ natural gas these structures have been extensively studied \cite{jahu17}.
 We consider in this experiment the three-layer viscous Rayleigh-Taylor instability proposed
 by Weinberg and Schmeling \cite{wesc92}
 and we focus in what follows on the case II of that publication.
-The domain is a 2D Cartesian box of size $2.24\si{m} \times 1\si{m}$.
-Gravity is Earth-like ($9.81\si{m}/\si{s}^2$).
+The domain is a 2D Cartesian box of size $2.24~\si{m} \times 1~\si{m}$.
+Gravity is Earth-like ($9.81~\si{\meter\per\square\second}$).
 Boundary conditions are free-slip on the sides and top and no-slip at the bottom.
 All three layers are initially horizontal. The top layer (fluid 1) has a thickness of
-$0.75\si{m}$, a viscosity $\eta_1=100\si{Pa . s}$ and a density $\rho_1=100\si{kg}/\si{m}^3$.
-The middle layer (fluid 2) has a thickness 0.125m with $\rho_2=90\si{kg}/\si{m}^3$ and $\mu_2=1\si{Pa . s}$.
-The bottom layer (fluid 3) has a thickness 0.125m with $\rho_3=89\si{kg}/\si{m}^3$ and $\mu_3=1\si{Pa . s}$.
-The two interfaces between the layers are perturbed by a random noise of amplitude $\pm 0.001\si{m}$.
+$0.75~\si{m}$, a viscosity $\eta_1=100~\si{\pascal\second}$ and a density $\rho_1=100~\si{\kg\per\cubic\meter}$.
+The middle layer (fluid 2) has a thickness $0.125~\si{\meter}$ with $\rho_2=90~\si{\kg\per\cubic\meter}$ and $\eta_2=1~\si{\pascal\second}$.
+The bottom layer (fluid 3) has a thickness $0.125~\si{\meter}$ with $\rho_3=89~\si{\kg\per\cubic\meter}$ and $\eta_3=1~\si{\pascal\second}$.
+The two interfaces between the layers are perturbed by a random noise of amplitude $\pm 0.001~\si{m}$.
 Since fluid 3 is lighter than fluid 2 and fluid 2 is lighter than fluid 1, both interfaces are unstable.
 We observe that interface 2-3 deforms first, produces domes which are subsequently incorporated in the domes
 being generated at the interface 1-2, as shown in Figure~\ref{fig:polydiapirs_density}.
-The root mean square velocity (Figure~\ref{fig:polydiapirs_vrms}) shows two slopes in the early stages ($t<50\si{s}$)
-corresponding to the
-two different growth rates of the interfaces,
-as explained by linear stability analysis \cite{wesc92,ramb81}.
+The root mean square velocity (Figure~\ref{fig:polydiapirs_vrms}) shows two slopes in the early stages ($t<50~\si{\second}$)
+corresponding to the two different growth rates of the interfaces, as explained by linear stability analysis \cite{wesc92,ramb81}.
 
 \begin{figure}
     \centering
@@ -7627,7 +7705,7 @@ as explained by linear stability analysis \cite{wesc92,ramb81}.
     \includegraphics[width=0.48\textwidth]{cookbooks/polydiapirism/doc/diapirs0005.png}
     \includegraphics[width=0.48\textwidth]{cookbooks/polydiapirism/doc/diapirs0010.png}
     \includegraphics[width=0.48\textwidth]{cookbooks/polydiapirism/doc/diapirs0015.png}
-    \caption{\it Polydiapirism benchmark: Density field at $t=0,25,50,75\si{s}$.}
+    \caption{\it Polydiapirism benchmark: Density field at $t=0,25,50,75~\si{\second}$.}
     \label{fig:polydiapirs_density}
 \end{figure}
 
@@ -7642,33 +7720,33 @@ as explained by linear stability analysis \cite{wesc92,ramb81}.
 \label{sec:sinking_block}
 
 This benchmark is based on the benchmark presented in \cite{gery10} and extended in \cite{thie11}.
-It consists of a two-dimensional $512\text{km}\times 512\text{km}$ domain filled with a fluid (the "mantle")
-of density $\rho_1=3200$kg/m$^3$ and viscosity $\eta_1=10^{21}\text{Pa s}$.
-A square block of size $128\text{km}\times 128\text{km}$ is placed in the domain and is centered at location $(x_c,y_c)=(256\text{km},384\text{km})$
+It consists of a two-dimensional $512~\si{\km}\times 512~\si{\km}$ domain filled with a fluid (the ``mantle'')
+of density $\rho_1=3200\si{\kg\per\cubic\meter}$ and viscosity $\eta_1=10^{21}~\si{\pascal\second}$.
+A square block of size $128~\si{\km}\times 128~\si{\km}$ is placed in the domain and is centered at location $(x_c,y_c)=(256~\si{\km},384~\si{\km})$
 so as to ensure that its sides align with cell boundaries at all resolutions (GMR level $\geq 3$). It is filled with a fluid of density
 $\rho_2=\rho_1+\delta \rho$ and viscosity $\eta_2$. The gravity vector points downwards with
-$|\boldsymbol{g}|=10\text{m}/\text{s}^2$. Boundary conditions are free slip on all sides.
+$|\boldsymbol{g}|=10~\si{\meter\per\square\second}$. Boundary conditions are free slip on all sides.
 Only one time step is carried out and we measure the absolute velocity $|v_z|$ in the middle of the block.
 
 In a geodynamical context, the block could be interpreted as a detached slab or a plume head.
 As such its viscosity and density can vary (a cold slab has a higher effective viscosity than the surrounding mantle while
 it is the other way around for a plume head). The block densities can then vary from a few units to several
-hundreds of $\text{kg/m}^{3}$ and the viscosities by several orders of magnitude to represent a wide array of scenarios.
-The velocity field obtained for $\eta_2=10^{27}\text{Pa s}$ and $\delta\rho=32\text{kg/m}^{3}$ is shown in
+hundreds of $\si{\kg\per\cubic\meter}$ and the viscosities by several orders of magnitude to represent a wide array of scenarios.
+The velocity field obtained for $\eta_2=10^{27}~\si{\pascal\second}$ and $\delta\rho=32~\si{\kg\per\cubic\meter}$ is shown in
 Figure~\ref{fig:sinking_block1}.
 
 As shown in \cite{thie11} one can independently vary $\eta_1$, $\rho_2$, $\eta_2$, and measure $|v_z|$ for each combination: the quantity
 $|v_z| \eta_1/\delta\rho$ is then found to be a simple function of the ratio $\eta^\star=\eta_1/\eta_2$:
 at high enough mesh resolution all data points collapse onto a single line.
 The shell script {\sl run\_benchmark} in the folder runs the experiment for values
-$\eta_2\in [10^{17},10^{26}]\text{Pa s}$ and $\delta\rho=8,32,128\text{kg/m}^{3}$.
+$\eta_2\in [10^{17},10^{26}]~\si{\pascal\second}$ and $\delta\rho=8,32,128~\si{\kg\per\cubic\meter}$.
 Results are shown in Figure~\ref{fig:sinking_block2} and we indeed recover the expected trend with
 all data points forming a single smooth line.
 
 \begin{figure}
   \centering
   \includegraphics[width=0.6\textwidth]{cookbooks/benchmarks/sinking_block/doc/dens_vel.png}
-  \caption{\it Density field with velocity arrows for $\eta_2=10^{27}\text{Pa s}$ and $\delta\rho=32\text{kg/m}^{3}$}
+  \caption{\it Density field with velocity arrows for $\eta_2=10^{27}~\si{\pascal\second}$ and $\delta\rho=32~\si{\kg\per\cubic\meter}$}
   \label{fig:sinking_block1}
 \end{figure}
 
@@ -8196,7 +8274,9 @@ and a second-order convergence rate for the pressure.
 \subsubsection{The 2D annulus benchmark}
 \label{sec:cookbooks-annulus}
 
-This benchmark is based on Thieulot \& Puckett [Subm.] in which an analytical solution to the
+\textit{This section was contributed by C. Thieulot and E. G. Puckett.}
+
+This benchmark is based on a manufactured solution in which an analytical solution to the
 isoviscous incompressible Stokes equations is derived in an annulus geometry.
 The velocity and pressure fields are as follows:
 
@@ -9474,6 +9554,318 @@ In this benchmark, a 2D input ASCII file containing $V_S$ specified at 50 and 75
 
 The parameter file and initial temperature model for this benchmark can be found at \url{benchmarks/yamauchi_takei_2016_anelasticity/yamauchi_takei_2016_anelasticity.prm} and \url{benchmarks/yamauchi_takei_2016_anelasticity/anelasticity_temperature.cc}. Code to recreate  Fig.~\ref{fig:anelasticity}  is provided in \url{benchmarks/yamauchi_takei_2016_anelasticity/plot_output}.
 
+\subsubsection{Thin shell gravity benchmark}
+\label{sec:benchmark-thin-shell-gravity}
+
+\textit{This section was contributed by Cedric Thieulot, Bart Root and Paul Bremner.}
+
+The idea behind this benchmark is to test the accuracy of the gravity postprocessor: the domain is a thin shell of constant density somewhere in the Earth mantle and we wish to compute the resulting gravity field and potential at satellite height.
+
+The domain is a spherical shell of 10~\si{\km} radius centered at a depth $D$, i.e. the inner radius is $R\textsubscript{inner}=6371-D-5~\si{\km}$ and the outer radius $R\textsubscript{outer}=6371-D+5~ \si{\km}$. It is filled with a fluid of constant density $\rho_0=3300~\si{\kg\per\cubic\meter}$ with total mass $M=\frac43 \pi (R\textsubscript{outer}^3-R\textsubscript{inner}^3)\rho_0$.
+
+Both the Stokes and energy equations solve are bypassed:
+
+\lstinputlisting[language=prmfile]{cookbooks/benchmarks/gravity_thin_shell/doc/thinshell_b.prm.out}
+
+We make use of the Custom mesh subdivision option to generate a mesh where a single cell is used in the radial direction (parameterized with the number of `slices') while 6 blocks (default value) of $2^5\times 2^5$ cells are used in the lateral direction. This gives a total of 6,144 mesh cells. For $D=100~\si{\km}$ the parameterization of the mesh is then as follows:
+
+\lstinputlisting[language=prmfile]{cookbooks/benchmarks/gravity_thin_shell/doc/thinshell_a.prm.out}
+
+We wish to compute the gravity potential $U$ and the gravity vector ${\mathbf g}$ at a radius of $R\textsubscript{s}=6371+250=6621~\si{\km}$ (i.e. the gravity experienced by a satellite flying at a height of $250~\si{\km}$ above the surface of the Earth) on a regular longitude-latitude grid spanning the whole Earth, with a $2\si{\degree}\times 2\si{\degree}$ resolution:
+
+\lstinputlisting[language=prmfile]{cookbooks/benchmarks/gravity_thin_shell/doc/thinshell_c.prm.out}
+
+The Gauss-Legendre Quadrature (GLQ) algorithm is central to the \aspect{} code as it is used to compute the elemental integrals stemming from the discretization of the weak form of the PDEs. Logically, the gravity postprocessor is also based on the GLQ since the potential $U$ at any location in space is given by the integral
+\begin{equation}
+U({\mathbf r}) = \iiint_\Omega \frac{G \rho({\mathbf r}')}{|{\mathbf r}-{\mathbf r}'|} d{\mathbf r}'
+= \sum_K \iiint_{\Omega_K} \frac{G \rho({\mathbf r}')}{|{\mathbf r}-{\mathbf r}'|} d{\mathbf r}',
+\end{equation}
+where the sum runs over all cells of the mesh and ${G}=6.67430\times 10^{-11}~\si{\cubic\meter\per\kg\per\square\second}$ is the gravitational constant. The gravity acceleration vector is obtained via ${\mathbf g}=-{\mathbf \nabla} U$, or
+\begin{equation}
+{\mathbf g}({\mathbf r}) =
+\iiint_\Omega  \frac{G \rho({\mathbf r}')}{|{\mathbf r}-{\mathbf r}'|^2} d{\mathbf r}'
+=
+\sum_K \iiint_{\Omega_K} \frac{G \rho({\mathbf r}')}{|{\mathbf r}-{\mathbf r}'|^2} d{\mathbf r}'.
+\end{equation}
+
+The default number of quadrature points for each cell in the postprocessor is $2\textsuperscript{ndim}$, where ndim is the number of dimensions. The $n$-point GLQ allows exact integration of $(2n-1)$-order polynomials. However, the integrand of the Newton integral is not a polynomial (it contains a term $\sim r^{-m}$), so there is not an optimal number of quadrature points to use. Therefore, the postprocessor allows the user to choose how many additional points per dimension are used with an expectation that an increase in the number of quadrature points inside the cells leads to a more accurate calculation. This increase number $I$ is set to 1 in the example above, although it can also be chosen to be 0, 1, 2 or even -1. The case $I=-1$ approximates the cell as a point mass since there is a single quadrature point in the middle of the cell.
+
+Given the symmetry of the problem, the values of the potential and acceleration depend solely on the distance $r$ from the origin, see Turcotte and Schubert \cite{TS14}. Their analytical values are given by $U(r) = - GM/r$ and $|{\mathbf g}(r)|= g_r(r)=GM/r^2$. 
+Minimum, maximum, and average values of both the potential and the acceleration are printed in the statistics file while measurements at all the desired points are written in the \texttt{output\_gravity} folder inside the output folder. We ran the input file for $I\in \{-1,0,1,2\}$ for $D=0,100,500,1500,3000~\si{\km}$ and the results are presented in Table~\ref{tab:thin_shell_gravity_benchmark} alongside the analytical values.
+
+\begin{table}[htb]
+\center
+\begin{tabular}{|c|c|c|ccc|ccc|}
+\hline
+D  &
+$I$ & $n_q$& & $g_r$ (mGal)  & && $U$ (\si{\joule\per\kg}) &\\
+(\si{\km})&&& avrg.  & min  & max  &
+avrg. & min & max    \\
+\hline
+0 & -1 & $1^3$ &
+2563.6541 &
+2530.6859 &
+2607.5210 &
+-169764.4978 &
+-169832.3647 &
+-169744.3149 \\
+&0  & $2^3$ &
+2562.8680 &
+2553.5683 &
+2571.9157 &
+-169676.4060 &
+-169681.1065 &
+-169671.6199 \\
+&1  & $3^3$ &
+2562.6878 &
+2561.9847 &
+2563.7170 &
+-169676.3142 &
+-169676.8060 &
+-169675.9148 \\
+&2  & $4^3$  &
+2562.6993 &
+2562.6215 &
+2562.7395 &
+-169676.3211 &
+-169676.3361 &
+-169676.2903 \\
+& a.v. && 2562.6993 &&& -169676.3210 & &\\
+\hline\hline
+100&-1 & $1^3$ &
+2484.0821 &
+2479.3619 &
+2499.2301 &
+-164477.2574 &
+-164520.0786 &
+-164472.4899 \\
+&0 & $2^3$ &
+2482.9027 &
+2481.7033 &
+2484.0834 &
+-164391.6151 &
+-164392.2246 &
+-164390.9963 \\
+& 1 & $3^3$ &  
+2482.8799 &
+2482.7731 &
+2482.9959 &
+-164391.6031 &
+-164391.6623 &
+-164391.5473 \\
+& 2 & $4^3$ & 
+2482.8819 &
+2482.8759 &
+2482.8865 &
+-164391.6041 &
+-164391.6067 &
+-164391.6012\\
+& a.v. & & 2482.8818 & & & -164391.6041 & &\\
+\hline\hline
+500&-1 & $1^3$&
+2177.3562 &
+2177.2415 &
+2179.8737 &
+-144163.9859 &
+-144178.2736 &
+-144162.2361 \\
+& 0 & $2^3$ &
+2176.2392 &
+2176.2253 &
+2176.2404 &
+-144088.7939 &
+-144088.7971 &
+-144088.7538 \\
+& 1 & $3^3$ & 
+2176.2391 &
+2176.2391 &
+2176.2392 &
+-144088.7937 &
+-144088.7938 &
+-144088.7936 \\
+& 2 & $4^3$ & 
+2176.2391 &
+2176.2391 &
+2176.2391 &
+-144088.7937 &
+-144088.7937 &
+-144088.7937 \\
+& a.v. && 2176.2391 &&& -144088.7937 & &\\
+\hline\hline
+1500&-1 & $1^3$ &
+1498.7997 &
+1498.7569 &
+1499.0522 &
+-99236.0403 &
+-99238.4122 &
+-99235.3167 \\
+& 0 & $2^3$ &
+1498.0239 &
+1498.0236 &
+1498.0240 &
+-99184.1673 &
+-99184.1678 &
+-99184.1647 \\
+& 1 & $3^3$ &
+1498.0240 &
+1498.0240 &
+1498.0240 &
+-99184.1672 &
+-99184.1672 &
+-99184.1672 \\
+& 2 & $4^3$ &
+1498.0240 &
+1498.0240 &
+1498.0240 &
+-99184.1672 &
+-99184.1672 &
+-99184.1672 \\
+& a.v. && 1498.0240 &&& -99184.1672 &&\\
+\hline\hline
+3000 &-1 & $1^3$ &
+717.8387 &
+717.8315 &
+717.8533 &
+-47528.1777 &
+-47528.3488 &
+-47528.0725 \\
+ & 0 & $2^3$ &
+717.4641 &
+717.4640 &
+717.4641 &
+-47503.2981 &
+-47503.2982 &
+-47503.2980 \\
+ & 1 & $3^3$ &
+717.4641 &
+717.4641 &
+717.4641 &
+-47503.2981 &
+-47503.2981 &
+-47503.2981 \\
+& 2 & $4^3$ &
+717.4641 &
+717.4641 &
+717.4641 &
+-47503.2981 &
+-47503.2981 &
+-47503.2981 \\
+&{\small a.v.} && 717.4641 &&& -47503.2981 && \\
+\hline
+\end{tabular}\\
+\caption{\it Thin shell gravity benchmark: $1\si{mGal}=10^{-5}\si{\meter\per\square\second}$. $n_q$ is the number of GLQ points per cell. `a.v.' stands for analytical value.}
+\label{tab:thin_shell_gravity_benchmark}
+\end{table}
+
+The accuracy of the calculations increases with $I$ but so does the time spent in the postprocessor: for $I\in\{-1,0,1,2\}$  this time was about 18, 132, 440 and 1040~\si{s} respectively. This is easily explained when one realizes that increasing $I$ from 0 to 1 means that the number of GLQ points per cell goes from $2^3=8$ to $3^3=27$, i.e. a $3.375$ increase in operations for the same number of cells and measurement points. The time spent in the postprocessor increases by a similar factor ($440/132\sim 3.4$).
+The accuracy obtained with lower $I$ values increases with increasing anomaly depth (or increasing distance from the observation point). Note that this benchmark has uniform density so that the projection of the density from the nodes onto the quadrature points is exact and it does not introduce any smoothing of data which might occur in the presence of density discontinuities (e.g. air-water, water-crust, moho, etc.) inside a cell. $I=1$ seems to be the best compromise between accuracy (gravity acceleration errors are less than 0.01~mGal for all shells) and compute time for this experiment.
+
+\subsubsection{Thick shell gravity benchmark}
+\label{sec:benchmark-thick-shell-gravity}
+
+\textit{This section was contributed by Cedric Thieulot.}
+
+This benchmark tests the accuracy of the gravity field and gravitational potential computed by the gravity postprocessor inside and outside an Earth-sized planet (without its core) of constant density. The domain is a spherical shell with inner radius $R\textsubscript{inner}=3840~\si{\km}$ and outer radius $R\textsubscript{outer}=6371~\si{\km}$. The density is constant in the domain and set to $\rho_0=3300~\si{\kg\per\cubic\metre}$.
+
+First, let us calculate the exact profile which we expect the benchmark to reproduce. The gravitational potential $U$ of a spherically symmetric object satisfies the Poisson equation $\Delta U = 4\pi G \rho(\mathbf r)$. For a constant density shell, this equation can be solved analytically for the gravitational acceleration and potential inside and outside the planet.
+Inside ($r<R\textsubscript{inner}$) and outside ($r>R\textsubscript{outer}$) the spherical shell (i.e. where $\rho=0$) the Poisson equation simplifies to the Laplace equation $\Delta U=0$:
+\begin{equation}
+\frac{1}{r^2} \frac{\partial }{\partial r} \left(r^2 \frac{\partial U}{\partial r} \right) = 0. 
+\end{equation}
+The solution to this expression is:
+\begin{equation}
+g=\frac{\partial U}{\partial r} = \frac{C}{r^2} \label{eq:app1},
+\end{equation}
+where $C$ is a constant of integration.
+In order to avoid an infinite gravity field at $r=0$ (where the density is also zero in this particular setup of a shell), we need to impose $C=0$, i.e. the gravity is zero for $r\leq R\textsubscript{inner}$. Another way of arriving at the same conclusion is to realize that $g$ is zero at the center of the body because the material around it exerts an equal force in every direction.
+Inside the shell, $\rho=\rho_0$, yielding
+\begin{equation}
+g=\frac{\partial U}{\partial r} = \frac{4 \pi}{3} G \rho_0 r + \frac{A}{r^2},
+\end{equation}
+where $A$ is another integration constant. 
+At the inner boundary, $r=R\textsubscript{inner}$ and $g=0$, allowing $A$ to be computed. Substituting in the value of $A$,
+\begin{equation}
+g=\frac{\partial U}{\partial r} = \frac{4 \pi}{3} G \rho_0 
+\left(r - \frac{R\textsubscript{inner}^3}{r^2} \right). \label{eqgin}
+\end{equation}
+When $r\geq R\textsubscript{outer}$, the gravitational potential is given by Eq. (\ref{eq:app1}). Requiring the gravity field to be continuous at $r=R\textsubscript{outer}$:
+\begin{equation}
+g(r) = \frac{G M}{r^2} \label{eq:gout},
+\end{equation}
+where $M=\frac{4 \pi}{3} \rho_0(R\textsubscript{outer}^3-R\textsubscript{inner}^3)$ is the mass contained in the shell.
+For $r\ge R\textsubscript{outer}$, the potential is obtained by integrating Eq.(\ref{eq:gout}):
+\begin{equation}
+U(r)=-\frac{GM}{r} +D,
+\end{equation}
+where $D$ is an integration constant which has to be zero since we require the potential to vanish for $r\rightarrow \infty$.
+The potential within the shell, $R\textsubscript{inner}\leq r \leq R\textsubscript{outer}$, is found by integrating Eq.~\eqref{eqgin}:
+\begin{equation}
+U(r)= \frac{4 \pi}{3} G \rho_0 \left(\frac{r^2}{2} + \frac{R\textsubscript{inner}^3}{r} \right)  + E,
+\end{equation}
+where $E$ is a constant. Continuity of the potential at $r=R\textsubscript{outer}$ requires that $E=-2\pi\rho_0 G R\textsubscript{outer}^2$. 
+Gravitational acceleration is zero for $r\leq R\textsubscript{inner}$, so the potential there is constant and a continuity requirement yields
+\begin{equation}
+U(r)=2\pi G \rho_0 (R\textsubscript{inner}^2-R\textsubscript{outer}^2).
+\end{equation}
+
+The gravity postprocessor in \aspect{} can be used to calculate the radial components of gravity ($g_r$ and $U$) at arbitrary points using the sampling scheme `\textit{list of points}'. For this benchmark we calculate points along a line from the center of the planet to a distant point, $r=0$ to $r=10,000~\si{\km}$ (Figure \ref{fig:grav-thick-shell}). Arbitrarily, the latitude and longitude are both set to $13\si{\degree}$ so as to avoid potential measurement artifacts due to symmetry. The list of radii is defined as follows:
+
+\lstinputlisting[language=prmfile]{cookbooks/benchmarks/gravity_thick_shell/doc/thick_shell.prm.out}
+
+The resulting measurements obtained for a mesh composed of 12 caps of $32^3$ cells (i.e., 393,216 total mesh cells) are shown in Fig.~(\ref{fig:grav-thick-shell}) and are in good agreement with the analytical profiles.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=8cm]{cookbooks/benchmarks/gravity_thick_shell/doc/gravity_g.pdf}
+  \hfill
+  \includegraphics[width=8cm]{cookbooks/benchmarks/gravity_thick_shell/doc/gravity_U.pdf}
+  \caption{\it Gravity benchmark for a thick shell: Gravitational potential (left) and acceleration (right) computed on a line from the center of a constant density shell to a radius of 10,000~\si{\km}. The gray area indicates the region $R\textsubscript{inner}\leq r \leq R\textsubscript{outer}$ inside the shell, where the density is not zero.}
+  \label{fig:grav-thick-shell}
+\end{figure}
+
+
+\subsubsection{Gravity field generated by mantle density variations}
+\label{sec:benchmark-mantle-gravity}
+
+\textit{This section was contributed by C. Thieulot and L. Jeanniot.}
+
+The gravity postprocessor has been benchmarked in Section~\ref{sec:benchmark-thin-shell-gravity} and \ref{sec:benchmark-thick-shell-gravity}.
+We use it here in an Earth-like context: the tomography model S40RTS \cite{S40RTS} is used and scaled so as to provide temperature anomalies, which themselves incorporated in the Simple material model yield a density distribution for the entire Earth mantle minus the lithosphere, i.e. $R\textsubscript{inner} \leq r \leq R\textsubscript{outer}$  with $R\textsubscript{inner}=3480~\si{\km}$ and $R\textsubscript{outer}=6251~\si{\km}$. The use of the S20RTS/S40RTS tomography model and its parameterization is detailed in Section~\ref{sec:cookbooks-S20RTS}.
+
+We set the global refinement to 3 so that the mesh counts $12\times 16^3=49,152$ cells. This means that the radial resolution is $(R\textsubscript{outer}-R\textsubscript{inner})/16\simeq  173~\si{\km}$ while the lateral resolution is $(4\pi R\textsubscript{outer}^2/(12\times 16^2))^{1/2} \simeq 400~\si{km}$ at the surface and $(4\pi R\textsubscript{inner}^2/(12\times 16^2))^{1/2} \simeq 220~\si{km}$ at the CMB. The mesh and the density field are shown in Fig.~\ref{fig:grav_mantle1}. The temperature anomaly ranges from approximately $-342~\si{\kelvin}$ to approximately $+331~\si{\kelvin}$ and geodynamical features such as the mid-oceanic ridge or the Afar region are visible in the form of positive temperature anomalies, indicating that mantle material is present in these areas. Note that these values are not necessarily meaningful since we here assume that density variations are 100\% due to temperature variations as there is only a single material in the domain (i.e. no change in composition in space). Nevertheless this simple setup provides us with a complex-enough density distribution to test the gravity postprocessor.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=5cm]{cookbooks/benchmarks/gravity_mantle/mesh}
+  \hfill
+  \includegraphics[width=5cm]{cookbooks/benchmarks/gravity_mantle/T}
+  \hfill
+  \includegraphics[width=5cm]{cookbooks/benchmarks/gravity_mantle/rho}
+  \caption{Mantle gravity cookbook. From left to right: mesh, temperature anomaly and density. Coastlines are available for Paraview at 
+\url{https://www.earthmodels.org/date-and-tools/coastlines/los-alamos}. Once opened the data must be scaled up (simply set the scale of the lower left menu in Paraview to the desired outer radius of your model). Grid lines are also available on the same site.}
+  \label{fig:grav_mantle1}
+\end{figure}
+
+The gravity postprocessor computes the gravitational potential, acceleration vector and gradient at a given radius (here chosen to be $6371+250=6621~\si{\km}$) on a regular $2\si{\degree}$-latitude-longitude grid (see also the cookbook of Section~\ref{sec:benchmark-thin-shell-gravity}) and returns the results in the \texttt{gravity-00000} file to be found in the \texttt{output-gravity} folder inside the regular output folder. 
+
+The python script \texttt{convert\_gravity\_ascii\_to\_vtu\_map.py} converts the ascii output to \texttt{vtu} format in order to view the results in ParaView. It is provided in the folder of this cookbook and can be used as follows:
+\begin{lstlisting}[frame=single,language=ksh,showstringspaces=false]
+python3 convert_gravity_ascii_to_vtu_map.py gravity-00000 181 91
+\end{lstlisting}
+The first argument is the ascii file, while the following two arguments are the number of longitude and latitude points as specified in the \texttt{prm} file.
+The resulting \texttt{gravity-00000\_map.vtu} file is then visualised with ParaView and is shown in Fig.~\ref{fig:grav_mantle2}. Note that on a modern laptop the calculations resulting from running the provided \texttt{prm} file in the cookbook folder takes a bit less than 2 hours on a single thread: about 1250~\si{\second} are spent in the setup phase (using the spherical harmonics coefficients to compute the temperature field on the mesh nodes) and about 4700~\si{\second} in the gravity postprocessor itself. This time can be substantially decreased by running \aspect{} in parallel on $n$ threads: the processor can then make use of the domain decomposition and is almost $n$ times faster.
+
+As shown in the thin shell gravity benchmark the constant component of the density $\rho_0=3300~\si{\kg\per\cubic\metre}$ generates a constant gravity field at the measurement radius so it can be filtered out. In general, the contribution to the gravity signal of any density distribution that solely depends on $r$ can and should be removed as it does not contain any valuable information.
+
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.48\textwidth]{cookbooks/benchmarks/gravity_mantle/grav}
+  \includegraphics[width=0.48\textwidth]{cookbooks/benchmarks/gravity_mantle/pot}
+  \caption{Mantle gravity: gravitational acceleration $|g|$ (left) and potential (right) computed at radius 6621~\si{\km}.}
+  \label{fig:grav_mantle2}
+>>>>>>> S40RTS mantle gravity
+\end{figure}
 
 \subsubsection{Brittle thrust wedges benchmark}
 \label{sec:benchmark-brittle-thrust-wedge}
@@ -10580,7 +10972,7 @@ boundary indicators as follows:
        ++cell)
     for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
       if (cell->face(f)->at_boundary())
-        if (cell->face(f)->center()[0] == -1)
+        if (cell->face(f)->center(true)[0] == -1)
           cell->face(f)->set_boundary_indicator (42);
   \end{lstlisting}
   This calls functions \texttt{TriaAccessor::set\_boundary\_indicator}. In 3d, it may
@@ -11658,7 +12050,7 @@ is triggered where you need it, and connect a function (slot) in your own plugin
 file to this signal using the mechanisms outlined above. Then send the code that
 defines and triggers the signal to the developers of \aspect{} to make sure that
 it is also included in the next release. Alternatively, you can also simply ask
-on the mailing lists for someone to add such a signal in the place where you
+on the forum for someone to add such a signal in the place where you
 want it. Either way, adding signals is something that is easy to do, and we would
 much rather add signals than have people who modify the \aspect{} source files
 for their own needs and are then stuck on a particular version.}
@@ -11868,7 +12260,7 @@ test and rename it to the name of your parameter file.
 
 To actually run the test, you have to go to your \aspect{} build directory and run
 \begin{lstlisting}[frame=single,language=ksh]
-    make setup\_tests
+    make setup_tests
 \end{lstlisting}
 so that your new test is added to the test suite. Then you can run it by executing
 \begin{lstlisting}[frame=single,language=ksh]
@@ -11957,7 +12349,7 @@ every contribution and are happy to work with you on improving \aspect{}. To get
 you started we have collected a set of guidelines and advice on how to get involved in the
 community. To avoid duplication we store these guidelines in a separate file \url{CONTRIBUTING.md}
 in the main folder of the repository, and you can also access them online at \url{https://github.com/geodynamics/aspect/blob/master/CONTRIBUTING.md}. Even if something in that file is not clear, this
-is an opportunity for you to ask your question on the mailing list (see
+is an opportunity for you to ask your question on the forum (see
 Section~\ref{sec:questions-and-answers}, and let us know that file needs improvement.
 
 \subsection{Future plans for \aspect}
@@ -11988,12 +12380,12 @@ resources:
   the mailing lists described at \url{https://www.dealii.org/mail.html}.
 
 \item In case of more general questions about mantle convection, you can
-  contact the CIG mantle
-  convection mailing lists at
-  \url{http://lists.geodynamics.org/cgi-bin/mailman/listinfo/cig-MC}.
+  ask on the CIG mantle
+  convection forum at
+  \url{https://community.geodynamics.org/c/mantle-convection/12}.
 
 \item If you have specific questions about \aspect{} that are not suitable
-  for public and archived mailing lists, you can contact the
+  for public and archived forums, you can contact the
   primary developers:
   \begin{itemize}
   \item Wolfgang Bangerth:
@@ -12008,6 +12400,8 @@ resources:
     \url{acglerum@gfz-potsdam.de},
   \item Timo Heister:
     \url{heister@clemson.edu},
+  \item Bob Myhill:
+    \url{bob.myhill@bristol.ac.uk},
   \item John Naliboff:
     \url{john.naliboff@gmail.com}.
   \end{itemize}

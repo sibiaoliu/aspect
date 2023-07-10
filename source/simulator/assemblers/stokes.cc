@@ -267,15 +267,15 @@ namespace aspect
       const double pressure_scaling = this->get_pressure_scaling();
 
       const MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>
-      *force = scratch.material_model_outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >();
+      *force = scratch.material_model_outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>();
 
       const MaterialModel::ElasticOutputs<dim>
-      *elastic_outputs = scratch.material_model_outputs.template get_additional_output<MaterialModel::ElasticOutputs<dim> >();
+      *elastic_outputs = scratch.material_model_outputs.template get_additional_output<MaterialModel::ElasticOutputs<dim>>();
 
       const MaterialModel::PrescribedPlasticDilation<dim>
       *prescribed_dilation =
         (this->get_parameters().enable_prescribed_dilation)
-        ? scratch.material_model_outputs.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
+        ? scratch.material_model_outputs.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim>>()
         : nullptr;
 
       const bool material_model_is_compressible = (this->get_material_model().is_compressible());
@@ -339,6 +339,10 @@ namespace aspect
                     {
                       scratch.grads_phi_u[i_stokes] = scratch.finite_element_values[introspection.extractors.velocities].symmetric_gradient(i,q);
                       scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence (i, q);
+                    }
+                  else if (this->get_parameters().enable_elasticity)
+                    {
+                      scratch.grads_phi_u[i_stokes] = scratch.finite_element_values[introspection.extractors.velocities].symmetric_gradient(i,q);
                     }
                   else if (prescribed_dilation && !material_model_is_compressible)
                     {
@@ -447,15 +451,15 @@ namespace aspect
 
       // Stokes RHS:
       if (this->get_parameters().enable_additional_stokes_rhs
-          && outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >() == nullptr)
+          && outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>() == nullptr)
         {
           outputs.additional_outputs.push_back(
-            std_cxx14::make_unique<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>> (n_points));
+            std::make_unique<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>> (n_points));
         }
 
       Assert(!this->get_parameters().enable_additional_stokes_rhs
              ||
-             outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >()->rhs_u.size()
+             outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>()->rhs_u.size()
              == n_points, ExcInternalError());
 
       // prescribed dilation:
@@ -463,25 +467,25 @@ namespace aspect
           && outputs.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim>>() == nullptr)
         {
           outputs.additional_outputs.push_back(
-            std_cxx14::make_unique<MaterialModel::PrescribedPlasticDilation<dim>> (n_points));
+            std::make_unique<MaterialModel::PrescribedPlasticDilation<dim>> (n_points));
         }
 
       Assert(!this->get_parameters().enable_prescribed_dilation
              ||
-             outputs.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()->dilation.size()
+             outputs.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim>>()->dilation.size()
              == n_points, ExcInternalError());
 
       // Elasticity:
       if ((this->get_parameters().enable_elasticity) &&
-          outputs.template get_additional_output<MaterialModel::ElasticOutputs<dim> >() == nullptr)
+          outputs.template get_additional_output<MaterialModel::ElasticOutputs<dim>>() == nullptr)
         {
           outputs.additional_outputs.push_back(
-            std_cxx14::make_unique<MaterialModel::ElasticOutputs<dim>> (n_points));
+            std::make_unique<MaterialModel::ElasticOutputs<dim>> (n_points));
         }
 
       Assert(!this->get_parameters().enable_elasticity
              ||
-             outputs.template get_additional_output<MaterialModel::ElasticOutputs<dim> >()->elastic_force.size()
+             outputs.template get_additional_output<MaterialModel::ElasticOutputs<dim>>()->elastic_force.size()
              == n_points, ExcInternalError());
     }
 
@@ -510,7 +514,6 @@ namespace aspect
             {
               if (introspection.is_stokes_component(fe.system_to_component_index(i).first))
                 {
-                  scratch.grads_phi_u[i_stokes] = scratch.finite_element_values[introspection.extractors.velocities].symmetric_gradient(i,q);
                   scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence (i, q);
 
                   ++i_stokes;
@@ -723,12 +726,12 @@ namespace aspect
       const unsigned int stokes_dofs_per_cell = data.local_dof_indices.size();
       const unsigned int n_q_points    = scratch.finite_element_values.n_quadrature_points;
       const double pressure_scaling = this->get_pressure_scaling();
-      const unsigned int density_idx = this->introspection().compositional_index_for_name("density_field");
+      const unsigned int density_idx = this->introspection().find_composition_type(Parameters<dim>::CompositionalFieldDescription::density);
 
       const double time_step = this->get_timestep();
       const double old_time_step = this->get_old_timestep();
 
-      std::vector<Tensor<1,dim> > density_gradients(n_q_points);
+      std::vector<Tensor<1,dim>> density_gradients(n_q_points);
       std::vector<double> density(n_q_points);
       std::vector<double> density_old(n_q_points);
       std::vector<double> density_old_old(n_q_points);

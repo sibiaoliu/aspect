@@ -59,21 +59,17 @@ namespace aspect
       void
       HeatFluxMap<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         for (unsigned int q=0; q<computed_quantities.size(); ++q)
           computed_quantities[q](0) = 0;
 
-#if DEAL_II_VERSION_GTE(9,3,0)
         auto cell = input_data.template get_cell<dim>();
-#else
-        auto cell = input_data.template get_cell<DoFHandler<dim> >();
-#endif
 
         if (output_point_wise_heat_flux)
           {
             bool cell_at_top_or_bottom_boundary = false;
-            for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+            for (const unsigned int f : cell->face_indices())
               if (cell->at_boundary(f) &&
                   (this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "top" ||
                    this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "bottom"))
@@ -105,7 +101,7 @@ namespace aspect
           {
             double heat_flux = 0.0;
 
-            for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+            for (const unsigned int f : cell->face_indices())
               if (cell->at_boundary(f) &&
                   (this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "top" ||
                    this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "bottom"))

@@ -1,18 +1,14 @@
 /*
   Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
-
   This file is part of ASPECT.
-
   ASPECT is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation; either version 2, or (at your option)
   any later version.
-
   ASPECT is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-
   You should have received a copy of the GNU General Public License
   along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
@@ -78,8 +74,7 @@ namespace aspect
          * Destructor. Does nothing but is virtual so that derived classes
          * destructors are also virtual.
          */
-        virtual
-        ~Interface ();
+        virtual ~Interface () = default;
 
         /**
          * Initialization function. This function is called once at the
@@ -318,7 +313,7 @@ namespace aspect
          * A list of mesh refinement objects that have been requested in the
          * parameter file.
          */
-        std::list<std::unique_ptr<Interface<dim> > > mesh_refinement_objects;
+        std::list<std::unique_ptr<Interface<dim>>> mesh_refinement_objects;
     };
 
 
@@ -329,7 +324,7 @@ namespace aspect
     bool
     Manager<dim>::has_matching_mesh_refinement_strategy () const
     {
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
+      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
            p = mesh_refinement_objects.begin();
            p != mesh_refinement_objects.end(); ++p)
         if (Plugins::plugin_type_matches<MeshRefinementType>(*(*p)))
@@ -352,14 +347,14 @@ namespace aspect
                              "that could not be found in the current model. Activate this "
                              "mesh refinement strategy in the input file."));
 
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
+      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
            p = mesh_refinement_objects.begin();
            p != mesh_refinement_objects.end(); ++p)
         if (Plugins::plugin_type_matches<MeshRefinementType>(*(*p)))
           return Plugins::get_plugin_as_type<MeshRefinementType>(*(*p));
 
       // We will never get here, because we had the Assert above. Just to avoid warnings.
-      typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator mesh_refinement_strategy;
+      typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator mesh_refinement_strategy;
       return Plugins::get_plugin_as_type<MeshRefinementType>(*(*mesh_refinement_strategy));
     }
 
@@ -377,12 +372,12 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_MESH_REFINEMENT_CRITERION_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::MeshRefinement::Interface<2>,classname<2> > \
-    dummy_ ## classname ## _2d (&aspect::MeshRefinement::Manager<2>::register_mesh_refinement_criterion, \
-                                name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::MeshRefinement::Interface<3>,classname<3> > \
-    dummy_ ## classname ## _3d (&aspect::MeshRefinement::Manager<3>::register_mesh_refinement_criterion, \
-                                name, description); \
+    aspect::internal::Plugins::RegisterHelper<aspect::MeshRefinement::Interface<2>,classname<2>> \
+        dummy_ ## classname ## _2d (&aspect::MeshRefinement::Manager<2>::register_mesh_refinement_criterion, \
+                                    name, description); \
+    aspect::internal::Plugins::RegisterHelper<aspect::MeshRefinement::Interface<3>,classname<3>> \
+        dummy_ ## classname ## _3d (&aspect::MeshRefinement::Manager<3>::register_mesh_refinement_criterion, \
+                                    name, description); \
   }
   }
 }

@@ -33,12 +33,7 @@
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/fe/fe.h>
 #include <deal.II/fe/mapping_q.h>
-
-#if !DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/constraint_matrix.h>
-#else
-#  include <deal.II/lac/affine_constraints.h>
-#endif
+#include <deal.II/lac/affine_constraints.h>
 
 namespace WorldBuilder
 {
@@ -190,8 +185,7 @@ namespace aspect
        * Destructor. Does nothing but is virtual so that derived classes
        * destructors are also virtual.
        */
-      virtual
-      ~SimulatorAccess ();
+      virtual ~SimulatorAccess () = default;
 
       /**
        * Initialize this class for a given simulator. This function is marked
@@ -496,9 +490,9 @@ namespace aspect
       get_dof_handler () const;
 
       /**
-       * Return a reference to the finite element that the DoFHandler that is
-       * used to discretize the variables at the current time step is built
-       * on. This is the finite element for the entire, couple problem, i.e.,
+       * Return a reference to the finite element that is
+       * used to discretize the variables at the current time step.
+       * This is the finite element for the entire, coupled problem, i.e.,
        * it contains sub-elements for velocity, pressure, temperature and all
        * other variables in this problem (e.g., compositional variables, if
        * used in this simulation).
@@ -636,7 +630,7 @@ namespace aspect
        * Return a reference to the object that describes traction
        * boundary conditions.
        */
-      const std::map<types::boundary_id,std::unique_ptr<BoundaryTraction::Interface<dim> > > &
+      const std::map<types::boundary_id,std::unique_ptr<BoundaryTraction::Interface<dim>>> &
       get_boundary_traction () const;
 
       /**
@@ -844,7 +838,7 @@ namespace aspect
        */
       static
       void
-      get_composition_values_at_q_point (const std::vector<std::vector<double> > &composition_values,
+      get_composition_values_at_q_point (const std::vector<std::vector<double>> &composition_values,
                                          const unsigned int                      q,
                                          std::vector<double>                    &composition_values_at_q_point);
 

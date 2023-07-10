@@ -39,7 +39,7 @@ namespace aspect
       void
       SurfaceDynamicTopography<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         // Initialize everything to zero, so that we can ignore faces we are
         // not interested in (namely, those not labeled as 'top' or 'bottom'
@@ -47,19 +47,15 @@ namespace aspect
           computed_quantities[q](0) = 0;
 
         const Postprocess::DynamicTopography<dim> &dynamic_topography =
-          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::DynamicTopography<dim> >();
+          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::DynamicTopography<dim>>();
 
-#if DEAL_II_VERSION_GTE(9,3,0)
         auto cell = input_data.template get_cell<dim>();
-#else
-        auto cell = input_data.template get_cell<DoFHandler<dim> >();
-#endif
 
         // We only want to output dynamic topography at the top and bottom
         // boundary, so only compute it if the current cell has
         // a face at the top or bottom boundary.
         bool cell_at_top_or_bottom_boundary = false;
-        for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+        for (const unsigned int f : cell->face_indices())
           if (cell->at_boundary(f) &&
               (this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "top" ||
                this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "bottom"))

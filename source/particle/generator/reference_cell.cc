@@ -30,18 +30,14 @@ namespace aspect
     {
       template <int dim>
       void
-      ReferenceCell<dim>::generate_particles(std::multimap<Particles::internal::LevelInd, Particle<dim> > &particles)
+      ReferenceCell<dim>::generate_particles(std::multimap<Particles::internal::LevelInd, Particle<dim>> &particles)
       {
-        const std::vector<Point<dim> > particles_in_unit_cell = generate_particle_positions_in_unit_cell();
+        const std::vector<Point<dim>> particles_in_unit_cell = generate_particle_positions_in_unit_cell();
 
         types::particle_index n_particles_to_generate = this->get_triangulation().n_locally_owned_active_cells() * particles_in_unit_cell.size();
         types::particle_index prefix_sum = 0;
 
-#if DEAL_II_VERSION_GTE(9,1,0)
         const int ierr = MPI_Scan(&n_particles_to_generate, &prefix_sum, 1, DEAL_II_PARTICLE_INDEX_MPI_TYPE, MPI_SUM, this->get_mpi_communicator());
-#else
-        const int ierr = MPI_Scan(&n_particles_to_generate, &prefix_sum, 1, PARTICLE_INDEX_MPI_TYPE, MPI_SUM, this->get_mpi_communicator());
-#endif
         AssertThrowMPI(ierr);
 
         types::particle_index particle_index = prefix_sum - n_particles_to_generate;
@@ -63,10 +59,10 @@ namespace aspect
 
 
       template <int dim>
-      std::vector<Point<dim> >
-      ReferenceCell<dim>::generate_particle_positions_in_unit_cell()
+      std::vector<Point<dim>>
+                           ReferenceCell<dim>::generate_particle_positions_in_unit_cell()
       {
-        std::vector<Point<dim> > particle_positions;
+        std::vector<Point<dim>> particle_positions;
         std::array<double, dim> spacing;
 
         // Calculate separation of particles

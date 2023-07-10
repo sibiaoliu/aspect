@@ -94,7 +94,7 @@ namespace aspect
          */
         void reinit(const std::vector<std::string> &column_names,
                     std::vector<std::vector<double>> &&coordinate_values,
-                    std::vector<Table<dim,double> > &&data_table);
+                    std::vector<Table<dim,double>> &&data_table);
 
         /**
          * Loads a data text file. Throws an exception if the file does not
@@ -434,13 +434,13 @@ namespace aspect
          * data we get from text files.
          */
         std::map<types::boundary_id,
-            std::unique_ptr<aspect::Utilities::StructuredDataLookup<dim-1> > > lookups;
+            std::unique_ptr<aspect::Utilities::StructuredDataLookup<dim-1>>> lookups;
 
         /**
          * Map between the boundary id and the old data objects.
          */
         std::map<types::boundary_id,
-            std::unique_ptr<aspect::Utilities::StructuredDataLookup<dim-1> > > old_lookups;
+            std::unique_ptr<aspect::Utilities::StructuredDataLookup<dim-1>>> old_lookups;
 
         /**
          * Handles the update of the data in lookup.
@@ -470,7 +470,7 @@ namespace aspect
      * A base class that implements initial conditions determined from a
      * AsciiData input file.
      */
-    template <int dim>
+    template <int dim, int spacedim=dim>
     class AsciiDataInitial : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
     {
       public:
@@ -492,7 +492,7 @@ namespace aspect
          * Returns the data component at the given position.
          */
         double
-        get_data_component (const Point<dim>                    &position,
+        get_data_component (const Point<spacedim>               &position,
                             const unsigned int                   component) const;
 
       protected:
@@ -500,7 +500,7 @@ namespace aspect
          * Pointer to an object that reads and processes data we get from text
          * files.
          */
-        std::unique_ptr<aspect::Utilities::StructuredDataLookup<dim> > lookup;
+        std::unique_ptr<aspect::Utilities::StructuredDataLookup<spacedim>> lookup;
     };
 
 
@@ -556,7 +556,7 @@ namespace aspect
          * Pointer to an object that reads and processes data we get from text
          * files.
          */
-        std::vector<std::unique_ptr<aspect::Utilities::StructuredDataLookup<dim-1> >> lookups;
+        std::vector<std::unique_ptr<aspect::Utilities::StructuredDataLookup<dim-1>>> lookups;
 
       private:
 
@@ -666,7 +666,7 @@ namespace aspect
          * Pointer to an object that reads and processes data we get from text
          * files.
          */
-        std::unique_ptr<aspect::Utilities::StructuredDataLookup<1> > lookup;
+        std::unique_ptr<aspect::Utilities::StructuredDataLookup<1>> lookup;
     };
 
 

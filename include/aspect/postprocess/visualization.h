@@ -42,7 +42,7 @@ namespace aspect
       /**
        * Compute the arithmetic average over q for each m of the variable quantities[q](m).
        */
-      inline void average_quantities(std::vector<Vector<double> > &quantities)
+      inline void average_quantities(std::vector<Vector<double>> &quantities)
       {
         const unsigned int N = quantities.size();
         const unsigned int M = quantities[0].size();
@@ -128,8 +128,7 @@ namespace aspect
            * Destructor. Does nothing but is virtual so that derived classes
            * destructors are also virtual.
            */
-          virtual
-          ~Interface ();
+          virtual ~Interface () = default;
 
           /**
            * Initialize function.
@@ -529,6 +528,14 @@ namespace aspect
         bool output_mesh_velocity;
 
         /**
+         * Whether or not ASPECT should also generate output for the base variables
+         * velocity, pressure, temperature and the compositional fields on the
+         * surface of the mesh. The mesh surface includes all boundaries of the
+         * domain.
+         */
+        bool output_base_variables_on_mesh_surface;
+
+        /**
          * File operations can potentially take a long time, blocking the
          * progress of the rest of the model run. Setting this variable to
          * 'true' moves this process into a background thread, while the
@@ -568,7 +575,7 @@ namespace aspect
          * A list of postprocessor objects that have been requested in the
          * parameter file.
          */
-        std::list<std::unique_ptr<VisualizationPostprocessors::Interface<dim> > > postprocessors;
+        std::list<std::unique_ptr<VisualizationPostprocessors::Interface<dim>>> postprocessors;
 
         /**
          * A structure that keeps some history about past output operations.
@@ -617,14 +624,14 @@ namespace aspect
           * there is no way to store the simulation time inside the .pvtu or
           * .vtu files).
           */
-          std::vector<std::pair<double,std::string> > times_and_pvtu_names;
+          std::vector<std::pair<double,std::string>> times_and_pvtu_names;
 
           /**
            * A list of list of filenames, sorted by timestep, that correspond to
            * what has been created as output. This is used to create a master
            * .visit file for the entire simulation.
            */
-          std::vector<std::vector<std::string> > output_file_names_by_timestep;
+          std::vector<std::vector<std::string>> output_file_names_by_timestep;
 
           /**
            * A set of data related to XDMF file sections describing the HDF5
@@ -705,12 +712,12 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_VISUALIZATION_POSTPROCESSOR_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::VisualizationPostprocessors::Interface<2>,classname<2> > \
-    dummy_ ## classname ## _2d (&aspect::Postprocess::Visualization<2>::register_visualization_postprocessor, \
-                                name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::VisualizationPostprocessors::Interface<3>,classname<3> > \
-    dummy_ ## classname ## _3d (&aspect::Postprocess::Visualization<3>::register_visualization_postprocessor, \
-                                name, description); \
+    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::VisualizationPostprocessors::Interface<2>,classname<2>> \
+        dummy_ ## classname ## _2d (&aspect::Postprocess::Visualization<2>::register_visualization_postprocessor, \
+                                    name, description); \
+    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::VisualizationPostprocessors::Interface<3>,classname<3>> \
+        dummy_ ## classname ## _3d (&aspect::Postprocess::Visualization<3>::register_visualization_postprocessor, \
+                                    name, description); \
   }
 }
 

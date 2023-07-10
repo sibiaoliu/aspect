@@ -28,15 +28,4 @@
 #include <functional>
 #include <memory>
 
-// for std_cxx14::make_unique:
-#if DEAL_II_VERSION_GTE(9,3,0)
-// avoid deprecated std_cxx14 inside deal.II
-namespace std_cxx14
-{
-  using std::make_unique;
-}
-#else
-#include <deal.II/base/std_cxx14/memory.h>
-#endif
-
 #endif

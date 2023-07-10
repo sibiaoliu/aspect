@@ -32,11 +32,6 @@ namespace aspect
   namespace InitialTopographyModel
   {
     template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-
-    template <int dim>
     void
     Interface<dim>::initialize ()
     {}
@@ -62,8 +57,8 @@ namespace aspect
       std::tuple
       <void *,
       void *,
-      internal::Plugins::PluginList<Interface<2> >,
-      internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      internal::Plugins::PluginList<Interface<2>>,
+      internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -159,12 +154,12 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<InitialTopographyModel::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<InitialTopographyModel::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<InitialTopographyModel::Interface<2>>::PluginInfo> *
+                                                                                 internal::Plugins::PluginList<InitialTopographyModel::Interface<2>>::plugins = nullptr;
 
       template <>
-      std::list<internal::Plugins::PluginList<InitialTopographyModel::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<InitialTopographyModel::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<InitialTopographyModel::Interface<3>>::PluginInfo> *
+                                                                                 internal::Plugins::PluginList<InitialTopographyModel::Interface<3>>::plugins = nullptr;
     }
   }
 

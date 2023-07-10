@@ -30,9 +30,9 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-#include <sys/stat.h>
-#include <stdlib.h>
 #include <boost/lexical_cast.hpp>
+#include <cstdlib>
+#include <sys/stat.h>
 
 namespace aspect
 {
@@ -1007,6 +1007,15 @@ namespace aspect
                            "method implemented is 'entropy viscosity' as described in \\cite {KHB12}. "
                            "SUPG is currently experimental.");
 
+        prm.declare_entry ("List of compositional fields with disabled boundary entropy viscosity", "",
+                           Patterns::List(Patterns::Anything()),
+                           "Select for which compositional fields to skip the entropy viscosity "
+                           "stabilization at dirichlet boundaries. This is "
+                           "only advisable for compositional fields"
+                           "that have intrinsic physical diffusion terms, otherwise "
+                           "oscillations may develop. The parameter should contain a list of "
+                           "compositional field names.");
+
         prm.declare_entry ("Use artificial viscosity smoothing", "false",
                            Patterns::Bool (),
                            "If set to false, the artificial viscosity of a cell is computed and "
@@ -1135,7 +1144,7 @@ namespace aspect
     prm.enter_subsection ("Temperature field");
     {
       prm.declare_entry ("Temperature method", "field",
-                         Patterns::Selection("field|prescribed field"),
+                         Patterns::Selection("field|prescribed field|static"),
                          "A comma separated list denoting the solution method of the "
                          "temperature field. Each entry of the list must be "
                          "one of the currently implemented field types."
@@ -1153,7 +1162,12 @@ namespace aspect
                          "marked with this method, then the value of a specific additional material "
                          "model output, called the `PrescribedTemperatureOutputs' is interpolated "
                          "onto the temperature. This field does not change otherwise, it is not "
-                         "advected with the flow. \n"
+                         "advected with the flow. "
+                         "\n"
+                         "\\item ``static'': If a temperature field is marked "
+                         "this way, then it does not evolve at all. Its values are "
+                         "simply set to the initial conditions, and will then "
+                         "never change."
                          "\\end{itemize}");
     }
     prm.leave_subsection();
@@ -1167,11 +1181,24 @@ namespace aspect
       prm.declare_entry ("Names of fields", "",
                          Patterns::List(Patterns::Anything()),
                          "A user-defined name for each of the compositional fields requested.");
+      prm.declare_entry ("Types of fields", "unspecified",
+                         Patterns::List (Patterns::Selection("chemical composition|stress|grain size|porosity|density|generic|unspecified")),
+                         "A type for each of the compositional fields requested. "
+                         "Each entry of the list must be "
+                         "one of several recognized types: chemical composition, "
+                         "stress, grain size, porosity, general and unspecified. "
+                         "The generic type is intended to be a placeholder type "
+                         "that has no effect on the running of any material model, "
+                         "while the unspecified type is intended to tell ASPECT "
+                         "that the user has not explicitly indicated the type of "
+                         "field (facilitating parameter file checking). "
+                         "If a plugin such as a material model uses these types, "
+                         "the choice of type will affect how that module functions.");
       prm.declare_entry ("Compositional field methods", "",
                          Patterns::List (Patterns::Selection("field|particles|volume of fluid|static|melt field|prescribed field|prescribed field with diffusion")),
                          "A comma separated list denoting the solution method of each "
                          "compositional field. Each entry of the list must be "
-                         "one of the currently implemented field types."
+                         "one of the currently implemented field methods."
                          "\n\n"
                          "These choices correspond to the following methods by which "
                          "compositional fields gain their values:"
@@ -1675,6 +1702,9 @@ namespace aspect
                                                                                       (Utilities::split_string_list(prm.get ("Global composition minimum"))),
                                                                                       n_compositional_fields,
                                                                                       "Global composition minimum");
+        compositional_fields_with_disabled_boundary_entropy_viscosity =
+          Utilities::split_string_list(prm.get("List of compositional fields with disabled boundary entropy viscosity"));
+
       }
       prm.leave_subsection ();
 
@@ -1721,6 +1751,8 @@ namespace aspect
         temperature_method = AdvectionFieldMethod::fem_field;
       else if (x_temperature_method == "prescribed field")
         temperature_method = AdvectionFieldMethod::prescribed_field;
+      else if (x_temperature_method == "static")
+        temperature_method = AdvectionFieldMethod::static_field;
       else
         AssertThrow(false,ExcNotImplemented());
     }
@@ -1783,6 +1815,42 @@ namespace aspect
 
       AssertThrow (normalized_fields.size() <= n_compositional_fields,
                    ExcMessage("Invalid input parameter file: Too many entries in List of normalized fields"));
+
+      // Process the compositional field types
+      // There are three valid cases:
+      // 1) The user doesn't specify types of fields. This choice should
+      // result in the default type being used for all fields.
+      // The default type is "unspecified".
+      // 2) The user specifies just one type of field. In this case, ASPECT
+      // should automatically assume that all fields have the same type.
+      // 3) The user specifies types for every compositional field.
+      std::vector<std::string> x_compositional_field_types
+        = Utilities::split_string_list
+          (prm.get ("Types of fields"));
+
+      AssertThrow ((x_compositional_field_types.size() == 1) ||
+                   (x_compositional_field_types.size() == n_compositional_fields),
+                   ExcMessage ("The length of the list of names for the field types of compositional "
+                               "fields needs to either have one entry or have a length equal to "
+                               "the number of compositional fields."));
+
+      // If only one method is specified apply this to all fields
+      if (x_compositional_field_types.size() == 1)
+        x_compositional_field_types = std::vector<std::string> (n_compositional_fields, x_compositional_field_types[0]);
+
+      // For backwards compatibility, convert a field named "density_field" without type to a density field
+      const unsigned int density_index = std::find(names_of_compositional_fields.begin(), names_of_compositional_fields.end(), "density_field")
+                                         - names_of_compositional_fields.begin();
+      if (density_index != n_compositional_fields && x_compositional_field_types[density_index] == "unspecified")
+        x_compositional_field_types[density_index] = "density";
+
+      AssertThrow (std::count(x_compositional_field_types.begin(), x_compositional_field_types.end(), "density") < 2,
+                   ExcMessage("There can only be one field of type 'density' in a simulation!"));
+
+      composition_descriptions.resize(n_compositional_fields);
+
+      for (unsigned int i=0; i<n_compositional_fields; ++i)
+        composition_descriptions[i].type = CompositionalFieldDescription::parse_type(x_compositional_field_types[i]);
 
       std::vector<std::string> x_compositional_field_methods
         = Utilities::split_string_list
@@ -1938,6 +2006,21 @@ namespace aspect
           mapped_particle_properties.insert(std::make_pair(compositional_field_index,
                                                            std::make_pair(particle_property,atoi(component.c_str()))));
         }
+
+      // Check that the names inside compositional_fields_with_disabled_boundary_entropy_viscosity
+      // are actually fields. We parse and store this value above, but only here do we know the
+      // names of the present fields.
+      for (const std::string &field_name: compositional_fields_with_disabled_boundary_entropy_viscosity)
+        {
+          AssertThrow(std::find(names_of_compositional_fields.begin(),
+                                names_of_compositional_fields.end(),
+                                field_name)
+                      != names_of_compositional_fields.end(),
+                      ExcMessage("The entry '" + field_name + "' in the parameter "
+                                 "<List of compositional fields with disabled boundary entropy viscosity> "
+                                 "is not a valid name of a compositional field "
+                                 "as specified in the <Compositional fields/Names of fields> parameter."));
+        }
     }
     prm.leave_subsection ();
 
@@ -2057,7 +2140,7 @@ namespace aspect
             {
               AssertThrow (false, ExcMessage ("While parsing the entry <Boundary traction model/Prescribed "
                                               "traction indicators>, there was an error. Specifically, "
-                                              "the conversion function complained as follows: "
+                                              "the conversion function complained as follows:\n\n"
                                               + error));
             }
 
@@ -2089,7 +2172,7 @@ namespace aspect
         {
           AssertThrow (false, ExcMessage ("While parsing the entry <Boundary heat flux model/Fixed heat flux "
                                           "boundary indicators>, there was an error. Specifically, "
-                                          "the conversion function complained as follows: "
+                                          "the conversion function complained as follows:\n\n"
                                           + error));
         }
     }

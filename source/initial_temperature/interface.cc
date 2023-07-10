@@ -33,11 +33,6 @@ namespace aspect
   namespace InitialTemperature
   {
     template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-
-    template <int dim>
     void
     Interface<dim>::initialize ()
     {}
@@ -72,8 +67,8 @@ namespace aspect
       std::tuple
       <void *,
       void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -132,7 +127,7 @@ namespace aspect
       for (auto &model_name : model_names)
         {
           // create initial temperature objects
-          initial_temperature_objects.push_back (std::unique_ptr<Interface<dim> >
+          initial_temperature_objects.push_back (std::unique_ptr<Interface<dim>>
                                                  (std::get<dim>(registered_plugins)
                                                   .create_plugin (model_name,
                                                                   "Initial temperature model::Model names")));
@@ -172,7 +167,7 @@ namespace aspect
 
 
     template <int dim>
-    const std::list<std::unique_ptr<Interface<dim> > > &
+    const std::list<std::unique_ptr<Interface<dim>>> &
     Manager<dim>::get_active_initial_temperature_conditions () const
     {
       return initial_temperature_objects;
@@ -253,11 +248,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<InitialTemperature::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<2>>::PluginInfo> *
+                                                                             internal::Plugins::PluginList<InitialTemperature::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<InitialTemperature::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<3>>::PluginInfo> *
+                                                                             internal::Plugins::PluginList<InitialTemperature::Interface<3>>::plugins = nullptr;
     }
   }
 

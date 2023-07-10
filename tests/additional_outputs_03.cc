@@ -93,7 +93,7 @@ namespace aspect
           return;
 
         std::cout << "   creating additional output!" << std::endl;
-        out.additional_outputs.push_back(std_cxx14::make_unique<MaterialModel::AdditionalOutputs1<dim> > (2));
+        out.additional_outputs.push_back(std::make_unique<MaterialModel::AdditionalOutputs1<dim> > (2));
 
       }
 
@@ -108,7 +108,7 @@ namespace aspect
         std::cout << "* local_assemble_stokes call, have additional? " << (additional!=nullptr) << std::endl;
         if (additional!=nullptr)
           std::cout << "   value = " << additional->additional_material_output1[0]
-                    << " " << additional->additional_material_output1[1] << std::endl;
+                    << ' ' << additional->additional_material_output1[1] << std::endl;
 
 
       }

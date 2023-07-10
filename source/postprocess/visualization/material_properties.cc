@@ -97,7 +97,7 @@ namespace aspect
       void
       MaterialProperties<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,
@@ -132,11 +132,7 @@ namespace aspect
             &&
             this->get_parameters().material_averaging != MaterialModel::MaterialAveraging::AveragingOperation::project_to_Q1_only_viscosity)
           MaterialModel::MaterialAveraging::average (this->get_parameters().material_averaging,
-#if DEAL_II_VERSION_GTE(9,3,0)
                                                      input_data.template get_cell<dim>(),
-#else
-                                                     input_data.template get_cell<DoFHandler<dim>>(),
-#endif
                                                      Quadrature<dim>(),
                                                      this->get_mapping(),
                                                      out);
@@ -275,16 +271,15 @@ namespace aspect
       ASPECT_REGISTER_VISUALIZATION_POSTPROCESSOR(MaterialProperties,
                                                   "material properties",
                                                   "A visualization output object that generates output "
-                                                  "for the material properties given by the material model."
-                                                  "There are a number of other visualization postprocessors "
-                                                  "that offer to write individual material properties. However, "
-                                                  "they all individually have to evaluate the material model. "
-                                                  "This is inefficient if one wants to output more than just "
-                                                  "one or two of the fields provided by the material model. "
+                                                  "for the material properties given by the material model. "
                                                   "The current postprocessor allows to output a (potentially "
                                                   "large) subset of all of the information provided by "
                                                   "material models at once, with just a single material model "
-                                                  "evaluation per output point."
+                                                  "evaluation per output point. "
+                                                  "Although individual properties can still be listed in the "
+                                                  "``List of output variables'', this visualization plugin "
+                                                  "is called internally to avoid duplicated evaluations of "
+                                                  "the material model. "
                                                   "\n\n"
                                                   "In almost all places inside \\aspect{}, the program "
                                                   "can use ``averaged'' material properties, for example for "
