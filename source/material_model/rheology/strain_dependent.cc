@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2021 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -84,7 +84,7 @@ namespace aspect
                            "approximated as the product of the second invariant of the strain rate "
                            "in each time step and the time step size in regions where material is "
                            "not plastically yielding. This quantity is integrated and tracked over time, and "
-                           "used to weaken the the pre-yield viscosity. The cohesion and friction angle are "
+                           "used to weaken the pre-yield viscosity. The cohesion and friction angle are "
                            "not weakened."
                            "\n\n"
                            "\\item ``default'': The default option has the same behavior as ``none'', "
@@ -152,7 +152,7 @@ namespace aspect
                            "If only one value is given, then all use the same value.  Units: None.");
 
         prm.declare_entry ("Strain healing mechanism", "no healing",
-                           Patterns::Selection("no healing|temperature dependent"),
+                           Patterns::Selection("no healing|temperature dependent|fracture healing"),
                            "Whether to apply strain healing to plastic yielding and viscosity terms, "
                            "and if yes, which method to use. The following methods are available:"
                            "\n\n"
@@ -163,7 +163,14 @@ namespace aspect
                            "to the temperature-dependent Frank Kamenetskii formulation, computes "
                            "strain healing as removing strain as a function of temperature, time, "
                            "and a user-defined healing rate and prefactor "
-                           "as done in Fuchs and Becker, 2019, for mantle convection");
+                           "as done in Fuchs and Becker, 2019, for mantle convection. "
+                           "\n\n"
+                           "\\item ``fracture healing'': Fracture-related healing applied to "
+                           "plastic yielding term, reducing the accumulated plastic strain with "
+                           "time on deactivated, slowly creeping fractures (e.g., faults). "
+                           "This mechanism is refered to Poliakov & Buck, 1998. "
+                           "Note that this mechanism is only tested with the option -  "
+                           "plastic weakening with plastic strain only ");
 
         prm.declare_entry ("Strain healing temperature dependent recovery rate", "1.e-15", Patterns::Double(0),
                            "Recovery rate prefactor for temperature dependent "
@@ -172,6 +179,10 @@ namespace aspect
         prm.declare_entry ("Strain healing temperature dependent prefactor", "15.", Patterns::Double(0),
                            "Prefactor for temperature dependent "
                            "strain healing. Units: None");
+
+        prm.declare_entry ("Strain healing fracture recovery rate", "1.e-13", Patterns::Double(0),
+                           "Constant fracture recovery rate for deactivating fractures, "
+                           "which is equal to 1/fracture healing time. Units: $1/s$");
       }
 
       template <int dim>
@@ -223,7 +234,7 @@ namespace aspect
         if (weakening_mechanism == finite_strain_tensor)
           {
             AssertThrow(this->n_compositional_fields() >= s,
-                        ExcMessage("There must be enough compositional fields to track all components of the finite strain tensor (4 in 2D, 9 in 3D). "));
+                        ExcMessage("There must be enough compositional fields to track all components of the finite strain tensor (4 in 2d, 9 in 3d). "));
             // Assert that fields exist and that they are in the right order
             const unsigned int n_s11 = this->introspection().compositional_index_for_name("s11");
             const unsigned int n_s12 = this->introspection().compositional_index_for_name("s12");
@@ -271,17 +282,32 @@ namespace aspect
                          Parameters<dim>::NonlinearSolver::single_Advection_iterated_Stokes
                          ||
                          this->get_parameters().nonlinear_solver ==
+                         Parameters<dim>::NonlinearSolver::iterated_Advection_and_Stokes
+                         ||
+                         this->get_parameters().nonlinear_solver ==
                          Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes
                          ||
                          this->get_parameters().nonlinear_solver ==
-                         Parameters<dim>::NonlinearSolver::single_Advection_iterated_defect_correction_Stokes),
+                         Parameters<dim>::NonlinearSolver::iterated_Advection_and_Newton_Stokes
+                         ||
+                         this->get_parameters().nonlinear_solver ==
+                         Parameters<dim>::NonlinearSolver::single_Advection_iterated_defect_correction_Stokes
+                         ||
+                         this->get_parameters().nonlinear_solver ==
+                         Parameters<dim>::NonlinearSolver::iterated_Advection_and_defect_correction_Stokes
+                         ||
+                         this->get_parameters().nonlinear_solver ==
+                         Parameters<dim>::NonlinearSolver::no_Advection_no_Stokes),
                         ExcMessage("The material model will only work with the nonlinear "
                                    "solver schemes 'single Advection, single Stokes', "
                                    "'single Advection, iterated Stokes', "
-                                   "'single Advection, iterated Newton Stokes', and "
-                                   "'single Advection, iterated defect correction Stokes' "
-                                   "when strain weakening is enabled, because more than one nonlinear "
-                                   "advection iteration will result in the incorrect value of strain."));
+                                   "'iterated Advection and Stokes', "
+                                   "'single Advection, iterated Newton Stokes', "
+                                   "'iterated Advection and Newton Stokes', "
+                                   "'single Advection, iterated defect correction Stokes', "
+                                   "'iterated Advection and defect correction Stokes, and' "
+                                   "'no Advection, no Stokes' "
+                                   "when strain weakening is enabled."));
           }
 
 
@@ -318,6 +344,8 @@ namespace aspect
           healing_mechanism = no_healing;
         else if (prm.get ("Strain healing mechanism") == "temperature dependent")
           healing_mechanism = temperature_dependent;
+        else if (prm.get ("Strain healing mechanism") == "fracture healing")
+          healing_mechanism = fracture_healing;
         else
           AssertThrow(false, ExcMessage("Not a valid Strain healing mechanism!"));
 
@@ -342,6 +370,8 @@ namespace aspect
         strain_healing_temperature_dependent_recovery_rate = prm.get_double ("Strain healing temperature dependent recovery rate");
 
         strain_healing_temperature_dependent_prefactor = prm.get_double ("Strain healing temperature dependent prefactor");
+
+        strain_healing_fracture_recovery_rate = prm.get_double ("Strain healing fracture recovery rate");
       }
 
 
@@ -441,6 +471,15 @@ namespace aspect
                               * this->get_timestep();
               break;
             }
+            case fracture_healing:
+            {
+              // Formula: APS_new = APS_current + delta_APS, where
+              // delta_APS = edot_ii*dt - recovery_rate*dt is the strain
+              // increment due to fracture strain healing. The recovery_rate
+              // is 1/fracture healing time. See Eq. 12 in Gerya (2013).
+              healed_strain = strain_healing_fracture_recovery_rate * this->get_timestep();
+              break;
+            }
           }
         return healed_strain;
       }
@@ -498,15 +537,43 @@ namespace aspect
         // Calculate changes in strain and update the reaction terms
         if  (this->simulator_is_past_initialization() && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
           {
-            const double edot_ii = std::max(sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))),min_strain_rate);
-            double delta_e_ii = edot_ii*this->get_timestep();
+            Assert(std::isfinite(in.strain_rate[i].norm()),
+                   ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
+                              "not filled by the caller."));
 
-            // Adjusting strain values to account for strain healing without exceeding an unreasonable range
-            if (healing_mechanism != no_healing)
+            const double edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(in.strain_rate[i])), 0.)),
+                                            min_strain_rate);
+            // strain increment from current timestep
+            double delta_e_ii = edot_ii*this->get_timestep();
+            // MAKE A TEST TO CALL CURRENT STRAIN
+            // // current extrapolate strain: either accumulated plastic strain or total strain
+            // double current_e_ii = 0.0;
+            // if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
+            //   current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("total_strain")];
+            // else if (weakening_mechanism == plastic_weakening_with_plastic_strain_only || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
+            //   current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")];
+            // else
+            //   AssertThrow(false, ExcNotImplemented());
+
+            // Adjusting strain values to account for strain healing
+            // without exceeding an unreasonable range
+            if (healing_mechanism == temperature_dependent)
               {
                 // Never heal more strain than exists
                 delta_e_ii -= calculate_strain_healing(in,i);
               }
+            if (healing_mechanism == fracture_healing)
+              {
+                // new strain increment due to fracture healing
+                // Note that the strain healing mechanism is not used
+                // for the first timestep.
+                //if (this->get_timestep_number() == 1)
+                //  delta_e_ii += 0.0;
+                //else
+                  // delta_e_ii += current_e_ii / (calculate_strain_healing(in,i)+1.0) - current_e_ii - edot_ii*this->get_timestep();
+                delta_e_ii -= calculate_strain_healing(in,i);                  
+              }
+
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_only && plastic_yielding == true)
               out.reaction_terms[i][this->introspection().compositional_index_for_name("plastic_strain")] =
                 std::max(delta_e_ii, -in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")]);
