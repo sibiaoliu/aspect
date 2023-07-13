@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2020 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2020 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -332,8 +332,7 @@ namespace aspect
           Rheology::DruckerPragerParameters drucker_prager_parameters;
 
         /**
-         * Parsed function that specifies the region and amount of
-         * material that is injected into the model.
+         * Parsed function of the dike injection.
          */
         Functions::ParsedFunction<dim> injection_function;
         

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2020 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2020 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -125,59 +125,42 @@ namespace aspect
                                               (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
 
         double edot_ii;
-
-        // If the dike injection is activated, we want to remove its
-        // effect on the strain rate when calculating the viscosity
-        double dike_injection_rate = 0.0;
-        if (this->convert_output_to_years())
-          dike_injection_rate = injection_function.value(in.position[i]) / year_in_seconds;
-        else
-          dike_injection_rate = injection_function.value(in.position[i]);
-                        
-        // dike effect on the strain rate: xx, yy, zz components
-        // const double dike_xx = -2.0 / 3.0 * dike_injection_rate;
-        // const double dike_yy = 1.0 / 3.0 * dike_injection_rate;
-        // const double dike_zz = 1.0 / 3.0 * dike_injection_rate;
-        // const double dike_ii = std::sqrt(0.5 * (std::pow(dike_xx,2) + std::pow(dike_yy,2) + std::pow(dike_zz,2)));
-
-        SymmetricTensor<2, dim> strain_rate_current = in.strain_rate[i];
-        SymmetricTensor<2, dim> deviatoric_strain_rate_current = deviator(strain_rate_current);
-        const double edot_ii_origin = std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.));
-        if(dike_injection_rate !=0)
-        {
-          std::cout << "edot_ii_rogin: " << edot_ii_origin << " 1/s \n" << std::endl;
-          std::cout << "strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << "strain rate zz: " << strain_rate_current[2][2] << " 1/s \n" << std::endl;                 
-          std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate_current[2][2] << " 1/s \n" << std::endl;
-        }
-
+        // The deviatoric strain rate
+        SymmetricTensor<2, dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);
         if (use_reference_strainrate)
           edot_ii = ref_strain_rate;
         else
-          {  
-            // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
-            
-            // If the dike injection is activated --- TEST first
-            if (this->get_parameters().enable_dike_injection == true)
-              {
-                //remove dike contribution to strain rate from deviatoric strain rate (for xx, yy and zz components)
-                deviatoric_strain_rate_current[0][0] -= 2.0 / 3.0 * dike_injection_rate;
-                deviatoric_strain_rate_current[1][1] += 1.0 / 3.0 * dike_injection_rate;
-                deviatoric_strain_rate_current[2][2] += 1.0 / 3.0 * dike_injection_rate;
-                edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate_current), 0.)),		
-                                min_strain_rate);
-              }
+          {
+            // If the dike injection is activated, we want to remove its
+            // effect on the deviatoric strain rate when calculating the viscosity
+            double dike_injection_rate = 0.0;
+            if (this->convert_output_to_years())
+              dike_injection_rate = injection_function.value(in.position[i]) / year_in_seconds;
             else
-              edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(in.strain_rate[i])), 0.)),		
-                              min_strain_rate);
+              dike_injection_rate = injection_function.value(in.position[i]);
 
-            if (dike_injection_rate !=0)
+            if (this->get_parameters().enable_prescribed_dilation)
               {
-                std::cout << "NEW edot_ii: " << edot_ii << " 1/s \n" << std::endl;
-                std::cout << "NEW strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "NEW strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << "NEW strain rate zz: " << strain_rate_current[2][2] << " 1/s \n" << std::endl;        
-                std::cout << "NEW Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "NEW Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << "NEW Dev. strain rate zz: " << deviatoric_strain_rate_current[2][2] << " 1/s \n" << std::endl; 
+                //remove the contribution of dilation term from the deviatoric strain rate.
+                if (dim==2)
+                  {
+                    deviatoric_strain_rate[0][0] -= 1.0 / 2.0 * dike_injection_rate;
+                    deviatoric_strain_rate[1][1] += 1.0 / 2.0 * dike_injection_rate;
+                  }
+                else
+                  {
+                    deviatoric_strain_rate[0][0] -= 2.0 / 3.0 * dike_injection_rate;
+                    deviatoric_strain_rate[1][1] += 1.0 / 3.0 * dike_injection_rate;
+                    deviatoric_strain_rate[2][2] += 1.0 / 3.0 * dike_injection_rate;
+                  }
               }
-   
+            // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
+            edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate), 0.)),
+                               min_strain_rate);              
           }
+          //std::cout << "edot_ii_rogin: " << edot_ii_origin << " 1/s \n" << std::endl;
+          //std::cout << "strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << "strain rate zz: " << strain_rate_current[2][2] << " 1/s \n" << std::endl;                 
+          //std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate_current[2][2] << " 1/s \n" << std::endl;
 
         // Calculate viscosities for each of the individual compositional phases
         for (unsigned int j=0; j < volume_fractions.size(); ++j)
@@ -294,7 +277,7 @@ namespace aspect
                     Assert(std::isfinite(in.strain_rate[i].norm()),
                            ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                                       "not filled by the caller."));
-                    const double viscoelastic_strain_rate_invariant = elastic_rheology.calculate_viscoelastic_strain_rate(deviatoric_strain_rate_current,
+                    const double viscoelastic_strain_rate_invariant = elastic_rheology.calculate_viscoelastic_strain_rate(deviatoric_strain_rate,
                                                                       stress_old,
                                                                       elastic_shear_moduli[j]);
 
@@ -334,10 +317,10 @@ namespace aspect
             // Determine if the pressure used in Drucker Prager plasticity will be capped at 0 (default).
             // This may be necessary in models without gravity and when the dynamic stresses are much higher
             // than the lithostatic pressure.
-
-            double pressure_for_plasticity = in.pressure[i];
+            // Use the lithostatic pressure for the plastic part
+            double pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
             if (allow_negative_pressures_in_plasticity == false)
-              pressure_for_plasticity = std::max(in.pressure[i],0.0);
+              pressure_for_plasticity = std::max(this->get_adiabatic_conditions().pressure(in.position[i]),0.0);
 
             // Step 5a: calculate Drucker-Prager yield stress
             const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
@@ -415,7 +398,7 @@ namespace aspect
                                     const std::vector<unsigned int> &n_phase_transitions_per_composition) const
       {
         MaterialModel::MaterialModelDerivatives<dim> *derivatives =
-          out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>();        
+          out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>();
 
         if (derivatives != nullptr)
           {
@@ -564,7 +547,7 @@ namespace aspect
                            "Upper cutoff for effective viscosity. Units: \\si{\\pascal\\second}. "
                            "List with as many components as active "
                            "compositional fields (material data is assumed to "
-                           "be in order with the ordering of the fields). ");                     
+                           "be in order with the ordering of the fields). ");
 
         // Rheological parameters
         prm.declare_entry ("Viscosity averaging scheme", "harmonic",
@@ -643,13 +626,6 @@ namespace aspect
         prm.declare_entry ("Include viscoelasticity", "false",
                            Patterns::Bool (),
                            "Whether to include elastic effects in the rheological formulation.");
-        //Adding the same dike injection function for removal_in_eta
-        prm.enter_subsection("Remove dike effect function");
-        {
-          Functions::ParsedFunction<dim>::declare_parameters(prm,1);
-          prm.declare_entry("Function expression","0.0");
-        }
-        prm.leave_subsection();                           
       }
 
 
@@ -777,24 +753,6 @@ namespace aspect
                        ExcMessage("If adiabatic heating is enabled you should not add another adiabatic gradient"
                                   "to the temperature for computing the viscosity, because the ambient"
                                   "temperature profile already includes the adiabatic gradient."));
-        
-        //Adding the same dike injection function for removal_in_eta
-        prm.enter_subsection("Remove dike effect function");
-        {
-          try
-            {
-              injection_function.parse_parameters(prm);
-            }
-          catch (...)
-            {
-              std::cerr << "FunctionParser failed to parse\n"
-                        << "\t Remove dike effect function\n"
-                        << "with expression \n"
-                        << "\t' " << prm.get("Function expression") << "'";
-              throw;
-            } 
-        }
-        prm.leave_subsection();
 
       }
 
