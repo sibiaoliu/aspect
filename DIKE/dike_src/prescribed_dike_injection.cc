@@ -20,8 +20,13 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/simulator_access.h>
 #include <aspect/simulator.h>
+#include <aspect/utilities.h>
+#include <aspect/global.h>
+
 #include <deal.II/base/function_lib.h>
 #include <deal.II/base/parsed_function.h>
+#include <deal.II/base/signaling_nan.h>
+
 #include <aspect/heating_model/interface.h>
 #include <aspect/material_model/visco_plastic.h>
 
@@ -195,6 +200,13 @@ namespace aspect
     void
     PrescribedDilation<dim>::update()
     {
+      // we get time passed as seconds (always) but may want
+      // to reinterpret it in years
+      if (this->convert_output_to_years())
+        injection_function.set_time (this->get_time() / year_in_seconds);
+      else
+        injection_function.set_time (this->get_time());
+      
       base_model->update();
     }
 
@@ -264,21 +276,21 @@ namespace aspect
                 {
                   AssertThrow(this->introspection().compositional_name_exists("injection_phase"),
                               ExcMessage("Material model prescribed dilation only works if there "
-                                         "is a compositional field called 'injection_phase'."));
+                                         "is a compositional field called 'injection_phase'. If "
+                                         "you only want the 'injection phase' field in the injection "
+                                         "area, you should prescribe other fields such as 'mantle' "
+                                         "below to be 0."));
 
                   if (c == this->introspection().compositional_index_for_name("injection_phase"))
                     out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
-                  
-                  // TODO: find a good way to avoid this user-defined compositional name
-                  if (c == this->introspection().compositional_index_for_name("mantle"))
+                  else if (c == this->introspection().compositional_index_for_name("mantle"))
                     out.reaction_terms[i][c] = -1.0 * composition[c];
-
-                  // Do not allow the plastic deformation within the dike
-                  if (c == this->introspection().compositional_index_for_name("plastic_strain"))
-                    out.reaction_terms[i][c] = -1.0 * composition[c];
+                  else if (c == this->introspection().compositional_index_for_name("plastic_strain"))
+                    out.reaction_terms[i][c] = -1.0 * composition[c];// No plastic deformation in the dike
+                
                 }
             }
-        }
+        } 
     }
 
     template <int dim>
@@ -335,12 +347,12 @@ namespace aspect
               }
             catch (...)
               {
-                std::cerr << "FunctionParser failed to parse\n"
+                std::cerr << "ERROR: FunctionParser failed to parse\n"
                           << "\t Injection function\n"
                           << "with expression \n"
                           << "\t' " << prm.get("Function expression") << "'";
                 throw;
-              }
+              } 
           }
           prm.leave_subsection();
         }
