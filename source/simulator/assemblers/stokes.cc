@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -398,28 +398,14 @@ namespace aspect
 
               // Only assemble this term if we are running incompressible, otherwise this term
               // is already included on the LHS of the equation.
-              // if (prescribed_dilation != nullptr && !material_model_is_compressible)
-              //   data.local_rhs(i) += (
-              //                          // RHS of momentum eqn: - \int 2/3 eta R, div v
-              //                          - 2.0 / 3.0 * eta
-              //                          * prescribed_dilation->dilation[q]
-              //                          * scratch.div_phi_u[i]
-              //                        ) * JxW;
+              if (prescribed_dilation != nullptr && !material_model_is_compressible)
+                data.local_rhs(i) += (
+                                       // RHS of momentum eqn: - \int 2/3 eta R, div v
+                                       - 2.0 / 3.0 * eta
+                                       * prescribed_dilation->dilation[q]
+                                       * scratch.div_phi_u[i]
+                                     ) * JxW;
 
-              if (scratch.rebuild_stokes_matrix)
-                for (unsigned int j=0; j<stokes_dofs_per_cell; ++j)
-                  {
-                    data.local_matrix(i,j) += ( (eta * 2.0 * (scratch.grads_phi_u[i] * scratch.grads_phi_u[j]))
-                                                // assemble \nabla p as -(p, div v):
-                                                - (pressure_scaling *
-                                                   scratch.div_phi_u[i] * scratch.phi_p[j])
-                                                // assemble the term -div(u) as -(div u, q).
-                                                // Note the negative sign to make this
-                                                // operator adjoint to the grad p term:
-                                                - (pressure_scaling *
-                                                   scratch.phi_p[i] * scratch.div_phi_u[j]))
-                                              * JxW;
-                  }
             }
 
           // This is customized for the dike injection process:
@@ -443,6 +429,24 @@ namespace aspect
                 ++i;
               }
 
+          if (scratch.rebuild_stokes_matrix)
+            {
+              for (unsigned int i=0; i<stokes_dofs_per_cell; ++i)
+                for (unsigned int j=0; j<stokes_dofs_per_cell; ++j)
+                  {
+                    data.local_matrix(i,j) += ( (eta * 2.0 * (scratch.grads_phi_u[i] * scratch.grads_phi_u[j]))
+                                                // assemble \nabla p as -(p, div v):
+                                                - (pressure_scaling *
+                                                   scratch.div_phi_u[i] * scratch.phi_p[j])
+                                                // assemble the term -div(u) as -(div u, q).
+                                                // Note the negative sign to make this
+                                                // operator adjoint to the grad p term:
+                                                - (pressure_scaling *
+                                                   scratch.phi_p[i] * scratch.div_phi_u[j]))
+                                              * JxW;
+                  }
+            }
+           
           // If we are using the equal order Q1-Q1 element, then we also need
           // to put the stabilization term into the (P,P) block of the matrix:
           if (scratch.rebuild_stokes_matrix
