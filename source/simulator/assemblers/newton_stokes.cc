@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -316,13 +316,6 @@ namespace aspect
           const SymmetricTensor<2,dim> strain_rate = scratch.material_model_inputs.strain_rate[q];
           const double pressure = scratch.material_model_inputs.pressure[q];
           const double velocity_divergence = scratch.velocity_divergence[q];
-          const SymmetricTensor<2,dim> deviatoric_strain_rate = deviator(strain_rate);
-          // TEST: output the strain rate
-          if(prescribed_dilation->dilation[q] !=0)
-          {
-            std::cout << "strain rate xx: " << strain_rate[0][0] << " 1/s \n" << "strain rate yy: " << strain_rate[1][1] << " 1/s \n" << "strain rate zz: " << strain_rate[2][2] << " 1/s \n" << std::endl;                 
-            std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate[2][2] << " 1/s \n" << std::endl;          
-          }
 
           const Tensor<1,dim>
           gravity = this->get_gravity_model().gravity_vector (scratch.finite_element_values.quadrature_point(q));
@@ -335,7 +328,7 @@ namespace aspect
           // first assemble the rhs
           for (unsigned int i=0; i<stokes_dofs_per_cell; ++i)
             {
-              data.local_rhs(i) -= (eta * 2.0 * (scratch.grads_phi_u[i] * deviator(strain_rate))
+              data.local_rhs(i) -= (eta * 2.0 * (scratch.grads_phi_u[i] * strain_rate)
                                     - (scratch.div_phi_u[i] * pressure)
                                     - (pressure_scaling * scratch.phi_p[i] * velocity_divergence)
                                     -(density * gravity * scratch.phi_u[i]))
@@ -367,8 +360,6 @@ namespace aspect
                                        * prescribed_dilation->dilation[q]
                                        * scratch.div_phi_u[i]
                                      ) * JxW;
-              // if (this->get_parameters().enable_dike_injection == true && !material_model_is_compressible)
-              //   data.local_rhs(i) += (- eta_two_thirds * (scratch.div_phi_u[i]*velocity_divergence)) * JxW;
             }
 
           // This is customized for the dike injection process:
@@ -401,7 +392,6 @@ namespace aspect
                   {
                     data.local_matrix(i,j) += (
                                                 eta * 2.0 * (scratch.grads_phi_u[i] * scratch.grads_phi_u[j])
-                                                // - eta_two_thirds * (scratch.div_phi_u[i] * scratch.div_phi_u[j])
                                                 // assemble \nabla p as -(p, div v):
                                                 - (pressure_scaling *
                                                    (scratch.div_phi_u[i] * scratch.phi_p[j]))
@@ -457,12 +447,6 @@ namespace aspect
                                                                                              + (scratch.grads_phi_u[j] * deta_deps_times_eps_times_phi[i]))
                                                         + derivative_scaling_factor * pressure_scaling * 2.0 * viscosity_derivative_wrt_pressure * scratch.phi_p[j] * (scratch.grads_phi_u[i] * strain_rate) )
                                                       * JxW;
-                            // if (this->get_parameters().enable_dike_injection == true && !material_model_is_compressible)                        
-                            //   data.local_matrix(i,j) += (-eta_two_thirds * (scratch.div_phi_u[i] * scratch.div_phi_u[j])
-                            //                              - derivative_scaling_factor * two_thirds * scratch.div_phi_u[i] * ( (viscosity_derivative_wrt_strain_rate * scratch.grads_phi_u[j]) * velocity_divergence)
-                            //                              - derivative_scaling_factor * two_thirds * (scratch.div_phi_u[i] * viscosity_derivative_wrt_pressure * scratch.phi_p[j]) * velocity_divergence
-                            //                             )
-                            //                             * JxW;
 
                             Assert(dealii::numbers::is_finite(data.local_matrix(i,j)),
                                    ExcMessage ("Error: Assembly matrix is not finite." +
@@ -478,12 +462,6 @@ namespace aspect
                             data.local_matrix(i,j) += ( derivative_scaling_factor * alpha * 2.0 * (scratch.grads_phi_u[i] * deta_deps_times_eps_times_phi[j])
                                                         + derivative_scaling_factor * pressure_scaling * 2.0 * viscosity_derivative_wrt_pressure * scratch.phi_p[j] * (scratch.grads_phi_u[i] * strain_rate) )
                                                       * JxW;
-                            // if (this->get_parameters().enable_dike_injection == true && !material_model_is_compressible)                        
-                            //   data.local_matrix(i,j) += (-eta_two_thirds * (scratch.div_phi_u[i] * scratch.div_phi_u[j])
-                            //                              - derivative_scaling_factor * two_thirds * scratch.div_phi_u[i] * ( (viscosity_derivative_wrt_strain_rate * scratch.grads_phi_u[j]) * velocity_divergence)
-                            //                              - derivative_scaling_factor * two_thirds * (scratch.div_phi_u[i] * viscosity_derivative_wrt_pressure * scratch.phi_p[j]) * velocity_divergence
-                            //                             )
-                            //                             * JxW;
 
                             Assert(dealii::numbers::is_finite(data.local_matrix(i,j)),
                                    ExcMessage ("Error: Assembly matrix is not finite." +
