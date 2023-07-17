@@ -325,16 +325,25 @@ namespace aspect
             // Determine if the pressure used in Drucker Prager plasticity will be capped at 0 (default).
             // This may be necessary in models without gravity and when the dynamic stresses are much higher
             // than the lithostatic pressure.
-            // Use the lithostatic pressure for the plastic part
-            double pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
-            if (allow_negative_pressures_in_plasticity == false)
-              pressure_for_plasticity = std::max(this->get_adiabatic_conditions().pressure(in.position[i]),0.0);
 
+            double pressure_for_plasticity = in.pressure[i];
+            if (allow_negative_pressures_in_plasticity == false)
+              pressure_for_plasticity = std::max(in.pressure[i],0.0);
+            
+            // Note: Use the lithostatic pressure for the plastic part --- dike injection
+            if (use_adiabatic_pressure_in_creep)
+              pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
+
+            if (pressure_for_plasticity < 0.0)
+              std::cout << "Negative pressure: " << pressure_for_plasticity << std::endl;
+   
             // Step 5a: calculate Drucker-Prager yield stress
             const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
                                                                                        current_friction,
                                                                                        pressure_for_plasticity,
                                                                                        drucker_prager_parameters.max_yield_stress);
+            if (yield_stress < 0.0)
+              std::cout << "Negative yield stress: " << yield_stress << std::endl;
 
             // Step 5b: select if yield viscosity is based on Drucker Prager or stress limiter rheology
             double viscosity_yield = viscosity_pre_yield;
@@ -834,6 +843,10 @@ namespace aspect
             double pressure_for_plasticity = in.pressure[i];
             if (allow_negative_pressures_in_plasticity == false)
               pressure_for_plasticity = std::max(in.pressure[i], 0.0);
+
+            // Note: Use the lithostatic pressure for the plastic part --- dike injection
+            if (use_adiabatic_pressure_in_creep)
+              pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
 
             // average over the volume volume fractions
             for (unsigned int j = 0; j < volume_fractions.size(); ++j)
