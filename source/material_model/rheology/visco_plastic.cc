@@ -126,19 +126,12 @@ namespace aspect
 
         double edot_ii;
         // The deviatoric strain rate
-        SymmetricTensor<2, dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);                  
-        // Get the coordinate of the point.
-        const Point<dim> position = in.position[i];
-        //const std::array<double,dim> natural_position = this->get_geometry_model().cartesian_to_natural_coordinates(position);
-        //Point<dim> data_coordinates = Utilities::convert_array_to_point<dim>(natural_position);
-        if (position[0]>=0 && position[0]<=0.5e3 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
-          std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate[2][2] << " 1/s \n" << std::endl;
-      
+        SymmetricTensor<2, dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);
         if (use_reference_strainrate)
           edot_ii = ref_strain_rate;
         else
           {
-            // If the dike injection is activated, we want to remove its
+            // If the dike injection is on, we want to remove its
             // effect on the deviatoric strain rate when calculating the viscosity
             double dike_injection_rate = 0;
             if (this->convert_output_to_years())
@@ -146,9 +139,6 @@ namespace aspect
             else
               dike_injection_rate = injection_function.value(in.position[i]);
 
-            
-            if (position[0]>=0 && position[0]<=0.5e3 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
-              std::cout << "dike injection rate: " << dike_injection_rate << " 1/s \n" << std::endl;
 
             if (this->get_parameters().enable_prescribed_dilation)
               {
@@ -158,17 +148,11 @@ namespace aspect
                 if (dim==3)
                     deviatoric_strain_rate[2][2] += 1.0 / 3.0 * dike_injection_rate;
 
-              }
-            if (position[0]>=0 && position[0]<=0.5e3 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
-              std::cout << "NEW Dev. strain rate xx: " << deviatoric_strain_rate[0][0] << " 1/s \n" << "NEW Dev. strain rate yy: " << deviatoric_strain_rate[1][1] << " 1/s \n" << "NEW Dev. strain rate zz: " << deviatoric_strain_rate[2][2] << " 1/s \n" << std::endl;
-                    
+              }   
             // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
             edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate), 0.)),
                                min_strain_rate);              
           }
-          //std::cout << "edot_ii_rogin: " << edot_ii_origin << " 1/s \n" << std::endl;
-          //std::cout << "strain rate xx: " << strain_rate_current[0][0] << " 1/s \n" << "strain rate yy: " << strain_rate_current[1][1] << " 1/s \n" << "strain rate zz: " << strain_rate_current[2][2] << " 1/s \n" << std::endl;                 
-          //std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate_current[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate_current[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate_current[2][2] << " 1/s \n" << std::endl;
 
         // Calculate viscosities for each of the individual compositional phases
         for (unsigned int j=0; j < volume_fractions.size(); ++j)
@@ -333,17 +317,12 @@ namespace aspect
             // Note: Use the lithostatic pressure for the plastic part --- dike injection
             if (use_adiabatic_pressure_in_creep)
               pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
-
-            if (pressure_for_plasticity < 0.0)
-              std::cout << "Negative pressure: " << pressure_for_plasticity << std::endl;
    
             // Step 5a: calculate Drucker-Prager yield stress
             const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
                                                                                        current_friction,
                                                                                        pressure_for_plasticity,
                                                                                        drucker_prager_parameters.max_yield_stress);
-            if (yield_stress < 0.0)
-              std::cout << "Negative yield stress: " << yield_stress << std::endl;
 
             // Step 5b: select if yield viscosity is based on Drucker Prager or stress limiter rheology
             double viscosity_yield = viscosity_pre_yield;
