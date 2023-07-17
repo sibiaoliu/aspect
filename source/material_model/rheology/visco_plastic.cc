@@ -126,12 +126,12 @@ namespace aspect
 
         double edot_ii;
         // The deviatoric strain rate
-        SymmetricTensor<2, dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);
+        SymmetricTensor<2, dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);                  
         // Get the coordinate of the point.
         const Point<dim> position = in.position[i];
         //const std::array<double,dim> natural_position = this->get_geometry_model().cartesian_to_natural_coordinates(position);
         //Point<dim> data_coordinates = Utilities::convert_array_to_point<dim>(natural_position);
-        if (position[0]==0 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
+        if (position[0]>=0 && position[0]<=0.5e3 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
           std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate[2][2] << " 1/s \n" << std::endl;
       
         if (use_reference_strainrate)
@@ -140,23 +140,27 @@ namespace aspect
           {
             // If the dike injection is activated, we want to remove its
             // effect on the deviatoric strain rate when calculating the viscosity
-            // double dike_injection_rate = 4.95136539e-13;
-            // if (this->convert_output_to_years())
-            //   dike_injection_rate = injection_function.value(in.position[i]) / year_in_seconds;
-            // else
-            //   dike_injection_rate = injection_function.value(in.position[i]);
+            double dike_injection_rate = 0;
+            if (this->convert_output_to_years())
+              dike_injection_rate = injection_function.value(in.position[i]) / year_in_seconds;
+            else
+              dike_injection_rate = injection_function.value(in.position[i]);
+
+            
+            if (position[0]>=0 && position[0]<=0.5e3 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
+              std::cout << "dike injection rate: " << dike_injection_rate << " 1/s \n" << std::endl;
 
             if (this->get_parameters().enable_prescribed_dilation)
               {
                 //remove the contribution of dilation term from the deviatoric strain rate.
-                deviatoric_strain_rate[0][0] -= 2.0 / 3.0 * 4.95136539e-13; //dike_injection_rate;
-                deviatoric_strain_rate[1][1] += 1.0 / 3.0 * 4.95136539e-13; //dike_injection_rate;
+                deviatoric_strain_rate[0][0] -= 2.0 / 3.0 * dike_injection_rate;
+                deviatoric_strain_rate[1][1] += 1.0 / 3.0 * dike_injection_rate;
                 if (dim==3)
-                    deviatoric_strain_rate[2][2] += 1.0 / 3.0 * 4.95136539e-13; //dike_injection_rate;
+                    deviatoric_strain_rate[2][2] += 1.0 / 3.0 * dike_injection_rate;
 
               }
-            if (position[0]==0 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
-              std::cout << "Dev. strain rate xx: " << deviatoric_strain_rate[0][0] << " 1/s \n" << "Dev. strain rate yy: " << deviatoric_strain_rate[1][1] << " 1/s \n" << "Dev. strain rate zz: " << deviatoric_strain_rate[2][2] << " 1/s \n" << std::endl;
+            if (position[0]>=0 && position[0]<=0.5e3 && position[1]==0 && position[2]>=36e3 && position[2]<=37e3)
+              std::cout << "NEW Dev. strain rate xx: " << deviatoric_strain_rate[0][0] << " 1/s \n" << "NEW Dev. strain rate yy: " << deviatoric_strain_rate[1][1] << " 1/s \n" << "NEW Dev. strain rate zz: " << deviatoric_strain_rate[2][2] << " 1/s \n" << std::endl;
                     
             // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
             edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate), 0.)),
@@ -630,6 +634,13 @@ namespace aspect
         prm.declare_entry ("Include viscoelasticity", "false",
                            Patterns::Bool (),
                            "Whether to include elastic effects in the rheological formulation.");
+        //Adding the same dike injection function for removal_in_eta
+        prm.enter_subsection("Dike removal on the viscosity function");
+        {
+          Functions::ParsedFunction<dim>::declare_parameters(prm,1);
+          prm.declare_entry("Function expression","0.0");
+        }
+        prm.leave_subsection();                           
       }
 
 
@@ -757,6 +768,24 @@ namespace aspect
                        ExcMessage("If adiabatic heating is enabled you should not add another adiabatic gradient"
                                   "to the temperature for computing the viscosity, because the ambient"
                                   "temperature profile already includes the adiabatic gradient."));
+
+        //Adding the same dike injection function for removal_in_eta
+        prm.enter_subsection("Dike removal on the viscosity function");
+        {
+          try
+            {
+              injection_function.parse_parameters(prm);
+            }
+          catch (...)
+            {
+              std::cerr << "FunctionParser failed to parse\n"
+                        << "\t Remove dike effect on the viscosity function\n"
+                        << "with expression \n"
+                        << "\t' " << prm.get("Function expression") << "'";
+              throw;
+            } 
+        }
+        prm.leave_subsection();                                  
 
       }
 

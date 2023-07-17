@@ -331,10 +331,10 @@ namespace aspect
            */
           Rheology::DruckerPragerParameters drucker_prager_parameters;
 
-        /**
-         * Parsed function of the dike injection.
-         */
-        Functions::ParsedFunction<dim> injection_function;
+          /**
+           * Parsed function of the dike injection.
+           */
+          Functions::ParsedFunction<dim> injection_function;
         
       };
     }
