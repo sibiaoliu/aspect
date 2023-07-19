@@ -327,27 +327,28 @@ namespace aspect
                 Assert(std::isfinite(in.strain_rate[i].norm()),
                        ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                                   "not filled by the caller."));
+                // CHECK why the function call does not work (can compile, but model can't run)                  
                 //If the dike injection is on, removal dike effect on the deviatoric strain rate
-                MaterialModel::PrescribedPlasticDilation<dim>
-                *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
-                               ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
-                               : nullptr;
-                double dike_injection_rate = 0.0;
-                if(prescribed_dilation != nullptr && this->get_timestep_number() != 0)
-                  dike_injection_rate = prescribed_dilation->dilation[i];
-                SymmetricTensor<2, dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);
-                if (this->get_parameters().enable_prescribed_dilation)
-                  {
-                    //remove the contribution of dilation term from the deviatoric strain rate.
-                    deviatoric_strain_rate[0][0] -= 2.0 / 3.0 * dike_injection_rate;
-                    deviatoric_strain_rate[1][1] += 1.0 / 3.0 * dike_injection_rate;
-                    if (dim==3)
-                        deviatoric_strain_rate[2][2] += 1.0 / 3.0 * dike_injection_rate;
+                // MaterialModel::PrescribedPlasticDilation<dim>
+                // *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
+                //                ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
+                //                : nullptr;
+                // double dike_injection_rate = 0.0;
+                // if(prescribed_dilation != nullptr && this->get_timestep_number() != 0)
+                //   dike_injection_rate = prescribed_dilation->dilation[i];
+                // SymmetricTensor<2, dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);
+                // if (this->get_parameters().enable_prescribed_dilation)
+                //   {
+                //     //remove the contribution of dilation term from the deviatoric strain rate.
+                //     deviatoric_strain_rate[0][0] -= 2.0 / 3.0 * dike_injection_rate;
+                //     deviatoric_strain_rate[1][1] += 1.0 / 3.0 * dike_injection_rate;
+                //     if (dim==3)
+                //         deviatoric_strain_rate[2][2] += 1.0 / 3.0 * dike_injection_rate;
 
-                  }                
-                const SymmetricTensor<2,dim> stress_creep = 2. * average_viscoelastic_viscosity * ( deviatoric_strain_rate + stress_0 / (2. * damped_elastic_viscosity ) );
+                //   }                
+                // const SymmetricTensor<2,dim> stress_creep = 2. * average_viscoelastic_viscosity * ( deviatoric_strain_rate + stress_0 / (2. * damped_elastic_viscosity ) );
 
-                //const SymmetricTensor<2,dim> stress_creep = 2. * average_viscoelastic_viscosity * ( deviator(in.strain_rate[i]) + stress_0 / (2. * damped_elastic_viscosity ) );
+                const SymmetricTensor<2,dim> stress_creep = 2. * average_viscoelastic_viscosity * ( deviator(in.strain_rate[i]) + stress_0 / (2. * damped_elastic_viscosity ) );
 
                 // stress_new is the (new) stored elastic stress
                 SymmetricTensor<2,dim> stress_new = stress_creep * (1. - (elastic_damper_viscosity / damped_elastic_viscosity)) + elastic_damper_viscosity * stress_0 / damped_elastic_viscosity;

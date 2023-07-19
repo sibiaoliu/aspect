@@ -139,16 +139,18 @@ namespace aspect
             else
               dike_injection_rate = injection_function.value(in.position[i]);
 
-
-            if (this->get_parameters().enable_prescribed_dilation)
+            //remove the contribution of dilation term from the deviatoric strain rate.
+            if (dim==2)
+              {                
+                deviatoric_strain_rate[0][0] -= 1.0 / 2.0 * dike_injection_rate;
+                deviatoric_strain_rate[1][1] += 1.0 / 2.0 * dike_injection_rate;
+              }
+            else
               {
-                //remove the contribution of dilation term from the deviatoric strain rate.
                 deviatoric_strain_rate[0][0] -= 2.0 / 3.0 * dike_injection_rate;
                 deviatoric_strain_rate[1][1] += 1.0 / 3.0 * dike_injection_rate;
-                if (dim==3)
-                    deviatoric_strain_rate[2][2] += 1.0 / 3.0 * dike_injection_rate;
-
-              }   
+                deviatoric_strain_rate[2][2] += 1.0 / 3.0 * dike_injection_rate;               
+              }
             // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
             edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviatoric_strain_rate), 0.)),
                                min_strain_rate);              
