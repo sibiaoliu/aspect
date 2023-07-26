@@ -62,7 +62,7 @@ namespace aspect
      */
 
     template <int dim>
-    class PrescribedDilation : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
+    class PrescribedDikeInjection : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -143,7 +143,7 @@ namespace aspect
      * @ingroup HeatingModels
      */
     template <int dim>
-    class LatentHeatInjection : public Interface<dim>, public ::aspect::SimulatorAccess<dim>
+    class LatentHeatDikeInjection : public Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -191,14 +191,14 @@ namespace aspect
   {
     template <int dim>
     void
-    PrescribedDilation<dim>::initialize()
+    PrescribedDikeInjection<dim>::initialize()
     {
       base_model->initialize();
     }
 
     template <int dim>
     void
-    PrescribedDilation<dim>::update()
+    PrescribedDikeInjection<dim>::update()
     {
       // we get time passed as seconds (always) but may want
       // to reinterpret it in years
@@ -212,7 +212,7 @@ namespace aspect
 
     template <int dim>
     void
-    PrescribedDilation<dim>::evaluate(const typename Interface<dim>::MaterialModelInputs &in,
+    PrescribedDikeInjection<dim>::evaluate(const typename Interface<dim>::MaterialModelInputs &in,
                                       typename Interface<dim>::MaterialModelOutputs &out) const
     {
       // fill variable out with the results form the base material model
@@ -280,11 +280,11 @@ namespace aspect
 
     template <int dim>
     void
-    PrescribedDilation<dim>::declare_parameters (ParameterHandler &prm)
+    PrescribedDikeInjection<dim>::declare_parameters (ParameterHandler &prm)
     {
       prm.enter_subsection("Material model");
       {
-        prm.enter_subsection("Prescribed dilation");
+        prm.enter_subsection("Prescribed dike injection");
         {
           prm.declare_entry("Base model","simple",
                             Patterns::Selection(MaterialModel::get_valid_model_names_pattern<dim>()),
@@ -293,7 +293,7 @@ namespace aspect
                             "are the names of models that are also valid for the "
                             "``Material models/Model name'' parameter. See the documentation for "
                             "that for more information.");
-          prm.enter_subsection("Injection function");
+          prm.enter_subsection("Dike injection functioin");
           {
             Functions::ParsedFunction<dim>::declare_parameters(prm,1);
             prm.declare_entry("Function expression","0.0");
@@ -308,14 +308,14 @@ namespace aspect
 
     template <int dim>
     void
-    PrescribedDilation<dim>::parse_parameters (ParameterHandler &prm)
+    PrescribedDikeInjection<dim>::parse_parameters (ParameterHandler &prm)
     {
       prm.enter_subsection("Material model");
       {
-        prm.enter_subsection("Prescribed dilation");
+        prm.enter_subsection("Prescribed dike injection");
         {
-          AssertThrow( prm.get("Base model") != "prescribed dilation",
-                       ExcMessage("You may not use ''prescribed dilation'' as the base model for itself."));
+          AssertThrow( prm.get("Base model") != "prescribed dike injection",
+                       ExcMessage("You may not use ''prescribed dike injection'' as the base model for itself."));
 
           // create the base model and initialize its SimulatorAccess base
           // class; it will get a chance to read its parameters below after we
@@ -324,7 +324,7 @@ namespace aspect
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(base_model.get()))
             sim->initialize_simulator (this->get_simulator());
 
-          prm.enter_subsection("Injection function");
+          prm.enter_subsection("Dike injection function");
           {
             try
               {
@@ -354,7 +354,7 @@ namespace aspect
 
     template <int dim>
     bool
-    PrescribedDilation<dim>::
+    PrescribedDikeInjection<dim>::
     is_compressible () const
     {
       return base_model->is_compressible();
@@ -370,7 +370,7 @@ namespace aspect
 
     template <int dim>
     void
-    PrescribedDilation<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+    PrescribedDikeInjection<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
       // The base model may have additional outputs, so we need to copy
       // these additional outputs.
@@ -417,7 +417,7 @@ namespace aspect
   {
     template <int dim>
     void
-    LatentHeatInjection<dim>::
+    LatentHeatDikeInjection<dim>::
     evaluate (const MaterialModel::MaterialModelInputs<dim> &material_model_inputs,
               const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
               HeatingModel::HeatingModelOutputs &heating_model_outputs) const
@@ -448,7 +448,7 @@ namespace aspect
 
     template <int dim>
     void
-    LatentHeatInjection<dim>::declare_parameters (ParameterHandler &prm)
+    LatentHeatDikeInjection<dim>::declare_parameters (ParameterHandler &prm)
     {
       prm.enter_subsection("Heating model");
       {
@@ -471,7 +471,7 @@ namespace aspect
 
     template <int dim>
     void
-    LatentHeatInjection<dim>::
+    LatentHeatDikeInjection<dim>::
     create_additional_material_model_outputs(MaterialModel::MaterialModelOutputs<dim> &material_model_outputs) const
     {
       this->get_material_model().create_additional_named_outputs(material_model_outputs);
@@ -479,7 +479,7 @@ namespace aspect
 
     template <int dim>
     void
-    LatentHeatInjection<dim>::parse_parameters (ParameterHandler &prm)
+    LatentHeatDikeInjection<dim>::parse_parameters (ParameterHandler &prm)
     {
       prm.enter_subsection("Heating model");
       {
@@ -500,8 +500,8 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    ASPECT_REGISTER_MATERIAL_MODEL(PrescribedDilation,
-                                   "prescribed dilation",
+    ASPECT_REGISTER_MATERIAL_MODEL(PrescribedDikeInjection,
+                                   "prescribed an injected dike",
                                    "The material model uses a ``Base model'' from which material properties are "
                                    "derived. It then adds source terms in the Stokes equations "
                                    "that describe a dike injection of melt to the model. ")
@@ -509,8 +509,8 @@ namespace aspect
 
   namespace HeatingModel
   {
-    ASPECT_REGISTER_HEATING_MODEL(LatentHeatInjection,
-                                  "latent heat injection",
+    ASPECT_REGISTER_HEATING_MODEL(LatentHeatDikeInjection,
+                                  "latent heat during dike injection",
                                   "Latent heat releases due to the injection of melt into the model. "
                                   "This heating model takes the source term added to the Stokes "
                                   "equation and adds the corresponding source term to the energy "
