@@ -17,7 +17,7 @@
 #include <array>
 #include <utility>
 #include <limits>
-#include <aspect/material_model/interface.h>
+
 #include <aspect/simulator_access.h>
 #include <aspect/simulator.h>
 #include <aspect/utilities.h>
@@ -28,6 +28,7 @@
 #include <deal.II/base/signaling_nan.h>
 
 #include <aspect/heating_model/interface.h>
+#include <aspect/material_model/interface.h>
 #include <aspect/material_model/visco_plastic.h>
 
 /* Head file for injection term*/
@@ -42,7 +43,7 @@ namespace aspect
      * and defines a material injection zone via a dilation term applied to
      * the Stokes equations.
      *
-     * The method is described in the following paper:
+     * The method is mainly described in the following paper:
      * @code
      * @article{theissen2011coupled,
      *   title={Coupled mechanical and hydrothermal modeling of crustal
@@ -111,6 +112,19 @@ namespace aspect
         create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
       private:
+        /**
+         * Specify the dike shape, duration.
+         */
+        double dike_width;
+        double dike_depth;
+        double dike_duration;
+
+        /**
+         * Specify the time-dependent linear function of the melt fraction M.
+         */
+        double    half_extension_rate;
+        double    M_value;
+
         /**
          * Pointer to the material model used as the base model.
          */
@@ -227,15 +241,34 @@ namespace aspect
       // Finally, we move the additional outputs back into place:
       out.move_additional_outputs_from(base_output);
 
-      // Start to add the additional RHS terms to Stokes equations.
+      // Diking event setup
+      // 1. Find the dike location.
+      double dike_position_x1 = 0;
+      double dike_position_x2 = dike_position_x1 + dike_width;
+      double dike_bottom_depth = dike_depth;
+      double dike_end_time = dike_duration;
+
+      // 2. Start to add the additional RHS terms to Stokes equations.
       MaterialModel::PrescribedPlasticDilation<dim>
       *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                              : nullptr;
 
+      // final effective M value
+      double M_eff = 0;
       double injection_term = 0;
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
+          const double current_position = in.position[i];
+          // Initial timestep will be skipped.
+          if (current_position[0] >= dike_position_x1 && current_position[0] <= dike_position_x2 &&
+              this->get_geometry_model().depth(current_position) <= dike_bottom_depth &&
+              this->get_time() <= dike_end_time && this->get_timestep_number() != 0)
+            {
+              M_eff = M_value;
+              injection_term = 2 * M_eff * half_extension_rate / dike_width;
+            }
+
           // If "Enable prescribed dilation" is on, then the injection rate
           // R (m/s or m/yr) is added to the rhs of the mass eq., i.e.,
           // -div(u,q) = -(R, q).
@@ -259,7 +292,7 @@ namespace aspect
           for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
             {
               // Lookup the injection area              
-              if (injection_function.value(in.position[i]) != 0.0 && c == this->introspection().compositional_index_for_name("plastic_strain"))
+              if (prescribed_dilation->dilation[i] != 0.0 && c == this->introspection().compositional_index_for_name("plastic_strain"))
                 out.reaction_terms[i][c] = -1.0 * composition[c];
             }
             
@@ -283,7 +316,22 @@ namespace aspect
                             "that for more information.");
           prm.enter_subsection("Dike injection functioin");
           {
-
+    	      prm.declare_entry ("Dike width", "100.",
+      	                       Patterns::Double (0),
+      	                       "The width of the magma-intrusion zone. Units: m ");
+    	      prm.declare_entry ("Dike depth", "6000",
+      	                       Patterns::Double (0),
+      	                       "The depth of the magma-intrusion zone. Units: m ");
+    	      prm.declare_entry ("Duration of the diking event", "10e6",
+      	                       Patterns::Double (0),
+      	                       "The duration of the activated dike. Units: year or second ");
+    	      prm.declare_entry ("Half extension rate", "0.0",
+      	                       Patterns::Double (0),
+      	                       "The velocity of half-extension. Units: m/y or m/s ");
+    	      prm.declare_entry ("Melt fraction in the dike", "0.0",
+      	                       Patterns::Double (0),
+      	                       "M, the fraction of total extension accommodated by "
+                               "the emplacement of new magmatic material. Units: none ");
           }
           prm.leave_subsection();
         }
@@ -313,7 +361,11 @@ namespace aspect
 
           prm.enter_subsection("Dike injection function");
           {
-
+            dike_width           = prm.get_double ("Dike width");
+            dike_depth           = prm.get_double ("Dike depth");
+            dike_duration        = prm.get_double ("Duration of the diking event");
+            half_extension_rate  = prm.get_double ("Half extension rate");
+            M_value              = prm.get_double ("Melt fraction in the dike");
           }
           prm.leave_subsection();
         }
