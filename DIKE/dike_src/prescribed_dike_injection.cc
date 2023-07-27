@@ -112,12 +112,6 @@ namespace aspect
 
       private:
         /**
-         * Parsed function that specifies the region and amount of
-         * material that is injected into the model.
-         */
-        Functions::ParsedFunction<dim> injection_function;
-
-        /**
          * Pointer to the material model used as the base model.
          */
         std::unique_ptr<MaterialModel::Interface<dim>> base_model;
@@ -200,13 +194,6 @@ namespace aspect
     void
     PrescribedDikeInjection<dim>::update()
     {
-      // we get time passed as seconds (always) but may want
-      // to reinterpret it in years
-      if (this->convert_output_to_years())
-        injection_function.set_time (this->get_time() / year_in_seconds);
-      else
-        injection_function.set_time (this->get_time());
-      
       base_model->update();
     }
 
@@ -246,6 +233,7 @@ namespace aspect
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                              : nullptr;
 
+      double injection_term = 0;
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           // If "Enable prescribed dilation" is on, then the injection rate
@@ -257,9 +245,9 @@ namespace aspect
           if (prescribed_dilation != nullptr)
             {
               if (this->convert_output_to_years())
-                prescribed_dilation->dilation[i] = injection_function.value(in.position[i]) / year_in_seconds;
+                prescribed_dilation->dilation[i] = injection_term / year_in_seconds;
               else
-                prescribed_dilation->dilation[i] = injection_function.value(in.position[i]);
+                prescribed_dilation->dilation[i] = injection_term;
             }
           // NOTE:
           // If "Enable dike injection" is on, then the motion of dike injection
@@ -295,8 +283,7 @@ namespace aspect
                             "that for more information.");
           prm.enter_subsection("Dike injection functioin");
           {
-            Functions::ParsedFunction<dim>::declare_parameters(prm,1);
-            prm.declare_entry("Function expression","0.0");
+
           }
           prm.leave_subsection();
         }
@@ -326,18 +313,7 @@ namespace aspect
 
           prm.enter_subsection("Dike injection function");
           {
-            try
-              {
-                injection_function.parse_parameters(prm);
-              }
-            catch (...)
-              {
-                std::cerr << "ERROR: FunctionParser failed to parse\n"
-                          << "\t Injection function\n"
-                          << "with expression \n"
-                          << "\t' " << prm.get("Function expression") << "'";
-                throw;
-              } 
+
           }
           prm.leave_subsection();
         }
