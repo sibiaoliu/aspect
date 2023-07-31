@@ -36,6 +36,7 @@
 
 #include <aspect/simulator/assemblers/interface.h>
 #include <aspect/geometry_model/initial_topography_model/zero_topography.h>
+#include <aspect/material_model/rheology/elasticity.h>
 
 #include <deal.II/base/index_set.h>
 #include <deal.II/base/conditional_ostream.h>
@@ -109,7 +110,7 @@ namespace aspect
       if (geometry_model.has_curved_elements())
         return std::make_unique<MappingQCache<dim>>(4);
 
-#if !DEAL_II_VERSION_GTE(9,4,0) || DEAL_II_VERSION_GTE(9,4,1)
+#if DEAL_II_VERSION_GTE(9,4,1)
       if (Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(initial_topography_model))
         return std::make_unique<MappingCartesian<dim>>();
 #else
@@ -249,7 +250,7 @@ namespace aspect
       {
         // only open the log file on processor 0, the other processors won't be
         // writing into the stream anyway
-        log_file_stream.open((parameters.output_directory + "log.txt").c_str(),
+        log_file_stream.open(parameters.output_directory + "log.txt",
                              parameters.resume_computation ? std::ios_base::app : std::ios_base::out);
 
         // we already printed the header to the screen, so here we just dump it
@@ -302,7 +303,25 @@ namespace aspect
     material_model->parse_parameters (prm);
     material_model->initialize ();
 
-    heating_model_manager.initialize_simulator (*this);
+    // Make sure that the material model supports elasticity when it is requested,
+    // by checking that the material model creates the necessary material model
+    // outputs.
+    if (parameters.enable_elasticity)
+      {
+        // Set up outputs for one point
+        MaterialModel::MaterialModelOutputs<dim> out(1,
+                                                     introspection.n_compositional_fields);
+
+        material_model->create_additional_named_outputs(out);
+
+        MaterialModel::ElasticAdditionalOutputs<dim> *elastic_outputs = out.template get_additional_output<MaterialModel::ElasticAdditionalOutputs<dim>>();
+
+        // Throw if the elastic_outputs do not exist
+        AssertThrow(elastic_outputs != nullptr,
+                    ExcMessage("Elasticity is enabled, but not supported by the material model."));
+      }
+
+    heating_model_manager.initialize_simulator(*this);
     heating_model_manager.parse_parameters (prm);
 
     if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(gravity_model.get()))
@@ -370,6 +389,10 @@ namespace aspect
       sim->initialize_simulator (*this);
     adiabatic_conditions->parse_parameters (prm);
     adiabatic_conditions->initialize ();
+
+    // Create a boundary traction manager
+    boundary_traction_manager.initialize_simulator (*this);
+    boundary_traction_manager.parse_parameters (prm);
 
     // Initialize the mesh deformation handler
     if (parameters.mesh_deformation_enabled)
@@ -467,18 +490,6 @@ namespace aspect
                              "has not been tested in non-Cartesian geometries and currently requires "
                              "the use of a Cartesian geometry model."));
 
-    for (const auto &p : parameters.prescribed_traction_boundary_indicators)
-      boundary_traction[p.first]
-        = BoundaryTraction::create_boundary_traction<dim> (p.second.second);
-
-    for (auto &bv : boundary_traction)
-      {
-        if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(bv.second.get()))
-          sim->initialize_simulator(*this);
-        bv.second->parse_parameters (prm);
-        bv.second->initialize ();
-      }
-
     std::set<types::boundary_id> open_velocity_boundary_indicators
       = geometry_model->get_used_boundary_indicators();
     for (const auto &p : boundary_velocity_manager.get_active_boundary_velocity_names())
@@ -517,19 +528,13 @@ namespace aspect
     // Only write the parameter files on the root node to avoid file system conflicts
     if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
       {
-        std::ofstream prm_out ((parameters.output_directory + "parameters.prm").c_str());
+        std::ofstream prm_out ((parameters.output_directory + "parameters.prm"));
         AssertThrow (prm_out,
                      ExcMessage (std::string("Could not open file <") +
                                  parameters.output_directory + "parameters.prm>."));
         prm.print_parameters(prm_out, ParameterHandler::Text);
 
-        std::ofstream tex_out ((parameters.output_directory + "parameters.tex").c_str());
-        AssertThrow (tex_out,
-                     ExcMessage (std::string("Could not open file <") +
-                                 parameters.output_directory + "parameters.tex>."));
-        prm.print_parameters(tex_out, ParameterHandler::LaTeX);
-
-        std::ofstream json_out ((parameters.output_directory + "parameters.json").c_str());
+        std::ofstream json_out ((parameters.output_directory + "parameters.json"));
         AssertThrow (json_out,
                      ExcMessage (std::string("Could not open file <") +
                                  parameters.output_directory + "parameters.json>."));
@@ -638,8 +643,7 @@ namespace aspect
     // that end up in the bilinear form. we update those that end up in
     // the constraints object when calling compute_current_constraints()
     // above
-    for (auto &p : boundary_traction)
-      p.second->update ();
+    boundary_traction_manager.update();
   }
 
 
@@ -1359,7 +1363,7 @@ namespace aspect
                                                       p.first,
                                                       vel,
                                                       constraints,
-                                                      mask);
+                                                      ComponentMask(mask));
           }
         else
           {
@@ -1368,7 +1372,7 @@ namespace aspect
                                                       p.first,
                                                       Functions::ZeroFunction<dim>(introspection.n_components),
                                                       constraints,
-                                                      mask);
+                                                      ComponentMask(mask));
           }
       }
   }
@@ -1885,7 +1889,7 @@ namespace aspect
 
         case NonlinearSolver::single_Advection_iterated_Newton_Stokes:
         {
-          solve_single_advection_iterated_newton_stokes();
+          solve_single_advection_and_iterated_newton_stokes();
           break;
         }
 

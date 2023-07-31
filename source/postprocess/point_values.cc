@@ -57,7 +57,7 @@ namespace aspect
 
       // see if output is requested at this time
       if (this->get_time() < last_output_time + output_interval)
-        return std::pair<std::string,std::string>();
+        return {"", ""};
 
       // evaluate the solution at all of our evaluation points
       std::vector<Vector<double>>
@@ -122,7 +122,7 @@ namespace aspect
       if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
         {
 
-          std::ofstream f (filename.c_str());
+          std::ofstream f (filename);
           f << ("# <time> "
                 "<evaluation_point_x> "
                 "<evaluation_point_y> ")
@@ -264,7 +264,7 @@ namespace aspect
               if (use_natural_coordinates)
                 evaluation_points_cartesian[p] = this->get_geometry_model().natural_to_cartesian_coordinates(evaluation_points[p]);
               else
-                for (unsigned int i = 0; i < dim; i++)
+                for (unsigned int i = 0; i < dim; ++i)
                   evaluation_points_cartesian[p][i] = evaluation_points[p][i];
             }
         }

@@ -207,6 +207,7 @@ namespace aspect
                 }
 
               // Then create the actual mesh:
+              GridTools::consistently_order_cells (cells);
               coarse_grid.create_triangulation(points, cells, subcell_data);
             }
         }
@@ -307,11 +308,11 @@ namespace aspect
           case 2:
           {
             static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id> ("bottom", 0),
-                  std::pair<std::string,types::boundary_id> ("top", 1),
-                  std::pair<std::string,types::boundary_id> ("left",  2),
-                  std::pair<std::string,types::boundary_id> ("right", 3)
-                };
+            = { {"bottom", 0},
+              {"top", 1},
+              {"left",  2},
+              {"right", 3}
+            };
 
             if (phi == 360)
               return std::map<std::string,types::boundary_id> (std::begin(mapping),
@@ -325,26 +326,22 @@ namespace aspect
           {
             if (phi == 360)
               {
-                static const std::pair<std::string,types::boundary_id> mapping[]
-                  = { std::pair<std::string,types::boundary_id>("bottom", 0),
-                      std::pair<std::string,types::boundary_id>("top",    1)
-                    };
-
-                return std::map<std::string,types::boundary_id> (std::begin(mapping),
-                                                                 std::end(mapping));
+                return
+                {
+                  {"bottom", 0},
+                  {"top",    1}
+                };
               }
             else if (phi == 90)
               {
-                static const std::pair<std::string,types::boundary_id> mapping[]
-                  = { std::pair<std::string,types::boundary_id>("bottom", 0),
-                      std::pair<std::string,types::boundary_id>("top",    1),
-                      std::pair<std::string,types::boundary_id>("east",   2),
-                      std::pair<std::string,types::boundary_id>("west",   3),
-                      std::pair<std::string,types::boundary_id>("south",  4)
-                    };
-
-                return std::map<std::string,types::boundary_id> (std::begin(mapping),
-                                                                 std::end(mapping));
+                return
+                {
+                  {"bottom", 0},
+                  {"top",    1},
+                  {"east",   2},
+                  {"west",   3},
+                  {"south",  4}
+                };
               }
             else
               Assert (false, ExcNotImplemented());
@@ -352,7 +349,7 @@ namespace aspect
         }
 
       Assert (false, ExcNotImplemented());
-      return std::map<std::string,types::boundary_id>();
+      return {};
     }
 
 
@@ -507,8 +504,8 @@ namespace aspect
     SphericalShell<dim>::point_is_in_domain(const Point<dim> &point) const
     {
       AssertThrow(!this->get_parameters().mesh_deformation_enabled ||
-                  this->get_timestep_number() == 0,
-                  ExcMessage("After displacement of the mesh, this function can no longer be used to determine whether a point lies in the domain or not."));
+                  this->simulator_is_past_initialization() == false,
+                  ExcMessage("After displacement of the free surface, this function can no longer be used to determine whether a point lies in the domain or not."));
 
       AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
                   ExcMessage("After adding topography, this function can no longer be used to determine whether a point lies in the domain or not."));
@@ -532,7 +529,7 @@ namespace aspect
             point2[2] = numbers::PI;
         }
 
-      for (unsigned int d = 0; d < dim; d++)
+      for (unsigned int d = 0; d < dim; ++d)
         if (spherical_point[d] > point2[d]+std::numeric_limits<double>::epsilon()*std::abs(point2[d]) ||
             spherical_point[d] < point1[d]-std::numeric_limits<double>::epsilon()*std::abs(point2[d]))
           return false;
@@ -726,7 +723,7 @@ namespace aspect
           if (custom_mesh == list)
             {
               // Check that list is in ascending order
-              for (unsigned int i = 1; i < R_values_list.size(); i++)
+              for (unsigned int i = 1; i < R_values_list.size(); ++i)
                 AssertThrow(R_values_list[i] > R_values_list[i-1],
                             ExcMessage("Radial values must be strictly ascending"));
               // Check that first value is not smaller than the inner radius

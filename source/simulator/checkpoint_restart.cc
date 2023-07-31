@@ -308,7 +308,7 @@ namespace aspect
 
       signals.pre_checkpoint_store_user_data(triangulation);
 
-      triangulation.save ((parameters.output_directory + "restart.mesh.new").c_str());
+      triangulation.save (parameters.output_directory + "restart.mesh.new");
     }
 
     // save general information This calls the serialization functions on all
@@ -344,7 +344,7 @@ namespace aspect
                 static_cast<uint32_t>(compressed_data_length)
               }; /* list of compressed sizes of blocks */
 
-          std::ofstream f ((parameters.output_directory + "restart.resume.z.new").c_str());
+          std::ofstream f ((parameters.output_directory + "restart.resume.z.new"));
           f.write(reinterpret_cast<const char *>(compression_header), 4 * sizeof(compression_header[0]));
           f.write(reinterpret_cast<char *>(&compressed_data[0]), compressed_data_length);
           f.close();
@@ -523,7 +523,7 @@ namespace aspect
     // now that we have resumed from the snapshot load the mesh and solution vectors
     try
       {
-        triangulation.load ((parameters.output_directory + "restart.mesh").c_str());
+        triangulation.load (parameters.output_directory + "restart.mesh");
       }
     catch (...)
       {

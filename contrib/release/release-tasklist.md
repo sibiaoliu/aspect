@@ -42,9 +42,9 @@ and the links are working
 
   ```
   cd doc
-  make manual.pdf
-  grep undefined manual/manual.log    # try to fix some
   make aspect.tag
+  cd sphinx
+  make html
   ```
 
   and check for warnings
@@ -83,11 +83,11 @@ and the links are working
 - compile aspect, make sure you have a symlink in the main directory for the next step
   - make sure the WorldBuilder is using the included version
 
-- update doc/manual/parameters.tex and documentation:
+- update parameters and documentation:
 
   ```
-  cd doc && ./update_parameters.sh && make manual.pdf && cp manual.pdf manual-$VER.pdf && cd .. && \
-  git add doc/manual/parameters.tex && \
+  cd doc && ./update_parameters.sh && cd sphinx && make html && cd ../.. && \
+  git add doc/sphinx/parameters && \
   git commit -m "release task: update manual"
   ```
 
@@ -111,7 +111,7 @@ and the links are working
 
 - create a tar file:
   ```
-  cd doc && make manual.pdf && cp manual.pdf ../aspect-manual-$TAG.pdf && cd ..
+  cd doc/sphinx && make html && cd ..
   export PREFIX=aspect-$TAG && rm -rf $PREFIX.tar.gz && \
   git archive --format=tar.gz --prefix=$PREFIX/ HEAD >temp.tar.gz && \
   rm -fr $PREFIX/ && \
@@ -153,7 +153,7 @@ and the links are working
   sha1sum aspect-$TAG.tar.gz aspect-manual-$TAG.pdf >sha1sum-$TAG.txt
   ```
 
-- create a release on github, upload .tar.gz and manual-$VER.pdf
+- create a release on github, upload .tar.gz
 - update website (www branch):
   - header.include: add link to changes
   - index.html: add news entry
@@ -163,34 +163,120 @@ and the links are working
   - title: ASPECT v2.0.0
   - license: GPL 2
   - check CIG comments: https://github.com/geodynamics/best_practices/blob/master/ZenodoBestPractices.md
-  - cig community!
+  - add to "Computational Infrastructure for Geodynamics" community
   - update zenodo badge in README.md to newest version (see badge button on the right of zenodo page)
   - add zenodo badge also to the release on github (on top, see 2.0.1 for an example)
   - readme / release notes: add zenodo DOI button
-  - manual/manual.bib: add new zenodo entry
-. create figshare DOI for manual (just upload a new version as the same entry)
-  - update manual/manual.bib entry
-. update doc/manual/manual.bib with src and manual doi
-. update aspect.geodynamics.org/cite.html and citing.html in www repo:
+  - doc/sphinx/references.bib: add new zenodo entry
+- create figshare DOI for manual (just upload a new version as the same entry)
+  - update doc/sphinx/references.bib entry
+- update doc/sphinx/references.bib with src and manual doi
+- update aspect.geodynamics.org/cite.html and citing.html in www repo:
   - add new version in citing.html, search for "<option"
   - doc/make_cite_html.py:
     - add new version, update doc/zenodo dois
   - run aspect/doc/ python3 make_cite_html.py add to www
-. update http://geodynamics.org/cig/software/aspect/:
-      update current release number
-      create entry for the new release
-      update the list of contributors
-      ...
-. update docker image geodynamics/aspect:
-  - modify contrib/docker/docker/Dockerfile and contrib/docker/docker/build.sh to checkout the release
-    cd contrib/docker/docker && ./build.sh
-    docker push geodynamics/aspect:v$TAG
-. update the spack installation package with the latest tarball, 
+- update http://geodynamics.org/cig/software/aspect/:
+  - update current release number
+  - create entry for the new release
+  - update the list of contributors
+
+- update the spack installation package with the latest tarball,
   see https://github.com/spack/spack/pull/13830 for an example
-. announce on
-      cig-all@geodynamics.org
-      https://community.geodynamics.org/c/aspect
-      dealii@googlegroups.com
+- announce on
+  - cig-all@geodynamics.org
+  - https://community.geodynamics.org/c/aspect
+  - dealii@googlegroups.com
+
+## List of prior release notes
+
+Announcement for 2.5.0 (July 8, 2023)
+-----------------------------------------
+We are pleased to announce the release of ASPECT 2.5.0. ASPECT is the Advanced
+Solver for Problems in Earth's ConvecTion. It uses modern numerical methods such
+as adaptive mesh refinement, multigrid solvers, and a modular software design to
+provide a fast, flexible, and extensible mantle convection solver. ASPECT is
+available from
+
+                   https://aspect.geodynamics.org/
+
+and the release is available from
+
+        https://geodynamics.org/resources/aspect
+
+and
+
+        https://github.com/geodynamics/aspect/releases/tag/v2.5.0
+
+Among others this release includes the following significant changes:
+
+- ASPECT now includes version 0.5.0 of the Geodynamic World Builder.
+  (Menno Fraters and other contributors)
+
+- ASPECT's manual has been converted from LaTeX to Markdown to be hosted as a
+  website at https://aspect-documentation.readthedocs.io.
+  (Chris Mills, Mack Gregory, Timo Heister, Wolfgang Bangerth, Rene
+  Gassmoeller, and many others)
+
+- New: ASPECT now requires deal.II 9.4 or newer.
+  (Rene Gassmoeller, Timo Heister)
+
+- ASPECT now supports a DebugRelease build type that creates a debug build and
+  a release build of ASPECT at the same time.  It can be enabled by setting the
+  CMake option CMAKE_BUILD_TYPE to DebugRelease or by typing "make debugrelease".
+  (Timo Heister)
+
+- ASPECT now has a CMake option ASPECT_INSTALL_EXAMPLES that allows building
+  and install all cookbooks and benchmarks. ASPECT now additionally installs
+  the data/ directory. Both changes are helpful for installations that are used
+  for teaching and tutorials.
+  (Rene Gassmoeller)
+
+- Changed: ASPECT now releases the memory used for storing initial conditions
+  and the Geodynamic World Builder after model initialization unless an
+  owning pointer to these objects is kept. This reduces the memory footprint
+  for models initialized from large data files.
+  (Wolfgang Bangerth)
+
+- Added: Various helper functions to distinguish phase transitions for
+  different compositions and compositional fields of different types.
+  (Bob Myhill)
+
+- Added: The 'adiabatic' initial temperature plugin can now use a spatially
+  variable top boundary layer thickness read from a data file or specified as a
+  function in the input file. Additionally, the boundary layer temperature can
+  now also be computed following the plate cooling model instead of the
+  half-space cooling model.
+  (Daniel Douglas, John Naliboff, Juliane Dannberg, Rene Gassmoeller)
+
+- New: ASPECT now supports tangential velocity boundary conditions with GMG for
+  more geometries, such as 2D and 3D chunks.
+  (Timo Heister, Haoyuan Li, Jiaqi Zhang)
+
+- New: Phase transitions can now be deactivated outside a given temperature
+  range specified by upper and lower temperature limits for each phase
+  transition. This allows implementing complex phase diagrams with transitions
+  that intersect in pressure-temperature space.
+  (Haoyuan Li)
+
+- New: There is now a postprocessor that outputs the total volume of the
+  computational domain. This can be helpful for models using mesh deformation.
+  (Anne Glerum)
+
+- New: Added a particle property 'grain size' that tracks grain size evolution
+  on particles using the 'grain size' material model.
+  (Juliane Dannberg, Rene Gassmoeller)
+
+- Fixed: Many bugs, see link below for a complete list.
+  (Many authors. Thank you!).
+
+A complete list of all changes and their authors can be found at
+  https://aspect.geodynamics.org/doc/doxygen/changes_between_2_84_80_and_2_85_80.html
+
+Wolfgang Bangerth, Juliane Dannberg, Menno Fraters, Rene Gassmoeller,
+Anne Glerum, Timo Heister, Bob Myhill, John Naliboff,
+and many other contributors.
+
 
 Announcement for 2.4.0 (July 25, 2022)
 -----------------------------------------
