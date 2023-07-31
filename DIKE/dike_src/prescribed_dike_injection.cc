@@ -174,6 +174,9 @@ namespace aspect
          */
         double    half_extension_rate;
         double    M_value;
+        double    M_cutoff_time1;
+        double    M_cutoff_time2;
+        double    M_cutoff_value;
 
         /**
          * Pointer to the material model used as the base model.
@@ -458,7 +461,6 @@ namespace aspect
       double dike_position_x1 = 0;
       double dike_position_x2 = 0;
       double dike_bottom_depth = 0;
-      double dike_end_time = dike_duration;
 
       const QGauss<dim-1> quadrature_formula_face (this->get_fe()
                                                    .base_element(this->introspection().base_elements.temperature)
@@ -488,15 +490,14 @@ namespace aspect
                     double dike_probablity = dike_distribution(fe_face_values.quadrature_point(q));
                     double probablity_limit = A;
                     if (enable_random_noise == true)
-                      probablity_limit = A * 1.01;
+                      probablity_limit = A * 1.05;
 
                     if (dike_probablity >= probablity_limit)
                       {
                         dike_position_x1 = fe_face_values.quadrature_point(q)[0];
                         dike_position_x2 = dike_position_x1 + dike_width;
                         dike_bottom_depth = this->get_geometry_model().depth(fe_face_values.quadrature_point(q)) + dike_depth;
-                        dike_end_time = this->get_time() + dike_duration;
-                      }  
+                      }
                   }
               }
 
@@ -505,29 +506,30 @@ namespace aspect
       *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                              : nullptr;
+      
+      double M_eff = 0;  // final effective M value
+      // Specify the piece-wise linear time-dependent function of M
+      if (this->get_time() < M_cutoff_time1)
+        M_eff = this->get_time() * M_cutoff_value / M_cutoff_time1;
+      else if (this->get_time() >= M_cutoff_time1 && this->get_time() <= M_cutoff_time2)
+        M_eff = (this->get_time() - M_cutoff_time1) * (M_value - M_cutoff_value) / (M_cutoff_time2 - M_cutoff_time1) + M_cutoff_value;
+      else
+        M_eff = M_value;
 
-      // final effective M value
-      double M_eff = 0;
-      double injection_term = 0;
+      // Calculate the injection term in the Stokes eq.
+      double injection_term =0;
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const Point<dim> current_position = in.position[i];
           // Initial timestep will be skipped.
+          // In each timestep, if the timestep is grater than the duration of
+          // dike episode, we assume there is no diking?
           if (current_position[0] >= dike_position_x1 &&
               current_position[0] <= dike_position_x2 &&
               this->get_geometry_model().depth(current_position) <= dike_bottom_depth &&
-              this->get_time() <= dike_end_time && this->get_timestep_number() != 0)
-            {
-              M_eff = M_value;
-              injection_term = 2 * M_eff * half_extension_rate / dike_width;
-            }
+              this->get_timestep() <= dike_duration && this->get_timestep_number() != 0)
+            injection_term = 2 * M_eff * half_extension_rate / dike_width;
 
-          // If "Enable prescribed dilation" is on, then the injection rate
-          // R (m/s or m/yr) is added to the rhs of the mass eq., i.e.,
-          // -div(u,q) = -(R, q).
-          // Meanwhile, the term - 2.0 / 3.0 * eta * (R, div v) is added to
-          // the rhs of the momentum eq. (if the model is incompressible),
-          // otherwise this term is already present on the left side.
           if (prescribed_dilation != nullptr)
             {
               if (this->convert_output_to_years())
@@ -535,10 +537,6 @@ namespace aspect
               else
                 prescribed_dilation->dilation[i] = injection_term;
             }
-          // NOTE:
-          // If "Enable dike injection" is on, then the motion of dike injection
-          // is prescribed only in the hortizontal direction (x). 
-          // This is internally implemented in the stokes.cc and newton_stokes.cc files
 
           // No plastic deformation in the dike
           const std::vector<double> &composition = in.composition[i];
@@ -548,8 +546,7 @@ namespace aspect
               if (prescribed_dilation->dilation[i] != 0.0 && c == this->introspection().compositional_index_for_name("plastic_strain"))
                 out.reaction_terms[i][c] = -1.0 * composition[c];
             }
-            
-        } 
+        }
     }
 
     template <int dim>
@@ -580,13 +577,13 @@ namespace aspect
                                "or isolated. The units of the coordinates are "
                                "dependent on the geometry model. In the box model they are in meters, in the "
                                "chunks they are in degrees.");
-    	      prm.declare_entry ("Dike width", "100.",
+    	      prm.declare_entry ("Dike width", "200.",
       	                       Patterns::Double (0),
       	                       "The width of the magma-intrusion zone. Units: m ");
     	      prm.declare_entry ("Dike depth", "6000",
       	                       Patterns::Double (0),
       	                       "The depth of the magma-intrusion zone. Units: m ");
-    	      prm.declare_entry ("Duration of the diking event", "10e6",
+    	      prm.declare_entry ("Duration of the diking event", "5e3",
       	                       Patterns::Double (0),
       	                       "The duration of the activated dike. Units: year or second ");
             prm.declare_entry ("Enable random noise", "false",
@@ -617,6 +614,18 @@ namespace aspect
       	                       Patterns::Double (0),
       	                       "M, the fraction of total extension accommodated by "
                                "the emplacement of new magmatic material. Units: none ");
+    	      prm.declare_entry ("M function cutoff time1", "0.1",
+      	                       Patterns::Double (0),
+      	                       "Frist cutoff  time in the user-specified piece-wise time-dependent "
+                               "linear function of M. Units: year or second ");
+    	      prm.declare_entry ("M function cutoff time2", "0.1",
+      	                       Patterns::Double (0),
+      	                       "Second cutoff time in the user-specified piece-wise time-dependent "
+                               "linear function of M. Units: year or second ");
+    	      prm.declare_entry ("M function cutoff value", "0.0",
+      	                       Patterns::Double (0),
+      	                       "Cutoff value in the user-specified piece-wise time-dependent "
+                               "linear function of M. Units: none ");
             prm.declare_entry ("Random number generator seed", "0",
                              Patterns::Double (0),
                              "The value of the seed used for the random number generator. "
@@ -677,6 +686,9 @@ namespace aspect
             dike_duration        = prm.get_double ("Duration of the diking event");
             half_extension_rate  = prm.get_double ("Half extension rate");
             M_value              = prm.get_double ("Melt fraction in the dike");
+            M_cutoff_time1       = prm.get_double ("M function cutoff time1");
+            M_cutoff_time2       = prm.get_double ("M function cutoff time2");
+            M_cutoff_value       = prm.get_double ("M function cutoff value");
             grid_intervals[0]    = prm.get_integer ("Grid intervals for noise X or radius");
             grid_intervals[1]    = prm.get_integer ("Grid intervals for noise Y or longitude");
             if (dim == 3)
