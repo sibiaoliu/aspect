@@ -267,8 +267,10 @@ namespace aspect
           // is prescribed only in the hortizontal direction (x). 
           // This is internally implemented in the stokes.cc and newton_stokes.cc files
 
-          // Mimic the magmatic crust generation/accretion through the dike.
-          // We use the compositional reaction term to implement this process.
+          // We do not mimic the process of magmatic crust generation/accretion through the dike.
+          // We assume that the magma was already present in the dike and will migrate to the
+          // sides of the ridge through dike opening.
+          // We also assume that there is no deformation within the solid dike.
           const std::vector<double> &composition = in.composition[i];
           for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
             {
@@ -276,18 +278,16 @@ namespace aspect
               if (injection_function.value(in.position[i]) != 0.0)
                 {
                   AssertThrow(this->introspection().compositional_name_exists("injection_phase"),
-                              ExcMessage("Material model prescribed dilation only works if there "
-                                         "is a compositional field called 'injection_phase'. If "
-                                         "you only want the 'injection phase' field in the injection "
+                              ExcMessage("Material model 'prescribed dike injection' only works if "
+                                         "there is a compositional field called 'injection_phase'. "
+                                         "If you only want the 'injection phase' field in the injection "
                                          "area, you should prescribe other fields such as 'mantle' "
                                          "below to be 0."));
 
                   if (c == this->introspection().compositional_index_for_name("injection_phase"))
                     out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
-                  else if (c == this->introspection().compositional_index_for_name("mantle"))
+                  else
                     out.reaction_terms[i][c] = -1.0 * composition[c];
-                  else if (c == this->introspection().compositional_index_for_name("plastic_strain"))
-                    out.reaction_terms[i][c] = -1.0 * composition[c];// No plastic deformation in the dike
                 
                 }
             }
