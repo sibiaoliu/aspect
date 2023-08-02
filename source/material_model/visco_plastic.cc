@@ -511,19 +511,30 @@ namespace aspect
           options.property_name = "Thermal conductivities";
           thermal_conductivities = Utilities::MapParsing::parse_map_to_double_array (prm.get("Thermal conductivities"), options);
 
-          //Hydrothermal circulation parameters.
+          // Retrieve the list of composition names
+          const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
+
+          // Establish that a background field is required here
+          const bool has_background_field = true;
+
+          //Hydrothermal circulation parameters.          
           define_hydrothermal_circulation = prm.get_bool ("Define hydrothermal circulation");
-          options.property_name = "Nusselt numbers";
-          Nusselt_number = Utilities::parse_map_to_double_array (prm.get("Nusselt numbers"), options);
-          
-          options.property_name = "Hydrothermal circulation cutoff temperatures";
-          T_cooling = Utilities::parse_map_to_double_array (prm.get("Hydrothermal circulation cutoff temperatures"), options);
-
-          options.property_name = "Hydrothermal circulation cutoff depths";
-          D_cooling = Utilities::parse_map_to_double_array (prm.get("Hydrothermal circulation cutoff depths"), options);
-
-          options.property_name = "Hydrothermal circulation smoothing factors";        
-          A_smoothing = Utilities::parse_map_to_double_array (prm.get("Hydrothermal circulation smoothing factors"), options);
+          Nusselt_number = Utilities::parse_map_to_double_array (prm.get("Nusselt numbers"),
+                                                                 list_of_composition_names,
+                                                                 has_background_field,
+                                                                 "Nusselt numbers");
+          T_cooling = Utilities::parse_map_to_double_array (prm.get("Hydrothermal circulation cutoff temperatures"),
+                                                            list_of_composition_names,
+                                                            has_background_field,
+                                                            "Hydrothermal circulation cutoff temperatures");
+          D_cooling = Utilities::parse_map_to_double_array (prm.get("Hydrothermal circulation cutoff depths"),
+                                                            list_of_composition_names,
+                                                            has_background_field,
+                                                            "Hydrothermal circulation cutoff depths");       
+          A_smoothing = Utilities::parse_map_to_double_array (prm.get("Hydrothermal circulation smoothing factors"),
+                                                              list_of_composition_names,
+                                                              has_background_field,
+                                                              "Hydrothermal circulation smoothing factors");
 
           rheology = std::make_unique<Rheology::ViscoPlastic<dim>>();
           rheology->initialize_simulator (this->get_simulator());
