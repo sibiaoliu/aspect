@@ -564,7 +564,7 @@ namespace aspect
                             "are the names of models that are also valid for the "
                             "``Material models/Model name'' parameter. See the documentation for "
                             "that for more information.");
-          prm.enter_subsection("Dike injection functioin");
+          prm.enter_subsection("Dike injection function");
           {
             prm.declare_entry ("Dike axis line segments",
                                "",
@@ -920,7 +920,7 @@ namespace aspect
   namespace MaterialModel
   {
     ASPECT_REGISTER_MATERIAL_MODEL(PrescribedDikeInjection,
-                                   "prescribed an injected dike",
+                                   "prescribed dike injection",
                                    "The material model uses a ``Base model'' from which material properties are "
                                    "derived. It then adds source terms in the Stokes equations "
                                    "that describe a dike injection of melt to the model. ")
@@ -929,7 +929,7 @@ namespace aspect
   namespace HeatingModel
   {
     ASPECT_REGISTER_HEATING_MODEL(LatentHeatDikeInjection,
-                                  "latent heat during dike injection",
+                                  "latent heat dike injection",
                                   "Latent heat releases due to the injection of melt into the model. "
                                   "This heating model takes the source term added to the Stokes "
                                   "equation and adds the corresponding source term to the energy "
