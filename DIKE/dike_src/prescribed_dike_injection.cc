@@ -877,7 +877,7 @@ namespace aspect
     {
       prm.enter_subsection("Heating model");
       {
-        prm.enter_subsection("Latent heat injection");
+        prm.enter_subsection("Latent heat dike injection");
         {
           prm.declare_entry ("Latent heat of crystallization", "1.1e9",
                              Patterns::Double(0),
@@ -908,7 +908,7 @@ namespace aspect
     {
       prm.enter_subsection("Heating model");
       {
-        prm.enter_subsection("Latent heat injection");
+        prm.enter_subsection("Latent heat dike injection");
         {
           latent_heat_of_crystallization = prm.get_double ("Latent heat of crystallization");
           temperature_of_injected_melt = prm.get_double ("Temperature of injected melt");
