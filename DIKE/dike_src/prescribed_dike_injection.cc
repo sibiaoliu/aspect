@@ -490,10 +490,16 @@ namespace aspect
                     double dike_probablity = dike_distribution(fe_face_values.quadrature_point(q));
                     double probablity_limit = A;
                     if (enable_random_noise == true)
-                      probablity_limit = A * 1.05;
+                      probablity_limit = A * 1.05; //TODO: 1.05 is just a test number, find a better way to find the dike location.
 
                     if (dike_probablity >= probablity_limit)
                       {
+                        // Currently, there is only one dike event in each timestep
+                        // In the future, more dikes should be activated in each timestep.
+                        // But how to check the dike number, or should it be fixed?
+                        // Maybe define the dike_position to be a vector, such as
+                        // std::vector<double> dike_position_x;
+                        // dike_position_x[0 to dike_number-1] = fe_face_values.quadrature_point(q)[0];
                         dike_position_x1 = fe_face_values.quadrature_point(q)[0];
                         dike_position_x2 = dike_position_x1 + dike_width;
                         dike_bottom_depth = this->get_geometry_model().depth(fe_face_values.quadrature_point(q)) + dike_depth;
