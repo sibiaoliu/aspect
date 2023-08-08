@@ -87,7 +87,7 @@ namespace aspect
          * around a user-defined set of line-segments.
          */
         virtual
-        double dike_locations (const Point<dim> &position) const;
+        double dike_gaussian_probablity (const Point<dim> &position) const;
 
         /**
          * Function to compute the material properties in @p out given
@@ -369,7 +369,7 @@ namespace aspect
     template <int dim>
     double
     PrescribedDikeInjection<dim>::
-    dike_locations (const Point<dim> &position) const
+    dike_gaussian_probablity (const Point<dim> &position) const
     {
       // Initiate distance with large value
       double distance_to_dike_axis = 1e23;
@@ -453,76 +453,50 @@ namespace aspect
       out.move_additional_outputs_from(base_output);
 
       // Diking event configurarions
-      // 1. Find the dike location.
-      double dike_position_x1 = 0;
-      double dike_position_x2 = dike_position_x1 + dike_width;
-      double dike_bottom_depth = dike_depth;
-      
-      const QGauss<dim-1> quadrature_formula_face (this->get_fe().degree+1);
-      FEFaceValues<dim> fe_face_values (this->get_mapping(),
-                                        this->get_fe(),quadrature_formula_face,
-                                        update_values | update_quadrature_points);
-
-      const types::boundary_id top_boundary_id = this->get_geometry_model().translate_symbolic_boundary_name_to_id("top");
-      
-      //Note the timestep (and time) of the initial timestep is NaN
-      double dt = 0; //Current timestep size
-      if (this->simulator_is_past_initialization())
+      // 1. Find the dike location, where the probablity is reached.
+      double dike_position_x1 = 0;                 
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
-          dt = this->get_timestep();
-          //Loop over all of the boundary cells and go to the surface cell.
-          for (const auto &cell : this->get_dof_handler().active_cell_iterators())
-            if (cell->is_locally_owned() && cell->at_boundary())
-              for (const unsigned int face_no : cell->face_indices())
-                if (cell->face(face_no)->at_boundary())
-                  {
-                    if ( cell->face(face_no)->boundary_id() != top_boundary_id)
-                      continue;
+          // dike probability follwing the Gaussian Distribution 
+          double dike_probablity = dike_gaussian_probablity(in.position[i]);
+          // Currently, there is only one dike event in each timestep
+          // In the future, more dikes can be activated in each timestep.
+          // TODO: Check how many (fixed number of?) dikes initiate per timestep?
+          // Maybe define the dike_position to be a vector, such as
+          // std::vector<double> dike_position_x(fe_face_values.quadrature_point.size())?;
+          // dike_position_x[0 to dike_number-1] = fe_face_values.quadrature_point(q)[0];           
+          if (dike_probablity == A)
+            dike_position_x1 = in.position[i][0];
 
-                    // Focus on each quadrature point on the boundary cell's upper face if on the top boundary.
-                    fe_face_values.reinit (cell, face_no);
-                    
-                    for (unsigned int q=0; q<fe_face_values.n_quadrature_points; ++q)
-                      {                        
-                        // dike probability follwing the Gaussian Distribution 
-                        double dike_probablity = dike_locations(fe_face_values.quadrature_point(q));
-                        double probablity_limit = A;
-                        //TODO: 1.05 is just a test number, find a better way to find the dike location.
-                        if (enable_random_noise == true)
-                          probablity_limit = A * 1.05;
-                        
-                        if (dike_probablity >= 0.99999)
-                          {
-                            // Currently, there is only one dike event in each timestep
-                            // In the future, more dikes should be activated in each timestep.
-                            // But how to check the dike number, or should it be fixed?
-                            // Maybe define the dike_position to be a vector, such as
-                            // std::vector<double> dike_position_x(fe_face_values.quadrature_point.size())?;
-                            // dike_position_x[0 to dike_number-1] = fe_face_values.quadrature_point(q)[0];                        
-                            dike_position_x1 = fe_face_values.quadrature_point(q)[0];
-                            dike_position_x2 = dike_position_x1 + dike_width;
-                            dike_bottom_depth = this->get_geometry_model().depth(fe_face_values.quadrature_point(q)) + dike_depth;
-                          }
-                      }
-                  }
         }
+      const double dike_position_x2 = dike_position_x1 + dike_width;
+
       // 2. Start to add the additional RHS terms to Stokes equations.
       MaterialModel::PrescribedPlasticDilation<dim>
       *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                              : nullptr;
 
+      //Note the timestep (and time) of the initial timestep is NaN
+      //Current timestep size
+      const double dt = ((this->get_timestep_number() > 0 &&
+                          this->simulator_is_past_initialization())
+                          ?
+                          this->get_timestep()
+                          :
+                          0.0);
+      
       // final effective M value
       double M_eff = 0;
       double injection_term = 0;
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const Point<dim> current_position = in.position[i];
-          // Initial timestep will be skipped.
+
           if (current_position[0] >= dike_position_x1 &&
               current_position[0] <= dike_position_x2 &&
-              this->get_geometry_model().depth(current_position) <= dike_bottom_depth &&
-              this->get_timestep_number() > 0 && dt <= dike_duration)
+              this->get_geometry_model().depth(current_position) <= dike_depth &&
+              dt <= dike_duration)
             {
               M_eff = M_value;
               injection_term = 2 * M_eff * half_extension_rate / dike_width;
@@ -637,7 +611,7 @@ namespace aspect
                              "The amplitude of the Gaussian distribution of the amplitude of the dike noise. "
                              "Note that this parameter is taken to be the same for all dike segments. "
                              "Units: none.");
-            prm.declare_entry ("Standard deviation of Gaussian noise amplitude distribution", "1e3",
+            prm.declare_entry ("Standard deviation of Gaussian noise amplitude distribution", "10e3",
                              Patterns::Double (0),
                              "The standard deviation of the Gaussian distribution of the amplitude of the dike noise. "
                              "Note that this parameter is taken to be the same for all dike segments. "
