@@ -601,17 +601,6 @@ namespace aspect
                                     old_plastic_strain,
                                     this->introspection().component_indices.compositional_fields[plastic_strain_index]);
 
-                if (healing_mechanism == fracture_healing && plastic_yielding == true)
-                  {
-                    // Currently, we only consider that the fracture healing process
-                    // depends on the accumulated plastic strain (APS).
-                    // The APS  increment delta_APS = APS_current - APS_old
-                    //                              = APS_old/(1+fracture_healing_part)-APS_old
-                    const double fracture_healing_part = calculate_strain_healing(in,i);
-                    delta_e_ii_plastic = old_plastic_strain[i]/(1+fracture_healing_part) - old_plastic_strain[i];
-                    out.reaction_terms[i][plastic_strain_index] = std::max(delta_e_ii_plastic, -in.composition[i][plastic_strain_index]);
-                  }
-                else  
                   out.reaction_terms[i][plastic_strain_index] = std::max(delta_e_ii_plastic, -old_plastic_strain[i]);
        
               }
