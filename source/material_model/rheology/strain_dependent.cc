@@ -601,7 +601,7 @@ namespace aspect
                                     old_plastic_strain,
                                     this->introspection().component_indices.compositional_fields[plastic_strain_index]);
 
-                  out.reaction_terms[i][plastic_strain_index] = std::max(delta_e_ii_plastic, -old_plastic_strain[i]);
+                  out.reaction_terms[i][plastic_strain_index] = std::max(delta_e_ii_plastic, -in.composition[i][plastic_strain_index]);
        
               }
             if (weakening_mechanism == viscous_weakening_with_viscous_strain_only)
@@ -612,7 +612,7 @@ namespace aspect
                                     old_viscous_strain,
                                     this->introspection().component_indices.compositional_fields[viscous_strain_index]);
 
-                out.reaction_terms[i][viscous_strain_index] = std::max(delta_e_ii_viscous, -old_viscous_strain[i]);
+                out.reaction_terms[i][viscous_strain_index] = std::max(delta_e_ii_viscous, -in.composition[i][viscous_strain_index]);
               }
             if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
               {
@@ -622,7 +622,7 @@ namespace aspect
                                     old_total_strain,
                                     this->introspection().component_indices.compositional_fields[total_strain_index]);
 
-                out.reaction_terms[i][total_strain_index] = std::max(delta_e_ii,  -old_total_strain[i]);
+                out.reaction_terms[i][total_strain_index] = std::max(delta_e_ii,  -in.composition[i][total_strain_index]);
               }
             if (weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
               {
@@ -632,7 +632,7 @@ namespace aspect
                                     old_plastic_strain,
                                     this->introspection().component_indices.compositional_fields[plastic_strain_index]);
 
-                out.reaction_terms[i][plastic_strain_index] = std::max(delta_e_ii_plastic, -old_plastic_strain[i]);
+                out.reaction_terms[i][plastic_strain_index] = std::max(delta_e_ii_plastic, -in.composition[i][plastic_strain_index]);
 
                 const int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
 
@@ -640,7 +640,7 @@ namespace aspect
                                     old_viscous_strain,
                                     this->introspection().component_indices.compositional_fields[viscous_strain_index]);
 
-                out.reaction_terms[i][viscous_strain_index] = std::max(delta_e_ii_viscous, -old_viscous_strain[i]);
+                out.reaction_terms[i][viscous_strain_index] = std::max(delta_e_ii_viscous, -in.composition[i][viscous_strain_index]);
               }
             if (this->introspection().compositional_name_exists("noninitial_plastic_strain"))
               {
@@ -650,7 +650,7 @@ namespace aspect
                                     old_noninitial_plastic_strain,
                                     this->introspection().component_indices.compositional_fields[noninitial_plastic_strain_index]);
 
-                out.reaction_terms[i][noninitial_plastic_strain_index] = std::max(delta_e_ii_plastic, -old_noninitial_plastic_strain[i]);
+                out.reaction_terms[i][noninitial_plastic_strain_index] = std::max(delta_e_ii_plastic, -in.composition[i][noninitial_plastic_strain_index]);
               }
           }
       }
