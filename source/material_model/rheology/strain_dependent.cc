@@ -632,13 +632,7 @@ namespace aspect
                 else  
                   out.reaction_terms[i][strain_index] = std::max(delta_e_ii_plastic,
                                                                -composition_evaluators[strain_index]->get_value(0));
-
-                if (in.position[i][0]== 50e3 && in.position[i][1]== 50e3)
-                  {
-                    std::cout << "old_plastic_strain: " << composition_evaluators[strain_index]->get_value(0) << "\n "
-                    << "current plastic strain: " << in.composition[i][strain_index] << "\n"
-                    << "delta_e_ii_plastic: " << delta_e_ii_plastic << std::endl;
-                  }                                               
+                                           
               }
             if (weakening_mechanism == viscous_weakening_with_viscous_strain_only)
               {
