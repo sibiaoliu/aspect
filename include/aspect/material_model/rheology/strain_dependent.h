@@ -225,11 +225,6 @@ namespace aspect
           double strain_healing_fracture_recovery_rate;
 
           /**
-           * The fracture recovery rate used in the strain healing model for faulting.
-           */
-          double strain_healing_fracture_recovery_rate;
-
-          /**
            * We cache the evaluators that are necessary to evaluate the velocity
            * gradients and compositions.
            * By caching the evaluator, we can avoid recreating them
