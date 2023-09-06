@@ -553,17 +553,7 @@ namespace aspect
 
             const double edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(in.strain_rate[i])), 0.)),
                                             min_strain_rate);
-            // strain increment from current timestep
             double delta_e_ii = edot_ii*this->get_timestep();
-            // MAKE A TEST TO CALL CURRENT STRAIN
-            // // current extrapolate strain: either accumulated plastic strain or total strain
-            // double current_e_ii = 0.0;
-            // if (weakening_mechanism == total_strain || weakening_mechanism == plastic_weakening_with_total_strain_only)
-            //   current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("total_strain")];
-            // else if (weakening_mechanism == plastic_weakening_with_plastic_strain_only || weakening_mechanism == plastic_weakening_with_plastic_strain_and_viscous_weakening_with_viscous_strain)
-            //   current_e_ii = in.composition[i][this->introspection().compositional_index_for_name("plastic_strain")];
-            // else
-            //   AssertThrow(false, ExcNotImplemented());
 
             // Assign accumulated strain value according to active deformation mechanism
 
@@ -581,6 +571,7 @@ namespace aspect
             if (healing_mechanism != no_healing)
               {
                 // Temperature-dependent healing occurs independent of deformation state
+                // or fracture healing mechanism
                 const double healed_strain = calculate_strain_healing(in,i);
 
                 delta_e_ii_plastic -= healed_strain;
