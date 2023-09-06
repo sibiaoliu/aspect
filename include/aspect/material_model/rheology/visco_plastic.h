@@ -282,6 +282,16 @@ namespace aspect
           bool use_adiabatic_pressure_in_creep;
 
           /**
+           * Depth of the mantle dehydration zone
+           */
+          double mantle_dehydration_depth;
+
+          /**
+           * List of scale factors of the effective viscosity due to mantle dehydration
+           */
+          std::vector<double> mantle_dehydration_factors;
+
+          /**
            * List of exponents controlling the behavior of the stress limiter
            * yielding mechanism.
            */
