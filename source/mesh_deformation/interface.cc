@@ -104,8 +104,7 @@ namespace aspect
               scratch.face_material_model_inputs.reinit  (scratch.face_finite_element_values,
                                                           cell,
                                                           this->introspection(),
-                                                          this->get_solution(),
-                                                          false);
+                                                          this->get_solution());
               scratch.face_material_model_inputs.requested_properties = MaterialModel::MaterialProperties::density;
 
               this->get_material_model().evaluate(scratch.face_material_model_inputs, scratch.face_material_model_outputs);
@@ -1429,6 +1428,11 @@ namespace aspect
       mg_transfer.interpolate_to_mg(mesh_deformation_dof_handler,
                                     level_displacements,
                                     displacements);
+
+      const unsigned int n_levels = sim.triangulation.n_global_levels();
+      for (unsigned int level = 0; level < n_levels; ++level)
+        level_displacements[level].update_ghost_values();
+
     }
 
 

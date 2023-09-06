@@ -220,16 +220,13 @@ namespace aspect
           double strain_healing_temperature_dependent_prefactor;
 
           /**
-           * The fracture recovery rate used in the strain healing model for faulting.
-           */
-          double strain_healing_fracture_recovery_rate;
-
-          /**
-           * We cache the evaluator that is necessary to evaluate the velocity
-           * gradients. By caching the evaluator, we can avoid recreating it
+           * We cache the evaluators that are necessary to evaluate the velocity
+           * gradients and compositions.
+           * By caching the evaluator, we can avoid recreating them
            * every time we need it.
            */
           mutable std::unique_ptr<FEPointEvaluation<dim, dim>> evaluator;
+          mutable std::vector<std::unique_ptr<FEPointEvaluation<1, dim>>> composition_evaluators;
       };
     }
   }

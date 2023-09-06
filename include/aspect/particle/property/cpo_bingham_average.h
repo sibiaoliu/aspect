@@ -159,7 +159,6 @@ namespace aspect
           /**
            * Read the parameters this class declares from the parameter file.
            */
-          virtual
           void
           parse_parameters (ParameterHandler &prm) override;
 
@@ -200,11 +199,6 @@ namespace aspect
            * when doing the random draw volume weighting, this sets how many samples are taken.
            */
           unsigned int n_samples;
-
-          /**
-           * The tensor equivalent to the permutation symbol (Levi-Civita symbol).
-           */
-          Tensor<3,3> permutation_operator_3d;
 
       };
     }

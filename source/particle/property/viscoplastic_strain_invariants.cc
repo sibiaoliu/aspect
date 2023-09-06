@@ -118,7 +118,7 @@ namespace aspect
         material_inputs.strain_rate[0] = symmetrize (grad_u);
 
         // Put compositional fields into single variable
-        for (unsigned int i = 0; i < this->n_compositional_fields(); i++)
+        for (unsigned int i = 0; i < this->n_compositional_fields(); ++i)
           {
             material_inputs.composition[0][i] = solution[this->introspection().component_indices.compositional_fields[i]];
           }
@@ -130,7 +130,7 @@ namespace aspect
         const bool plastic_yielding = viscoplastic.is_yielding(material_inputs);
 
         // Next take the integrated strain invariant from the prior time step.
-        auto &data = particle->get_properties();
+        const auto data = particle->get_properties();
 
         // Calculate strain rate second invariant
         const double edot_ii = std::sqrt(std::max(-second_invariant(deviator(material_inputs.strain_rate[0])), 0.));

@@ -142,7 +142,7 @@ namespace aspect
                       diffusion_strain_rate = dislocation_viscosity / (diffusion_viscosity + dislocation_viscosity) * edot_ii;
                       dislocation_strain_rate = diffusion_viscosity / (diffusion_viscosity + dislocation_viscosity) * edot_ii;
 
-                      stress_iteration++;
+                      ++stress_iteration;
                       AssertThrow(stress_iteration < stress_max_iteration_number,
                                   ExcMessage("No convergence has been reached in the loop that determines "
                                              "the ratio of diffusion/dislocation viscosity. Aborting! "
@@ -467,12 +467,12 @@ namespace aspect
                                    "activation energies, reference densities, thermal expansivities, "
                                    "and stress exponents. The effective viscosity is defined as "
                                    "\n\n"
-                                   "\\[\\eta_{\\text{eff}} = \\left(\\frac{1}{\\eta_{\\text{eff}}^\\text{diff}}+ "
-                                   "\\frac{1}{\\eta_{\\text{eff}}^\\text{dis}}\\right)^{-1}\\] "
+                                   "$\\eta_{\\text{eff}} = \\left(\\frac{1}{\\eta_{\\text{eff}}^\\text{diff}}+ "
+                                   "\\frac{1}{\\eta_{\\text{eff}}^\\text{dis}}\\right)^{-1}$ "
                                    "where "
-                                   "\\[\\eta_{\\text{i}} = \\frac{1}{2} A^{-\\frac{1}{n_i}} d^\\frac{m_i}{n_i} "
+                                   "$\\eta_{\\text{i}} = \\frac{1}{2} A^{-\\frac{1}{n_i}} d^\\frac{m_i}{n_i} "
                                    "\\dot{\\varepsilon_i}^{\\frac{1-n_i}{n_i}} "
-                                   "\\exp\\left(\\frac{E_i^\\ast + PV_i^\\ast}{n_iRT}\\right)\\] "
+                                   "\\exp\\left(\\frac{E_i^\\ast + PV_i^\\ast}{n_iRT}\\right)$ "
                                    "\n\n"
                                    "where $d$ is grain size, $i$ corresponds to diffusion or dislocation creep, "
                                    "$\\dot{\\varepsilon}$ is the square root of the second invariant of the "

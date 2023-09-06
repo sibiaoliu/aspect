@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# replaces the version information in several places by the given string
+# replaces the version information by the given string
 
 if [[ $# != 1 ]]
 then
@@ -15,10 +15,4 @@ echo "changing version info to '$VER':"
 echo "VERSION ..."
 echo "$VER" >../../VERSION
 
-echo "manual.tex ..."
-sed -i "s/^.* %VERSION-INFO%\$/$VER %VERSION-INFO%/g" ../../doc/manual/manual.tex
-
-echo "global.h ..."
-sed -i "s|version \(.*\)\\\\n\" //VERSION-INFO|version $VER\\\\n\" //VERSION-INFO|g" ../../include/aspect/global.h
-
-git add ../../VERSION ../../doc/manual/manual.tex ../../include/aspect/global.h
+git add ../../VERSION

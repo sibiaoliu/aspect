@@ -281,11 +281,11 @@ namespace aspect
               // processors
               catch (const std::exception &exc)
                 {
-                  Utilities::linear_solver_failed("iterative (bottom right) solver",
-                                                  "BlockSchurGMGPreconditioner::vmult",
-                                                  std::vector<SolverControl> {solver_control},
-                                                  exc,
-                                                  src.block(0).get_mpi_communicator());
+                  Utilities::throw_linear_solver_failure_exception("iterative (bottom right) solver",
+                                                                   "BlockSchurGMGPreconditioner::vmult",
+                                                                   std::vector<SolverControl> {solver_control},
+                                                                   exc,
+                                                                   src.block(0).get_mpi_communicator());
                 }
             }
         }
@@ -322,11 +322,11 @@ namespace aspect
           // processors
           catch (const std::exception &exc)
             {
-              Utilities::linear_solver_failed("iterative (top left) solver",
-                                              "BlockSchurGMGPreconditioner::vmult",
-                                              std::vector<SolverControl> {solver_control},
-                                              exc,
-                                              src.block(0).get_mpi_communicator());
+              Utilities::throw_linear_solver_failure_exception("iterative (top left) solver",
+                                                               "BlockSchurGMGPreconditioner::vmult",
+                                                               std::vector<SolverControl> {solver_control},
+                                                               exc,
+                                                               src.block(0).get_mpi_communicator());
             }
         }
       else
@@ -1027,11 +1027,6 @@ namespace aspect
     parse_parameters(prm);
     CitationInfo::add("mf");
 
-#if !DEAL_II_VERSION_GTE(9,3,2)
-    AssertThrow(!sim.parameters.mesh_deformation_enabled,
-                ExcMessage("Mesh deformation with the GMG solver requires deal.II 9.3.2 or newer."));
-#endif
-
     // Sorry, not any time soon:
     AssertThrow(!sim.parameters.include_melt_transport, ExcNotImplemented());
     // Not very difficult to do, but will require a different mass matrix
@@ -1395,8 +1390,7 @@ namespace aspect
                                                                                 &(sim.dof_handler));
 
                   fe_values.reinit(simulator_cell);
-                  in.reinit(fe_values, simulator_cell, sim.introspection, sim.current_linearization_point,
-                            true /* = compute_strain_rate */);
+                  in.reinit(fe_values, simulator_cell, sim.introspection, sim.current_linearization_point);
 
                   sim.material_model->fill_additional_material_model_inputs(in, sim.current_linearization_point, fe_values, sim.introspection);
                   sim.material_model->evaluate(in, out);
@@ -1531,8 +1525,7 @@ namespace aspect
                   face_material_inputs.reinit  (fe_face_values,
                                                 simulator_cell,
                                                 sim.introspection,
-                                                sim.solution,
-                                                false);
+                                                sim.solution);
                   face_material_inputs.requested_properties = MaterialModel::MaterialProperties::density;
                   sim.material_model->evaluate(face_material_inputs, face_material_outputs);
 
@@ -2234,12 +2227,12 @@ namespace aspect
             if (sim.parameters.n_expensive_stokes_solver_steps > 0)
               solver_controls.push_back(solver_control_expensive);
 
-            Utilities::linear_solver_failed("iterative Stokes solver",
-                                            "StokesMatrixFreeHandlerImplementation::solve",
-                                            solver_controls,
-                                            exc,
-                                            sim.mpi_communicator,
-                                            sim.parameters.output_directory+"solver_history.txt");
+            Utilities::throw_linear_solver_failure_exception("iterative Stokes solver",
+                                                             "StokesMatrixFreeHandlerImplementation::solve",
+                                                             solver_controls,
+                                                             exc,
+                                                             sim.mpi_communicator,
+                                                             sim.parameters.output_directory+"solver_history.txt");
           }
       }
 
@@ -2388,7 +2381,7 @@ namespace aspect
                         Assert (false, ExcInternalError());
                     }
                 }
-              mg_constrained_dofs_A_block.make_zero_boundary_constraints(dof_handler_v, {bdryid}, mask);
+              mg_constrained_dofs_A_block.make_zero_boundary_constraints(dof_handler_v, {bdryid}, ComponentMask(mask));
             }
           else
             {

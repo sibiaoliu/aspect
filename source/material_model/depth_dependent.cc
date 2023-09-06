@@ -73,7 +73,7 @@ namespace aspect
       /* find the layer containing the specified depth and return the corresponding viscosity */
       int i=0;
       const int nlayers = depth_values.size()-1;
-      while ( depth > depth_values[i] && i<nlayers ) i++; /* increment i until depth is above base of layer i */
+      while ( depth > depth_values[i] && i<nlayers ) ++i; /* increment i until depth is above base of layer i */
       return viscosity_values[i];
     }
 
@@ -230,7 +230,7 @@ namespace aspect
               AssertThrow( depth_values.size() == viscosity_values.size() ,
                            ExcMessage("Depth list must be same size as Viscosity list"));
               /* check that list is in ascending order */
-              for (unsigned int i=1; i<depth_values.size(); i++)
+              for (unsigned int i=1; i<depth_values.size(); ++i)
                 AssertThrow(depth_values[i] > depth_values[i-1],
                             ExcMessage("Viscosity depth values must be strictly ascending"));
               /* check that last layer includes base of model */
@@ -305,9 +305,7 @@ namespace aspect
                                    "derived. Currently the depth dependent model only allows depth dependence of "
                                    "viscosity - other material properties are taken from the ``Base model''. "
                                    "Viscosity $\\eta$ at depth $z$ is calculated according to:"
-                                   "\\begin{equation}"
-                                   "\\eta(z,p,T,X,...) = \\eta(z) \\eta_b(p,T,X,..)/\\eta_{r}"
-                                   "\\end{equation}"
+                                   "$ \\eta(z,p,T,X,...) = \\eta(z) \\eta_b(p,T,X,..)/\\eta_{r}$ "
                                    "where $\\eta(z)$ is the depth-dependence specified by the depth dependent "
                                    "model, $\\eta_b(p,T,X,...)$ is the viscosity calculated from the base model, "
                                    "and $\\eta_{r}$ is the reference viscosity. "

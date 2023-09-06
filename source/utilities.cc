@@ -272,7 +272,6 @@ namespace aspect
             {
               // Split the list by comma delimited components.
               const std::vector<std::string> field_entries = dealii::Utilities::split_string_list(input_string, ',');
-
               for (const auto &field_entry : field_entries)
                 {
                   // Split each entry into string and value ( <id> : <value>)
@@ -329,9 +328,9 @@ namespace aspect
           // 'value1, value2, value3' with as many entries as allowed keys.
           else if (Patterns::List(Patterns::Double(),options.list_of_allowed_keys.size(),options.list_of_allowed_keys.size()).match(input_string))
             {
-              const std::vector<double> values = possibly_extend_from_1_to_N (dealii::Utilities::string_to_double(dealii::Utilities::split_string_list(input_string)),
-                                                                              options.list_of_allowed_keys.size(),
-                                                                              options.property_name);
+              const std::vector<double> values = possibly_extend_from_1_to_N(dealii::Utilities::string_to_double(dealii::Utilities::split_string_list(input_string)),
+                                                                             options.list_of_allowed_keys.size(),
+                                                                             options.property_name);
 
               for (unsigned int i=0; i<values.size(); ++i)
                 {
@@ -510,18 +509,24 @@ namespace aspect
                                 Options &options)
       {
         // Check options for consistency
-        AssertThrow (options.list_of_required_keys.size() != 0,
-                     ExcMessage("parse_map_to_double_array needs at least one required key name."));
         AssertThrow (options.property_name != "",
                      ExcMessage("parse_map_to_double_array needs a property name to be able to properly report parsing errors."));
+        AssertThrow (options.list_of_required_keys.size() != 0,
+                     ExcMessage("parse_map_to_double_array needs at least one required key name for property "
+                                + options.property_name
+                                + "."));
         AssertThrow (options.check_values_per_key == false ||
                      options.store_values_per_key == false,
                      ExcMessage("parse_map_to_double_array can not simultaneously store the structure "
-                                "of the parsed map and check that structure against a given structure."));
+                                "of the parsed map for "
+                                + options.property_name
+                                + " and check that structure against a given structure."));
         AssertThrow (options.check_values_per_key == false ||
                      options.n_values_per_key.size() == options.list_of_required_keys.size(),
                      ExcMessage("parse_map_to_double_array can only check the structure "
-                                "of the parsed map if an expected number of values for each key is given."));
+                                "of the parsed map for "
+                                + options.property_name
+                                + " if an expected number of values for each key is given."));
 
         // First: parse the string into a map depending on what Pattern we are dealing with
         std::multimap<std::string, double> parsed_map = parse_string_to_map(input_string,
@@ -972,7 +977,7 @@ namespace aspect
       int   j=pointNo-1;
 
       // loop through all edges of the polygon
-      for (int i=0; i<pointNo; i++)
+      for (int i=0; i<pointNo; ++i)
         {
           // edge from V[i] to  V[i+1]
           if (point_list[j][1] <= point[1])
@@ -1321,7 +1326,7 @@ namespace aspect
     bool
     fexists(const std::string &filename)
     {
-      std::ifstream ifile(filename.c_str());
+      std::ifstream ifile(filename);
 
       // return whether construction of the input file has succeeded;
       // success requires the file to exist and to be readable
@@ -1337,7 +1342,7 @@ namespace aspect
       bool file_exists = false;
       if (Utilities::MPI::this_mpi_process(comm) == 0)
         {
-          std::ifstream ifile(filename.c_str());
+          std::ifstream ifile(filename);
 
           // return whether construction of the input file has succeeded;
           // success requires the file to exist and to be readable
@@ -1429,7 +1434,7 @@ namespace aspect
               // The POINTS values are set as attributes inside a table.
               // Loop through the Attribute table to locate the points values within
               std::vector<std::string> points;
-              for (libdap::AttrTable::Attr_iter i = das.var_begin(); i != das.var_end(); i++)
+              for (libdap::AttrTable::Attr_iter i = das.var_begin(); i != das.var_end(); ++i)
                 {
                   libdap::AttrTable *table = das.get_table(i);
                   if (table->get_attr("POINTS") != "")
@@ -1443,7 +1448,7 @@ namespace aspect
               // Append the gathered POINTS in the proper format:
               // "# POINTS: <val1> <val2> <val3>"
               urlString << "# POINTS:";
-              for (unsigned int i = 0; i < points.size(); i++)
+              for (unsigned int i = 0; i < points.size(); ++i)
                 {
                   urlString << ' ' << points[i];
                 }
@@ -1453,9 +1458,9 @@ namespace aspect
               // per row with a character return added at the end of each row.
               // TODO: Add a check to make sure that each column is the same size before writing
               //     to the stringstream
-              for (unsigned int i = 0; i < tmp.size(); i++)
+              for (unsigned int i = 0; i < tmp.size(); ++i)
                 {
-                  for (unsigned int j = 0; j < columns.size(); j++)
+                  for (unsigned int j = 0; j < columns.size(); ++j)
                     {
                       urlString << columns[j][i];
                       urlString << ' ';
@@ -1487,9 +1492,9 @@ namespace aspect
               std::ifstream filestream;
               const bool filename_ends_in_gz = std::regex_search(filename, std::regex("\\.gz$"));
               if (filename_ends_in_gz == true)
-                filestream.open(filename.c_str(), std::ios_base::in | std::ios_base::binary);
+                filestream.open(filename, std::ios_base::in | std::ios_base::binary);
               else
-                filestream.open(filename.c_str());
+                filestream.open(filename);
 
               if (!filestream)
                 {
@@ -1562,8 +1567,7 @@ namespace aspect
 
       if (Utilities::MPI::this_mpi_process(comm) == 0)
         {
-          std::ofstream filestream;
-          filestream.open(filename.c_str());
+          std::ofstream filestream(filename);
 
           AssertThrow (filestream.good(),
                        ExcMessage (std::string("Could not open file <") + filename + ">."));
@@ -1616,7 +1620,7 @@ namespace aspect
 
       while ((pos = pathname.find_first_of('/',pre)) != std::string::npos)
         {
-          const std::string subdir = pathname.substr(0,pos++);
+          const std::string subdir = pathname.substr(0,++pos);
           pre = pos;
 
           // if leading '/', first string is 0 length
@@ -1898,13 +1902,13 @@ namespace aspect
 
         // preconditioning
         // normalize column i so that a_ii=1
-        for (int i = 0; i < this->dim(); i++)
+        for (int i = 0; i < this->dim(); ++i)
           {
             assert(this->operator()(i,i) != 0.0);
             this->saved_diag(i) = 1.0/this->operator()(i,i);
             j_min = std::max(0,i-this->num_lower());
             j_max = std::min(this->dim()-1,i+this->num_upper());
-            for (int j = j_min; j <= j_max; j++)
+            for (int j = j_min; j <= j_max; ++j)
               {
                 this->operator()(i,j) *= this->saved_diag(i);
               }
@@ -1912,16 +1916,16 @@ namespace aspect
           }
 
         // Gauss LR-Decomposition
-        for (int k = 0; k < this->dim(); k++)
+        for (int k = 0; k < this->dim(); ++k)
           {
             i_max = std::min(this->dim()-1,k+this->num_lower());  // num_lower not a mistake!
-            for (int i = k+1; i <= i_max; i++)
+            for (int i = k+1; i <= i_max; ++i)
               {
                 assert(this->operator()(k,k) != 0.0);
                 x = -this->operator()(i,k)/this->operator()(k,k);
                 this->operator()(i,k) = -x;                         // assembly part of L
                 j_max = std::min(this->dim()-1, k + this->num_upper());
-                for (int j = k+1; j <= j_max; j++)
+                for (int j = k+1; j <= j_max; ++j)
                   {
                     // assembly part of R
                     this->operator()(i,j) = this->operator()(i,j)+x*this->operator()(k,j);
@@ -1938,11 +1942,11 @@ namespace aspect
         std::vector<double> x(this->dim());
         int j_start;
         double sum;
-        for (int i = 0; i < this->dim(); i++)
+        for (int i = 0; i < this->dim(); ++i)
           {
             sum = 0;
             j_start = std::max(0,i-this->num_lower());
-            for (int j = j_start; j < i; j++) sum += this->operator()(i,j)*x[j];
+            for (int j = j_start; j < i; ++j) sum += this->operator()(i,j)*x[j];
             x[i] = (b[i]*this->saved_diag(i)) - sum;
           }
         return x;
@@ -1960,7 +1964,7 @@ namespace aspect
           {
             sum = 0;
             j_stop = std::min(this->dim()-1, i + this->num_upper());
-            for (int j = i+1; j <= j_stop; j++) sum += this->operator()(i,j)*x[j];
+            for (int j = i+1; j <= j_stop; ++j) sum += this->operator()(i,j)*x[j];
             x[i] = (b[i] - sum) / this->operator()(i,i);
           }
         return x;
@@ -1995,7 +1999,7 @@ namespace aspect
         m_x = x;
         m_y = y;
         const unsigned int n = x.size();
-        for (unsigned int i = 0; i < n-1; i++)
+        for (unsigned int i = 0; i < n-1; ++i)
           {
             assert(m_x[i] < m_x[i+1]);
           }
@@ -2011,7 +2015,7 @@ namespace aspect
                  * interpolation spline.
                  */
                 std::vector<double> dys(n-1), dxs(n-1), ms(n-1);
-                for (unsigned int i=0; i < n-1; i++)
+                for (unsigned int i=0; i < n-1; ++i)
                   {
                     dxs[i] = x[i+1]-x[i];
                     dys[i] = y[i+1]-y[i];
@@ -2022,7 +2026,7 @@ namespace aspect
                 m_c.resize(n);
                 m_c[0] = 0;
 
-                for (unsigned int i = 0; i < n-2; i++)
+                for (unsigned int i = 0; i < n-2; ++i)
                   {
                     const double m0 = ms[i];
                     const double m1 = ms[i+1];
@@ -2044,7 +2048,7 @@ namespace aspect
                 // Get b and c coefficients
                 m_a.resize(n);
                 m_b.resize(n);
-                for (unsigned int i = 0; i < m_c.size()-1; i++)
+                for (unsigned int i = 0; i < m_c.size()-1; ++i)
                   {
                     const double c1 = m_c[i];
                     const double m0 = ms[i];
@@ -2061,7 +2065,7 @@ namespace aspect
                 // for the parameters b[]
                 band_matrix A(n,1,1);
                 std::vector<double>  rhs(n);
-                for (unsigned int i = 1; i<n-1; i++)
+                for (unsigned int i = 1; i<n-1; ++i)
                   {
                     A(i,i-1) = 1.0/3.0*(x[i]-x[i-1]);
                     A(i,i) = 2.0/3.0*(x[i+1]-x[i-1]);
@@ -2082,7 +2086,7 @@ namespace aspect
                 // calculate parameters a[] and c[] based on b[]
                 m_a.resize(n);
                 m_c.resize(n);
-                for (unsigned int i = 0; i<n-1; i++)
+                for (unsigned int i = 0; i<n-1; ++i)
                   {
                     m_a[i] = 1.0/3.0*(m_b[i+1]-m_b[i])/(x[i+1]-x[i]);
                     m_c[i] = (y[i+1]-y[i])/(x[i+1]-x[i])
@@ -2095,7 +2099,7 @@ namespace aspect
             m_a.resize(n);
             m_b.resize(n);
             m_c.resize(n);
-            for (unsigned int i = 0; i<n-1; i++)
+            for (unsigned int i = 0; i<n-1; ++i)
               {
                 m_a[i] = 0.0;
                 m_b[i] = 0.0;
@@ -2508,7 +2512,7 @@ namespace aspect
     Point<dim> convert_array_to_point(const std::array<double,dim> &array)
     {
       Point<dim> point;
-      for (unsigned int i = 0; i < dim; i++)
+      for (unsigned int i = 0; i < dim; ++i)
         point[i] = array[i];
 
       return point;
@@ -2520,7 +2524,7 @@ namespace aspect
     std::array<double,dim> convert_point_to_array(const Point<dim> &point)
     {
       std::array<double,dim> array;
-      for (unsigned int i = 0; i < dim; i++)
+      for (unsigned int i = 0; i < dim; ++i)
         array[i] = point[i];
 
       return array;
@@ -2882,12 +2886,12 @@ namespace aspect
 
 
 
-    void linear_solver_failed(const std::string &solver_name,
-                              const std::string &function_name,
-                              const std::vector<SolverControl> &solver_controls,
-                              const std::exception &exc,
-                              const MPI_Comm &mpi_communicator,
-                              const std::string &output_filename)
+    void throw_linear_solver_failure_exception(const std::string &solver_name,
+                                               const std::string &function_name,
+                                               const std::vector<SolverControl> &solver_controls,
+                                               const std::exception &exc,
+                                               const MPI_Comm &mpi_communicator,
+                                               const std::string &output_filename)
     {
       if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
         {
@@ -2911,7 +2915,7 @@ namespace aspect
           if (output_filename != "")
             {
               // output solver history
-              std::ofstream f((output_filename).c_str());
+              std::ofstream f((output_filename));
 
               for (const auto &solver_control: solver_controls)
                 {
@@ -2945,6 +2949,8 @@ namespace aspect
       else
         throw QuietException();
     }
+
+
 
     std::vector<Tensor<2,3>>
     rotation_matrices_random_draw_volume_weighting(const std::vector<double> volume_fraction,
@@ -2991,6 +2997,399 @@ namespace aspect
           matrices_out[grain_i] = matrices_sorted[matrix_index];
         }
       return matrices_out;
+    }
+
+
+
+    double
+    wrap_angle(const double angle)
+    {
+      return angle - 360.0*std::floor(angle/360.0);
+    }
+
+
+
+    std::array<double,3>
+    zxz_euler_angles_from_rotation_matrix(const Tensor<2,3> &rotation_matrix)
+    {
+      // ZXZ Euler angles
+      std::array<double,3> euler_angles;
+      for (size_t i = 0; i < 3; ++i)
+        for (size_t j = 0; j < 3; ++j)
+          Assert(abs(rotation_matrix[i][j]) <= 1.0,
+                 ExcMessage("rotation_matrix[" + std::to_string(i) + "][" + std::to_string(j) +
+                            "] is larger than one: " + std::to_string(rotation_matrix[i][j]) + " (" + std::to_string(rotation_matrix[i][j]-1.0) + "). rotation_matrix = \n"
+                            + std::to_string(rotation_matrix[0][0]) + " " + std::to_string(rotation_matrix[0][1]) + " " + std::to_string(rotation_matrix[0][2]) + "\n"
+                            + std::to_string(rotation_matrix[1][0]) + " " + std::to_string(rotation_matrix[1][1]) + " " + std::to_string(rotation_matrix[1][2]) + "\n"
+                            + std::to_string(rotation_matrix[2][0]) + " " + std::to_string(rotation_matrix[2][1]) + " " + std::to_string(rotation_matrix[2][2])));
+
+
+      AssertThrow(rotation_matrix[2][2] <= 1.0, ExcMessage("rot_matrix[2][2] > 1.0"));
+
+      const double theta = std::acos(rotation_matrix[2][2]);
+      double phi1 = 0.0;
+      double phi2 = 0.0;
+
+      if (theta != 0.0 && theta != dealii::numbers::PI)
+        {
+          //
+          phi1  = std::atan2(rotation_matrix[2][0]/-std::sin(theta),rotation_matrix[2][1]/-std::sin(theta));
+          phi2  = std::atan2(rotation_matrix[0][2]/-std::sin(theta),rotation_matrix[1][2]/std::sin(theta));
+        }
+
+      // note that in the case theta is 0 or phi a dimension is lost
+      // see: https://en.wikipedia.org/wiki/Gimbal_lock. We set phi1
+      // to 0 and compute the corresponding phi2. The resulting direction
+      // (cosine matrix) should be the same.
+      else if (theta == 0.0)
+        {
+          phi2 = - phi1 - std::atan2(rotation_matrix[0][1],rotation_matrix[0][0]);
+        }
+      else
+        {
+          phi2 = phi1 + std::atan2(rotation_matrix[0][1],rotation_matrix[0][0]);
+        }
+
+
+      AssertThrow(!std::isnan(phi1), ExcMessage("phi1 is not a number. theta = " + std::to_string(theta) + ", rotation_matrix[2][2]= " + std::to_string(rotation_matrix[2][2])
+                                                + ", acos(rotation_matrix[2][2]) = " + std::to_string(std::acos(rotation_matrix[2][2])) + ", acos(1.0) = " + std::to_string(std::acos(1.0))));
+      AssertThrow(!std::isnan(theta), ExcMessage("theta is not a number."));
+      AssertThrow(!std::isnan(phi2), ExcMessage("phi2 is not a number."));
+
+      euler_angles[0] = wrap_angle(phi1 * constants::radians_to_degree);
+      euler_angles[1] = wrap_angle(theta * constants::radians_to_degree);
+      euler_angles[2] = wrap_angle(phi2 * constants::radians_to_degree);
+
+
+      AssertThrow(!std::isnan(euler_angles[0]), ExcMessage(" euler_angles[0] is not a number."));
+      AssertThrow(!std::isnan(euler_angles[1]), ExcMessage(" euler_angles[1] is not a number."));
+      AssertThrow(!std::isnan(euler_angles[2]), ExcMessage(" euler_angles[2] is not a number."));
+
+      return euler_angles;
+    }
+
+
+
+    Tensor<2,3>
+    zxz_euler_angles_to_rotation_matrix(const double phi1_degrees, const double theta_degrees, const double phi2_degrees)
+    {
+      // ZXZ Euler angles
+      const double phi1 = phi1_degrees * constants::degree_to_radians;
+      const double theta = theta_degrees * constants::degree_to_radians;
+      const double phi2 = phi2_degrees * constants::degree_to_radians;
+      Tensor<2,3> rot_matrix;
+
+      rot_matrix[0][0] = std::cos(phi2)*std::cos(phi1) - std::cos(theta)*std::sin(phi1)*std::sin(phi2);
+      rot_matrix[0][1] = -std::cos(phi2)*std::sin(phi1) - std::cos(theta)*std::cos(phi1)*std::sin(phi2);
+      rot_matrix[0][2] = -std::sin(phi2)*std::sin(theta);
+
+      rot_matrix[1][0] = std::sin(phi2)*std::cos(phi1) + std::cos(theta)*std::sin(phi1)*std::cos(phi2);
+      rot_matrix[1][1] = -std::sin(phi2)*std::sin(phi1) + std::cos(theta)*std::cos(phi1)*std::cos(phi2);
+      rot_matrix[1][2] = std::cos(phi2)*std::sin(theta);
+
+      rot_matrix[2][0] = -std::sin(theta)*std::sin(phi1);
+      rot_matrix[2][1] = -std::sin(theta)*std::cos(phi1);
+      rot_matrix[2][2] = std::cos(theta);
+      AssertThrow(rot_matrix[2][2] <= 1.0, ExcMessage("rot_matrix[2][2] > 1.0"));
+
+      return rot_matrix;
+    }
+
+
+
+    namespace Tensors
+    {
+      SymmetricTensor<4,3>
+      rotate_full_stiffness_tensor(const Tensor<2,3> &rotation_tensor, const SymmetricTensor<4,3> &input_tensor)
+      {
+        SymmetricTensor<4,3> output;
+
+        // Dealii symmetric tensor is C_{ijkl} == C_{jikl} == C_{ijlk}, but not C_{klij}.
+        // So we make sure that those entries are not added twice in this loop by having
+        // the second and 4th loop starting with the first and third index respectively.
+        for (unsigned short int i1 = 0; i1 < 3; ++i1)
+          {
+            for (unsigned short int i2 = i1; i2 < 3; ++i2)
+              {
+                for (unsigned short int i3 = 0; i3 < 3; ++i3)
+                  {
+                    for (unsigned short int i4 = i3; i4 < 3; ++i4)
+                      {
+                        for (unsigned short int j1 = 0; j1 < 3; ++j1)
+                          {
+                            for (unsigned short int j2 = 0; j2 < 3; ++j2)
+                              {
+                                for (unsigned short int j3 = 0; j3 < 3; ++j3)
+                                  {
+                                    for (unsigned short int j4 = 0; j4 < 3; ++j4)
+                                      {
+                                        output[i1][i2][i3][i4] += rotation_tensor[i1][j1]*rotation_tensor[i2][j2]*rotation_tensor[i3][j3]*rotation_tensor[i4][j4]*input_tensor[j1][j2][j3][j4];
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+
+        return output;
+      }
+
+
+
+      SymmetricTensor<2,6>
+      rotate_voigt_stiffness_matrix(const Tensor<2,3> &rotation_tensor, const SymmetricTensor<2,6> &input_tensor)
+      {
+        // we can represent the rotation of the 4th order tensor as a rotation in the Voigt
+        // notation by computing $C'=MCM^{-1}$. Because M is orthogonal we can replace $M^{-1}$
+        // with $M^T$ resulting in $C'=MCM^{T}$ (Carcione, J. M. (2007). Wave Fields in Real Media:
+        // Wave Propagation in Anisotropic, Anelastic, Porous and Electromagnetic Media. Netherlands:
+        // Elsevier Science. Pages 8-9).
+        Tensor<2,6> rotation_matrix;
+        // top left block
+        rotation_matrix[0][0] = rotation_tensor[0][0] * rotation_tensor[0][0];
+        rotation_matrix[1][0] = rotation_tensor[1][0] * rotation_tensor[1][0];
+        rotation_matrix[2][0] = rotation_tensor[2][0] * rotation_tensor[2][0];
+        rotation_matrix[0][1] = rotation_tensor[0][1] * rotation_tensor[0][1];
+        rotation_matrix[1][1] = rotation_tensor[1][1] * rotation_tensor[1][1];
+        rotation_matrix[2][1] = rotation_tensor[2][1] * rotation_tensor[2][1];
+        rotation_matrix[0][2] = rotation_tensor[0][2] * rotation_tensor[0][2];
+        rotation_matrix[1][2] = rotation_tensor[1][2] * rotation_tensor[1][2];
+        rotation_matrix[2][2] = rotation_tensor[2][2] * rotation_tensor[2][2];
+
+        // top right block
+        rotation_matrix[0][3] = 2.0 * rotation_tensor[0][1] * rotation_tensor[0][2];
+        rotation_matrix[1][3] = 2.0 * rotation_tensor[1][1] * rotation_tensor[1][2];
+        rotation_matrix[2][3] = 2.0 * rotation_tensor[2][1] * rotation_tensor[2][2];
+        rotation_matrix[0][4] = 2.0 * rotation_tensor[0][2] * rotation_tensor[0][0];
+        rotation_matrix[1][4] = 2.0 * rotation_tensor[1][2] * rotation_tensor[1][0];
+        rotation_matrix[2][4] = 2.0 * rotation_tensor[2][2] * rotation_tensor[2][0];
+        rotation_matrix[0][5] = 2.0 * rotation_tensor[0][0] * rotation_tensor[0][1];
+        rotation_matrix[1][5] = 2.0 * rotation_tensor[1][0] * rotation_tensor[1][1];
+        rotation_matrix[2][5] = 2.0 * rotation_tensor[2][0] * rotation_tensor[2][1];
+
+        // bottom left block
+        rotation_matrix[3][0] = rotation_tensor[1][0] * rotation_tensor[2][0];
+        rotation_matrix[4][0] = rotation_tensor[2][0] * rotation_tensor[0][0];
+        rotation_matrix[5][0] = rotation_tensor[0][0] * rotation_tensor[1][0];
+        rotation_matrix[3][1] = rotation_tensor[1][1] * rotation_tensor[2][1];
+        rotation_matrix[4][1] = rotation_tensor[2][1] * rotation_tensor[0][1];
+        rotation_matrix[5][1] = rotation_tensor[0][1] * rotation_tensor[1][1];
+        rotation_matrix[3][2] = rotation_tensor[1][2] * rotation_tensor[2][2];
+        rotation_matrix[4][2] = rotation_tensor[2][2] * rotation_tensor[0][2];
+        rotation_matrix[5][2] = rotation_tensor[0][2] * rotation_tensor[1][2];
+
+        // bottom right block
+        rotation_matrix[3][3] = rotation_tensor[1][1] * rotation_tensor[2][2] + rotation_tensor[1][2] * rotation_tensor[2][1];
+        rotation_matrix[4][3] = rotation_tensor[0][1] * rotation_tensor[2][2] + rotation_tensor[0][2] * rotation_tensor[2][1];
+        rotation_matrix[5][3] = rotation_tensor[0][1] * rotation_tensor[1][2] + rotation_tensor[0][2] * rotation_tensor[1][1];
+        rotation_matrix[3][4] = rotation_tensor[1][0] * rotation_tensor[2][2] + rotation_tensor[1][2] * rotation_tensor[2][0];
+        rotation_matrix[4][4] = rotation_tensor[0][2] * rotation_tensor[2][0] + rotation_tensor[0][0] * rotation_tensor[2][2];
+        rotation_matrix[5][4] = rotation_tensor[0][2] * rotation_tensor[1][0] + rotation_tensor[0][0] * rotation_tensor[1][2];
+        rotation_matrix[3][5] = rotation_tensor[1][1] * rotation_tensor[2][0] + rotation_tensor[1][0] * rotation_tensor[2][1];
+        rotation_matrix[4][5] = rotation_tensor[0][0] * rotation_tensor[2][1] + rotation_tensor[0][1] * rotation_tensor[2][0];
+        rotation_matrix[5][5] = rotation_tensor[0][0] * rotation_tensor[1][1] + rotation_tensor[0][1] * rotation_tensor[1][0];
+
+        const Tensor<2,6> rotation_matrix_transposed = transpose(rotation_matrix);
+
+        return symmetrize((rotation_matrix*input_tensor)*rotation_matrix_transposed);
+      }
+
+
+
+      SymmetricTensor<2,6>
+      to_voigt_stiffness_matrix(const SymmetricTensor<4,3> &input_tensor)
+      {
+        SymmetricTensor<2,6> output;
+
+        for (unsigned short int i = 0; i < 3; i++)
+          {
+            output[i][i] = input_tensor[i][i][i][i];
+          }
+
+        for (unsigned short int i = 1; i < 3; i++)
+          {
+            output[0][i] = 0.5*(input_tensor[0][0][i][i] + input_tensor[i][i][0][0]);
+            //symmetry: output[0][i] = output[i][0];
+          }
+        output[1][2]=0.5*(input_tensor[1][1][2][2]+input_tensor[2][2][1][1]);
+        //symmetry: output[2][1]=output[1][2];
+
+        for (unsigned short int i = 0; i < 3; i++)
+          {
+            output[i][3]=0.25*(input_tensor[i][i][1][2]+input_tensor[i][i][2][1]+ input_tensor[1][2][i][i]+input_tensor[2][1][i][i]);
+            //symmetry: output[3][i]=output[i][3];
+          }
+
+        for (unsigned short int i = 0; i < 3; i++)
+          {
+            output[i][4]=0.25*(input_tensor[i][i][0][2]+input_tensor[i][i][2][0]+ input_tensor[0][2][i][i]+input_tensor[2][0][i][i]);
+            //symmetry: output[4][i]=output[i][4];
+          }
+
+        for (unsigned short int i = 0; i < 3; i++)
+          {
+            output[i][5]=0.25*(input_tensor[i][i][0][1]+input_tensor[i][i][1][0]+input_tensor[0][1][i][i]+input_tensor[1][0][i][i]);
+            //symmetry: output[5][i]=output[i][5];
+          }
+
+        output[3][3]=0.25*(input_tensor[1][2][1][2]+input_tensor[1][2][2][1]+input_tensor[2][1][1][2]+input_tensor[2][1][2][1]);
+        output[4][4]=0.25*(input_tensor[0][2][0][2]+input_tensor[0][2][2][0]+input_tensor[2][0][0][2]+input_tensor[2][0][2][0]);
+        output[5][5]=0.25*(input_tensor[1][0][1][0]+input_tensor[1][0][0][1]+input_tensor[0][1][1][0]+input_tensor[0][1][0][1]);
+
+        output[3][4]=0.125*(input_tensor[1][2][0][2]+input_tensor[1][2][2][0]+input_tensor[2][1][0][2]+input_tensor[2][1][2][0]+input_tensor[0][2][1][2]+input_tensor[0][2][2][1]+input_tensor[2][0][1][2]+input_tensor[2][0][2][1]);
+        //symmetry: output[4][3]=output[3][4];
+        output[3][5]=0.125*(input_tensor[1][2][0][1]+input_tensor[1][2][1][0]+input_tensor[2][1][0][1]+input_tensor[2][1][1][0]+input_tensor[0][1][1][2]+input_tensor[0][1][2][1]+input_tensor[1][0][1][2]+input_tensor[1][0][2][1]);
+        //symmetry: output[5][3]=output[3][5];
+        output[4][5]=0.125*(input_tensor[0][2][0][1]+input_tensor[0][2][1][0]+input_tensor[2][0][0][1]+input_tensor[2][0][1][0]+input_tensor[0][1][0][2]+input_tensor[0][1][2][0]+input_tensor[1][0][0][2]+input_tensor[1][0][2][0]);
+        //symmetry: output[5][4]=output[4][5];
+
+        return output;
+      }
+
+
+
+      SymmetricTensor<4,3>
+      to_full_stiffness_tensor(const SymmetricTensor<2,6> &input_tensor)
+      {
+        SymmetricTensor<4,3> output;
+
+        for (unsigned short int i = 0; i < 3; i++)
+          for (unsigned short int j = 0; j < 3; j++)
+            for (unsigned short int k = 0; k < 3; k++)
+              for (unsigned short int l = 0; l < 3; l++)
+                {
+                  // The first part of the inline if statement gets the diagonal.
+                  // The second part is never higher than 5 (which is the limit of the tensor index)
+                  // because to reach this part the variables need to be different, which results in
+                  // at least a minus 1.
+                  const unsigned short int p = (i == j ? i : 6 - i - j);
+                  const unsigned short int q = (k == l ? k : 6 - k - l);
+                  output[i][j][k][l] = input_tensor[p][q];
+                }
+        return output;
+      }
+
+
+
+      Tensor<1,21>
+      to_voigt_stiffness_vector(const SymmetricTensor<2,6> &input)
+      {
+        return Tensor<1,21,double> (
+        {
+          input[0][0],           // 0  // 1
+          input[1][1],           // 1  // 2
+          input[2][2],           // 2  // 3
+          numbers::SQRT2 *input[1][2],  // 3  // 4
+          numbers::SQRT2 *input[0][2],  // 4  // 5
+          numbers::SQRT2 *input[0][1],  // 5  // 6
+          2*input[3][3],         // 6  // 7
+          2*input[4][4],         // 7  // 8
+          2*input[5][5],         // 8  // 9
+          2*input[0][3],         // 9  // 10
+          2*input[1][4],         // 10 // 11
+          2*input[2][5],         // 11 // 12
+          2*input[2][3],         // 12 // 13
+          2*input[0][4],         // 13 // 14
+          2*input[1][5],         // 14 // 15
+          2*input[1][3],         // 15 // 16
+          2*input[2][4],         // 16 // 17
+          2*input[0][5],         // 17 // 18
+          2*numbers::SQRT2 *input[4][5], // 18 // 19
+          2*numbers::SQRT2 *input[3][5], // 19 // 20
+          2*numbers::SQRT2 *input[3][4] // 20 // 21
+        });
+
+      }
+
+
+
+      SymmetricTensor<2,6>
+      to_voigt_stiffness_matrix(const Tensor<1,21> &input)
+      {
+        SymmetricTensor<2,6> result;
+
+        const double sqrt_2_inv = 1/numbers::SQRT2;
+
+        result[0][0] = input[0];
+        result[1][1] = input[1];
+        result[2][2] = input[2];
+        result[1][2] = sqrt_2_inv * input[3];
+        result[0][2] = sqrt_2_inv * input[4];
+        result[0][1] = sqrt_2_inv * input[5];
+        result[3][3] = 0.5 * input[6];
+        result[4][4] = 0.5 * input[7];
+        result[5][5] = 0.5 * input[8];
+        result[0][3] = 0.5 * input[9];
+        result[1][4] = 0.5 * input[10];
+        result[2][5] = 0.5 * input[11];
+        result[2][3] = 0.5 * input[12];
+        result[0][4] = 0.5 * input[13];
+        result[1][5] = 0.5 * input[14];
+        result[1][3] = 0.5 * input[15];
+        result[2][4] = 0.5 * input[16];
+        result[0][5] = 0.5 * input[17];
+        result[4][5] = 0.5 * sqrt_2_inv * input[18];
+        result[3][5] = 0.5 * sqrt_2_inv * input[19];
+        result[3][4] = 0.5 * sqrt_2_inv * input[20];
+
+        return result;
+
+      }
+
+
+
+      Tensor<1,21>
+      to_voigt_stiffness_vector(const SymmetricTensor<4,3> &input_tensor)
+      {
+        return Tensor<1,21,double> (
+        {
+          input_tensor[0][0][0][0],           // 0  // 1
+          input_tensor[1][1][1][1],           // 1  // 2
+          input_tensor[2][2][2][2],           // 2  // 3
+          numbers::SQRT2*0.5*(input_tensor[1][1][2][2] + input_tensor[2][2][1][1]),   // 3  // 4
+          numbers::SQRT2*0.5*(input_tensor[0][0][2][2] + input_tensor[2][2][0][0]),   // 4  // 5
+          numbers::SQRT2*0.5*(input_tensor[0][0][1][1] + input_tensor[1][1][0][0]),   // 5  // 6
+          0.5*(input_tensor[1][2][1][2]+input_tensor[1][2][2][1]+input_tensor[2][1][1][2]+input_tensor[2][1][2][1]),         // 6  // 7
+          0.5*(input_tensor[0][2][0][2]+input_tensor[0][2][2][0]+input_tensor[2][0][0][2]+input_tensor[2][0][2][0]),         // 7  // 8
+          0.5*(input_tensor[1][0][1][0]+input_tensor[1][0][0][1]+input_tensor[0][1][1][0]+input_tensor[0][1][0][1]),         // 8  // 9
+          0.5*(input_tensor[0][0][1][2]+input_tensor[0][0][2][1]+input_tensor[1][2][0][0]+input_tensor[2][1][0][0]),         // 9  // 10
+          0.5*(input_tensor[1][1][0][2]+input_tensor[1][1][2][0]+input_tensor[0][2][1][1]+input_tensor[2][0][1][1]),         // 10 // 11
+          0.5*(input_tensor[2][2][0][1]+input_tensor[2][2][1][0]+input_tensor[0][1][2][2]+input_tensor[1][0][2][2]),         // 11 // 12
+          0.5*(input_tensor[2][2][1][2]+input_tensor[2][2][2][1]+input_tensor[1][2][2][2]+input_tensor[2][1][2][2]),         // 12 // 13
+          0.5*(input_tensor[0][0][0][2]+input_tensor[0][0][2][0]+input_tensor[0][2][0][0]+input_tensor[2][0][0][0]),         // 13 // 14
+          0.5*(input_tensor[1][1][0][1]+input_tensor[1][1][1][0]+input_tensor[0][1][1][1]+input_tensor[1][0][1][1]),         // 14 // 15
+          0.5*(input_tensor[1][1][1][2]+input_tensor[1][1][2][1]+input_tensor[1][2][1][1]+input_tensor[2][1][1][1]),         // 15 // 16
+          0.5*(input_tensor[2][2][0][2]+input_tensor[2][2][2][0]+input_tensor[0][2][2][2]+input_tensor[2][0][2][2]),         // 16 // 17
+          0.5*(input_tensor[0][0][0][1]+input_tensor[0][0][1][0]+input_tensor[0][1][0][0]+input_tensor[1][0][0][0]),         // 17 // 18
+          numbers::SQRT2*0.25*(input_tensor[0][2][0][1]+input_tensor[0][2][1][0]+input_tensor[2][0][0][1]+input_tensor[2][0][1][0]+input_tensor[0][1][0][2]+input_tensor[0][1][2][0]+input_tensor[1][0][0][2]+input_tensor[1][0][2][0]), // 18 // 19
+          numbers::SQRT2*0.25*(input_tensor[1][2][0][1]+input_tensor[1][2][1][0]+input_tensor[2][1][0][1]+input_tensor[2][1][1][0]+input_tensor[0][1][1][2]+input_tensor[0][1][2][1]+input_tensor[1][0][1][2]+input_tensor[1][0][2][1]), // 19 // 20
+          numbers::SQRT2*0.25*(input_tensor[1][2][0][2]+input_tensor[1][2][2][0]+input_tensor[2][1][0][2]+input_tensor[2][1][2][0]+input_tensor[0][2][1][2]+input_tensor[0][2][2][1]+input_tensor[2][0][1][2]+input_tensor[2][0][2][1])  // 20 // 21
+        });
+
+      }
+
+
+      template <>
+      const Tensor<3,3> &levi_civita<3>()
+      {
+        static const Tensor<3,3> t =
+          []()
+        {
+          Tensor<3,3> permutation_operator_3d;
+
+          permutation_operator_3d[0][1][2]  = 1;
+          permutation_operator_3d[1][2][0]  = 1;
+          permutation_operator_3d[2][0][1]  = 1;
+          permutation_operator_3d[0][2][1]  = -1;
+          permutation_operator_3d[1][0][2]  = -1;
+          permutation_operator_3d[2][1][0]  = -1;
+          return permutation_operator_3d;
+        }();
+
+        return t;
+      }
     }
 
 

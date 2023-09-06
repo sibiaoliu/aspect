@@ -256,37 +256,14 @@ namespace aspect
         std::vector<double> thermal_conductivities;
 
         /**
-         * Parameters for hydrothermal circulation
+         * Number of phase transitions for each chemical composition (including the background field).
          */
+        std::vector<unsigned int> n_phase_transitions_for_each_chemical_composition;
 
         /**
-         * Whether to activate the hydrothermal circulation.
+         * Total number of phases.
          */
-        bool define_hydrothermal_circulation;
-
-        /**
-         * Nusselt numbers are used for increasing the thermal conductivity in the
-         * hydrothermal cooling process. It represents the ratio of the total heat
-         * transport within a permeable layer to heat transfer by conduction alone.
-         */
-        std::vector<double> Nusselt_number;
-
-        /**
-         * Reference cutoff temperatures for hydrothermal circulation.
-         * Hydrothermal activity occurs when the temperature is lower than them.
-         */
-        std::vector<double> T_cooling;
-
-        /**
-         * Reference cutoff depths for hydrothermal circulation.
-         * Hydrothermal activity occurs when the depth is shallower than them.
-         */
-        std::vector<double> D_cooling;
-
-        /**
-         * Smoothing factors
-         */
-        std::vector<double> A_smoothing;
+        unsigned int n_phases;
 
         /**
          * Object for computing the equation of state.

@@ -128,7 +128,6 @@ namespace aspect
            * Initialization function. This function is called once at the
            * beginning of the program after parse_parameters is run.
            */
-          virtual
           void
           initialize () override;
 
@@ -143,7 +142,6 @@ namespace aspect
            * of this function should be to extend this vector by a number of
            * properties.
            */
-          virtual
           void
           initialize_one_particle_property (const Point<dim> &position,
                                             std::vector<double> &particle_properties) const override;
@@ -169,7 +167,6 @@ namespace aspect
            * @param [in,out] particle_properties The properties of the particle
            * that is updated within the call of this function.
            */
-          virtual
           void
           update_one_particle_property (const unsigned int data_position,
                                         const Point<dim> &position,
@@ -194,7 +191,6 @@ namespace aspect
            * Return which data has to be provided to update the property.
            * The integrated strains needs the gradients of the velocity.
            */
-          virtual
           UpdateFlags
           get_needed_update_flags () const override;
 
@@ -205,7 +201,6 @@ namespace aspect
            * @return A vector that contains pairs of the property names and the
            * number of components this property plugin defines.
            */
-          virtual
           std::vector<std::pair<std::string, unsigned int>>
           get_property_information() const override;
 
@@ -406,7 +401,7 @@ namespace aspect
            */
           inline
           double get_volume_fractions_grains(const unsigned int cpo_data_position,
-                                             const ArrayView<double> &data,
+                                             const ArrayView<const double> &data,
                                              const unsigned int mineral_i,
                                              const unsigned int grain_i) const
           {
@@ -443,7 +438,7 @@ namespace aspect
            */
           inline
           Tensor<2,3> get_rotation_matrix_grains(const unsigned int cpo_data_position,
-                                                 const ArrayView<double> &data,
+                                                 const ArrayView<const double> &data,
                                                  const unsigned int mineral_i,
                                                  const unsigned int grain_i) const
           {
@@ -590,11 +585,6 @@ namespace aspect
            * Backward Euler and Crank-Nicolson iterations.
            */
           unsigned int property_advection_max_iterations;
-
-          /**
-           * The tensor representation of the permutation symbol.
-           */
-          Tensor<3,3> permutation_operator_3d;
 
           /**
            * @name D-Rex variables

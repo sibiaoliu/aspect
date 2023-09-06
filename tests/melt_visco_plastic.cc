@@ -75,7 +75,7 @@ namespace aspect
 
     /**
      * A material model that implements a simple formulation of the
-     * material parameters required for the modelling of melt transport,
+     * material parameters required for the modeling of melt transport,
      * including a source term for the porosity according to the melting
      * model for dry peridotite of Katz, 2003. This also includes a
      * computation of the latent heat of melting (if the latent heat
@@ -102,16 +102,16 @@ namespace aspect
          * in the model is accounted for by changes in melt fraction."
          * Thus, this function will always return false.
          */
-        virtual bool is_compressible () const override;
+        bool is_compressible () const override;
 
         /**
          * @name Reference quantities
          * @{
          */
-        virtual double reference_darcy_coefficient () const override;
+        double reference_darcy_coefficient () const override;
 
-        virtual void evaluate(const typename Interface<dim>::MaterialModelInputs &in,
-                              typename Interface<dim>::MaterialModelOutputs &out) const override;
+        void evaluate(const typename Interface<dim>::MaterialModelInputs &in,
+                      typename Interface<dim>::MaterialModelOutputs &out) const override;
 
         virtual void melt_fractions (const MaterialModel::MaterialModelInputs<dim> &in,
                                      std::vector<double> &melt_fractions) const;
@@ -1030,7 +1030,7 @@ namespace aspect
                                    "and it is not advised that it be used for any serious models "
                                    "at this point.\n\n"
                                    "This material model implements a simple formulation of the "
-                                   "material parameters required for the modelling of melt transport, "
+                                   "material parameters required for the modeling of melt transport, "
                                    "including a source term for the porosity according to the melting "
                                    "model for dry peridotite of \\cite{KSL2003}. All other material "
                                    "properties are taken from the visco-plastic model.")

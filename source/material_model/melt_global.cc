@@ -111,11 +111,9 @@ namespace aspect
           && this->get_timestep_number() > 0 && !this->get_parameters().use_operator_splitting)
         {
           // Prepare the field function
-#if DEAL_II_VERSION_GTE(9,4,0)
+
           Functions::FEFieldFunction<dim, LinearAlgebra::BlockVector>
-#else
-          Functions::FEFieldFunction<dim, DoFHandler<dim>, LinearAlgebra::BlockVector>
-#endif
+
           fe_value(this->get_dof_handler(), this->get_old_solution(), this->get_mapping());
 
           const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
@@ -546,7 +544,7 @@ namespace aspect
     ASPECT_REGISTER_MATERIAL_MODEL(MeltGlobal,
                                    "melt global",
                                    "A material model that implements a simple formulation of the "
-                                   "material parameters required for the modelling of melt transport, "
+                                   "material parameters required for the modeling of melt transport, "
                                    "including a source term for the porosity according to a simplified "
                                    "linear melting model similar to \\cite{schmeling2006}:\n"
                                    "$\\phi_{\\text{equilibrium}} = \\frac{T-T_{\\text{sol}}}{T_{\\text{liq}}-T_{\\text{sol}}}$\n"

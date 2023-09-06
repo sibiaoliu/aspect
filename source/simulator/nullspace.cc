@@ -117,10 +117,10 @@ namespace aspect
         // all processors need to agree on the index.
 
         // First find candidates for DoF indices to constrain for each velocity component.
-        types::global_dof_index vel_idx[dim];
+        std::array<types::global_dof_index,dim> vel_idx;
         {
-          for (unsigned int d=0; d<dim; ++d)
-            vel_idx[d] = numbers::invalid_dof_index;
+          for (types::global_dof_index &idx : vel_idx)
+            idx = numbers::invalid_dof_index;
 
           unsigned int n_left_to_find = dim;
 
@@ -154,13 +154,12 @@ namespace aspect
 
                     // are we done searching?
                     if (n_left_to_find == 0)
-                      break; // exit inner loop
+                      goto after_cell_loop; // exit both nested loops at the same time
                   }
-
-                if (n_left_to_find == 0)
-                  break; // exit outer loop
               }
 
+        after_cell_loop:
+          ;
         }
 
 
@@ -425,7 +424,7 @@ namespace aspect
           if (use_constant_density == false)
             {
               // Set use_strain_rates to false since we don't need viscosity
-              in.reinit(fe, cell, introspection, solution, false);
+              in.reinit(fe, cell, introspection, solution);
               material_model->evaluate(in, out);
             }
           else

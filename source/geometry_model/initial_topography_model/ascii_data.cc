@@ -68,7 +68,7 @@ namespace aspect
         {
           // No need to set the vertical coordinate correctly,
           // because it will be thrown away in get_data_component anyway
-          for (unsigned int d=0; d<dim-1; d++)
+          for (unsigned int d=0; d<dim-1; ++d)
             global_point[d] = surface_point[d];
         }
       else if (Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>> (this->get_geometry_model()) ||
@@ -79,7 +79,7 @@ namespace aspect
           // because it will be thrown away in get_data_component anyway
           std::array<double, dim> point;
           point[0] = 6371000.0;
-          for (unsigned int d=0; d<dim-1; d++)
+          for (unsigned int d=0; d<dim-1; ++d)
             point[d+1] = surface_point[d];
 
           global_point = Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(point);
@@ -172,8 +172,8 @@ namespace aspect
                                              "assign the correct data to the prescribed coordinates. "
                                              "If you use a spherical model, "
                                              "then the assumed grid changes. "
-                                             "`x' will be replaced by the azimuth angle in radians "
-                                             " and `y' by the polar angle in radians measured "
+                                             "`x' will be replaced by the azimuth angle in radians (between $-\\pi$ and $\\pi$)"
+                                             " and `y' by the polar angle in radians (between $0$ and $\\pi$) measured "
                                              "positive from the north pole. The grid will be assumed to be "
                                              "a longitude-colatitude grid. Note that the order "
                                              "of spherical coordinates is `phi', `theta' "

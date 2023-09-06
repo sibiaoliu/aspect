@@ -203,41 +203,37 @@ namespace aspect
         {
           case 2:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("bottom",    0),
-                  std::pair<std::string,types::boundary_id>("top",       1),
-                  std::pair<std::string,types::boundary_id>("lowerwest",  2),
-                  std::pair<std::string,types::boundary_id>("lowereast",  3),
-                  std::pair<std::string,types::boundary_id>("uppereast",  4),
-                  std::pair<std::string,types::boundary_id>("upperwest",  5)
-                };
-
-            return std::map<std::string,types::boundary_id> (std::begin(mapping),
-                                                             std::end(mapping));
+            return
+            {
+              {"bottom",     0},
+              {"top",        1},
+              {"lowerwest",  2},
+              {"lowereast",  3},
+              {"uppereast",  4},
+              {"upperwest",  5}
+            };
           }
 
           case 3:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("bottom",     0),
-                  std::pair<std::string,types::boundary_id>("top",        1),
-                  std::pair<std::string,types::boundary_id>("lowerwest",  2),
-                  std::pair<std::string,types::boundary_id>("lowereast",  3),
-                  std::pair<std::string,types::boundary_id>("lowersouth", 4),
-                  std::pair<std::string,types::boundary_id>("lowernorth", 5),
-                  std::pair<std::string,types::boundary_id>("upperwest",  6),
-                  std::pair<std::string,types::boundary_id>("uppereast",  7),
-                  std::pair<std::string,types::boundary_id>("uppersouth", 8),
-                  std::pair<std::string,types::boundary_id>("uppernorth", 9)
-                };
-
-            return std::map<std::string,types::boundary_id> (std::begin(mapping),
-                                                             std::end(mapping));
+            return
+            {
+              {"bottom",     0},
+              {"top",        1},
+              {"lowerwest",  2},
+              {"lowereast",  3},
+              {"lowersouth", 4},
+              {"lowernorth", 5},
+              {"upperwest",  6},
+              {"uppereast",  7},
+              {"uppersouth", 8},
+              {"uppernorth", 9}
+            };
           }
         }
 
       Assert (false, ExcNotImplemented());
-      return std::map<std::string,types::boundary_id>();
+      return {};
     }
 
 
@@ -445,7 +441,7 @@ namespace aspect
       // AsciiDataBoundary for topography which uses this function....
       const Point<dim> transformed_point = manifold.pull_back_sphere(position_point);
       std::array<double,dim> position_array;
-      for (unsigned int i = 0; i < dim; i++)
+      for (unsigned int i = 0; i < dim; ++i)
         position_array[i] = transformed_point(i);
 
       return position_array;
@@ -473,7 +469,7 @@ namespace aspect
       // Ignore the topography to avoid a loop when calling the
       // AsciiDataBoundary for topography which uses this function....
       Point<dim> position_point;
-      for (unsigned int i = 0; i < dim; i++)
+      for (unsigned int i = 0; i < dim; ++i)
         position_point[i] = position_tensor[i];
       const Point<dim> transformed_point = manifold.push_forward_sphere(position_point);
 

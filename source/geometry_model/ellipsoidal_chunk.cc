@@ -258,9 +258,9 @@ namespace aspect
                                                       0,
                                                       bottom_depth)
                                           };
-      const unsigned int  subdivisions[dim] = {EW_subdiv,NS_subdiv,depth_subdiv};
+      const unsigned int  subdivisions[dim] = {EW_subdiv, NS_subdiv, depth_subdiv};
 
-      GridGenerator::subdivided_parallelepiped (coarse_grid, subdivisions,corner_points, true);
+      GridGenerator::subdivided_parallelepiped (coarse_grid, subdivisions, corner_points, true);
 
       // Shift the grid point at (0,0,0) (and the rest of the
       // points with it) to the correct location at corner[0] at a
@@ -334,35 +334,31 @@ namespace aspect
         {
           case 2:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("east",   0),
-                  std::pair<std::string,types::boundary_id>("west",   1),
-                  std::pair<std::string,types::boundary_id>("bottom", 2),
-                  std::pair<std::string,types::boundary_id>("top",    3)
-                };
-
-            return std::map<std::string,types::boundary_id> (std::begin(mapping),
-                                                             std::end(mapping));
+            return
+            {
+              {"east",   0},
+              {"west",   1},
+              {"bottom", 2},
+              {"top",    3}
+            };
           }
 
           case 3:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("east",   0),
-                  std::pair<std::string,types::boundary_id>("west",   1),
-                  std::pair<std::string,types::boundary_id>("north",  2),
-                  std::pair<std::string,types::boundary_id>("south",  3),
-                  std::pair<std::string,types::boundary_id>("bottom", 4),
-                  std::pair<std::string,types::boundary_id>("top",    5)
-                };
-
-            return std::map<std::string,types::boundary_id> (std::begin(mapping),
-                                                             std::end(mapping));
+            return
+            {
+              {"east",   0},
+              {"west",   1},
+              {"north",  2},
+              {"south",  3},
+              {"bottom", 4},
+              {"top",    5}
+            };
           }
         }
 
       Assert (false, ExcNotImplemented());
-      return std::map<std::string,types::boundary_id>();
+      return {};
     }
 
     template <int dim>
@@ -451,22 +447,22 @@ namespace aspect
           unsigned int missing = 0;
           if (NEcorner == "")
             {
-              missing++;
+              ++missing;
               present[0] = false;
             }
           if (NWcorner == "")
             {
-              missing++;
+              ++missing;
               present[1] = false;
             }
           if (SWcorner == "")
             {
-              missing++;
+              ++missing;
               present[2] = false;
             }
           if (SEcorner == "")
             {
-              missing++;
+              ++missing;
               present[3] = false;
             }
 
@@ -561,7 +557,7 @@ namespace aspect
           // If one or two of the corners is not provided, calculate it.
           if (missing == 1)
             {
-              for (unsigned int i = 0; i <= 3; i++)
+              for (unsigned int i = 0; i <= 3; ++i)
                 {
                   // find the corner which is missing, if there is one
                   if (present[i] == false)

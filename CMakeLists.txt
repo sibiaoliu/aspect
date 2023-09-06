@@ -38,6 +38,27 @@ IF ("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
   "begin a build in a different directory.")
 ENDIF()
 
+#
+# Setup CMAKE_BUILD_TYPE:
+#
+
+SET(CMAKE_BUILD_TYPE
+  "DebugRelease"
+  CACHE STRING
+  "Choose the type of build, options are: Debug, Release and DebugRelease."
+  )
+
+# This is a strict check. But it is better to only have a known number of
+# options for CMAKE_BUILD_TYPE...
+IF( NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Release" AND
+    NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Debug" AND
+    NOT "${CMAKE_BUILD_TYPE}" STREQUAL "DebugRelease" )
+  MESSAGE(FATAL_ERROR
+    "CMAKE_BUILD_TYPE must either be 'Release', 'Debug', or 'DebugRelease', but is set to '${CMAKE_BUILD_TYPE}'.")
+ELSE()
+  MESSAGE(STATUS "Setting up ASPECT for ${CMAKE_BUILD_TYPE} mode.")
+ENDIF()
+
 # Set the name of the project and main target. If we are generating
 # ASPECT debug and release mode, we have the debug build as 'aspect'
 # and we populate a list of all targets (by default they are the same):
@@ -150,12 +171,13 @@ if(ASPECT_WITH_WORLD_BUILDER)
 
     # generate config.cc and include it:
     IF(WORLD_BUILDER_VERSION VERSION_LESS 0.5.0)
-      CONFIGURE_FILE("${WORLD_BUILDER_SOURCE_DIR}/source/config.cc.in" "${CMAKE_BINARY_DIR}/source/world_builder/config.cc" @ONLY)
+      CONFIGURE_FILE("${WORLD_BUILDER_SOURCE_DIR}/source/config.cc.in"
+                     "${CMAKE_BINARY_DIR}/source/world_builder/config.cc" @ONLY)
       LIST(INSERT TARGET_SRC 0 "${CMAKE_BINARY_DIR}/source/world_builder/config.cc")
       FILE(REMOVE "${CMAKE_BINARY_DIR}/include/world_builder/config.h")
     ELSE()
-      Message(STATUS "C ${CMAKE_BINARY_DIR}")
-      CONFIGURE_FILE("${WORLD_BUILDER_SOURCE_DIR}/include/world_builder/config.h.in" "${CMAKE_BINARY_DIR}/include/world_builder/config.h" @ONLY)
+      CONFIGURE_FILE("${WORLD_BUILDER_SOURCE_DIR}/include/world_builder/config.h.in"
+                     "${CMAKE_BINARY_DIR}/include/world_builder/config.h" @ONLY)
       INCLUDE_DIRECTORIES("${CMAKE_BINARY_DIR}/include/")
       FILE(REMOVE "${CMAKE_BINARY_DIR}/source/world_builder/config.cc")
     ENDIF()
