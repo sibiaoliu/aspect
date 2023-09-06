@@ -275,18 +275,21 @@ namespace aspect
                   const double smoothing_part = std::exp(current_A_smoothing *(2.0 -
                                                 std::max(temperature_in_C,0.0) / (current_T_cooling-273)
                                                 - point_depth / current_D_cooling));
-                  if (current_A_smoothing == 0.0)
+                  if (in.temperature[i]<= current_T_cooling && point_depth <= current_D_cooling)                
                     {
-                      if (in.temperature[i]<= current_T_cooling && point_depth <= current_D_cooling)
+                      // No smoothing
+                      if (current_A_smoothing == 0.0)
                         out.thermal_conductivities[i] = current_thermal_conductivity * current_Nusselt_number;
                       else
-                        out.thermal_conductivities[i] = current_thermal_conductivity;
+                        out.thermal_conductivities[i] = current_thermal_conductivity * (1 + (current_Nusselt_number - 1.0) * smoothing_part);
                     }
                   else
-                    out.thermal_conductivities[i] = current_thermal_conductivity * (1 + (current_Nusselt_number - 1.0) * smoothing_part);
+                    out.thermal_conductivities[i] = current_thermal_conductivity;
+
                 }
               else
                 out.thermal_conductivities[i] = MaterialUtilities::average_value (volume_fractions, thermal_conductivities, MaterialUtilities::arithmetic);
+
             }
 
           // Now compute changes in the compositional fields (i.e. the accumulated strain).
