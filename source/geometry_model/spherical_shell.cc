@@ -22,8 +22,11 @@
 #include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/geometry_model/initial_topography_model/zero_topography.h>
 
+#include <aspect/compat.h>
+
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_tools.h>
+#include <deal.II/grid/manifold_lib.h>
 #include <aspect/utilities.h>
 #include <deal.II/dofs/dof_tools.h>
 
@@ -33,33 +36,114 @@ namespace aspect
   {
     namespace
     {
-      template <int dim>
-      void append_face_to_subcell_data(SubCellData &subcell_data, const CellData<dim-1> & face);
-
-
-
-      template <>
-      void append_face_to_subcell_data<2>(SubCellData &subcell_data, const CellData<1> &face)
+      void append_face_to_subcell_data(SubCellData &subcell_data, const CellData<1> &face)
       {
         subcell_data.boundary_lines.push_back(face);
       }
 
 
 
-      template <>
-      void append_face_to_subcell_data<3>(SubCellData &subcell_data, const CellData<2> &face)
+      void append_face_to_subcell_data(SubCellData &subcell_data, const CellData<2> &face)
       {
         subcell_data.boundary_quads.push_back(face);
       }
     }
 
 
+    namespace internal
+    {
+      template <int dim>
+      SphericalManifoldWithTopography<dim>::
+      SphericalManifoldWithTopography(const Point<dim> center)
+        :
+        SphericalManifold<dim>(center)
+      {}
+
+
+      template <int dim>
+      std::unique_ptr<Manifold<dim, dim>>
+      SphericalManifoldWithTopography<dim>::clone() const
+      {
+        return std::make_unique<SphericalManifoldWithTopography<dim>>(*this);
+      }
+
+
+      template <int dim>
+      Point<dim>
+      SphericalManifoldWithTopography<dim>::
+      get_intermediate_point(const Point<dim> &p1,
+                             const Point<dim> &p2,
+                             const double      w) const
+      {
+        return SphericalManifold<dim>::get_intermediate_point (p1, p2, w);
+      }
+
+
+
+      template <int dim>
+      Tensor<1, dim>
+      SphericalManifoldWithTopography<dim>::
+      get_tangent_vector(const Point<dim> &x1,
+                         const Point<dim> &x2) const
+      {
+        return SphericalManifold<dim>::get_tangent_vector (x1, x2);
+      }
+
+
+
+      template <int dim>
+      Tensor<1, dim>
+      SphericalManifoldWithTopography<dim>::
+      normal_vector(const typename Triangulation<dim, dim>::face_iterator &face,
+                    const Point<dim> &p) const
+      {
+        return SphericalManifold<dim>::normal_vector (face, p);
+      }
+
+
+
+      template <int dim>
+      void
+      SphericalManifoldWithTopography<dim>::
+      get_normals_at_vertices(
+        const typename Triangulation<dim, dim>::face_iterator &face,
+        typename Manifold<dim, dim>::FaceVertexNormals &face_vertex_normals) const
+      {
+        SphericalManifold<dim>::get_normals_at_vertices(face, face_vertex_normals);
+      }
+
+
+
+      template <int dim>
+      void
+      SphericalManifoldWithTopography<dim>::
+      get_new_points(const ArrayView<const Point<dim>> &surrounding_points,
+                     const Table<2, double>            &weights,
+                     ArrayView<Point<dim>>              new_points) const
+      {
+        SphericalManifold<dim>::get_new_points(surrounding_points, weights, new_points);
+      }
+
+
+
+      template <int dim>
+      Point<dim>
+      SphericalManifoldWithTopography<dim>::
+      get_new_point(const ArrayView<const Point<dim>> &vertices,
+                    const ArrayView<const double>          &weights) const
+      {
+        return SphericalManifold<dim>::get_new_point(vertices, weights);
+      }
+    }
+
+
 
     template <int dim>
-    SphericalShell<dim>::SphericalShell()
-      :
-      spherical_manifold()
-    {}
+    void
+    SphericalShell<dim>::initialize ()
+    {
+      manifold = std::make_unique<internal::SphericalManifoldWithTopography<dim>>();
+    }
 
 
 
@@ -186,7 +270,7 @@ namespace aspect
                               cell->vertex_index(vertex_n) + cell_layer * sphere_mesh.n_vertices();
                           face.boundary_id = 0;
 
-                          append_face_to_subcell_data<dim>(subcell_data, face);
+                          append_face_to_subcell_data(subcell_data, face);
                         }
 
                       // Mark the top face of the cell as boundary 1 if we are in
@@ -200,7 +284,7 @@ namespace aspect
                               (cell_layer + 1) * sphere_mesh.n_vertices();
                           face.boundary_id = 1;
 
-                          append_face_to_subcell_data<dim>(subcell_data, face);
+                          append_face_to_subcell_data(subcell_data, face);
                         }
 
                     }
@@ -251,11 +335,10 @@ namespace aspect
           Assert (false, ExcInternalError());
         }
 
-      // Use a manifold description for all cells. use manifold_id 99 in order
-      // not to step on the boundary indicators used below
-      coarse_grid.set_manifold (99, spherical_manifold);
+      // Use a manifold description for all cells. Use manifold_id 99 in order
+      // not to step on the boundary indicators used below.
+      coarse_grid.set_manifold (my_manifold_id, *manifold);
       set_manifold_ids(coarse_grid);
-
     }
 
 
@@ -265,7 +348,7 @@ namespace aspect
     SphericalShell<dim>::set_manifold_ids (parallel::distributed::Triangulation<dim> &triangulation) const
     {
       for (const auto &cell : triangulation.active_cell_iterators())
-        cell->set_all_manifold_ids (99);
+        cell->set_all_manifold_ids (my_manifold_id);
     }
 
 
@@ -372,7 +455,8 @@ namespace aspect
     template <int dim>
     void
     SphericalShell<dim>::adjust_positions_for_periodicity (Point<dim> &position,
-                                                           const ArrayView<Point<dim>> &connected_positions) const
+                                                           const ArrayView<Point<dim>> &connected_positions,
+                                                           const ArrayView<Tensor<1, dim>> &connected_velocities) const
     {
       AssertThrow(dim == 2,
                   ExcMessage("Periodic boundaries currently "
@@ -403,6 +487,9 @@ namespace aspect
 
           for (auto &connected_position: connected_positions)
             connected_position = rotation_matrix * connected_position;
+
+          for (auto &connected_velocity: connected_velocities)
+            connected_velocity = rotation_matrix * connected_velocity;
         }
 
       return;
@@ -636,18 +723,22 @@ namespace aspect
                              Patterns::Double (0.),
                              "Inner radius of the spherical shell. Units: \\si{\\meter}."
                              "\n\n"
-                             "\\note{The default value of 3,481,000 m equals the "
+                             ":::{note}\n"
+                             "The default value of 3,481,000 m equals the "
                              "radius of a sphere with equal volume as Earth (i.e., "
                              "6371 km) minus the average depth of the core-mantle "
-                             "boundary (i.e., 2890 km).}");
+                             "boundary (i.e., 2890 km).\n"
+                             ":::");
           prm.declare_entry ("Outer radius", "6336000.",  // 6371-35 in km
                              Patterns::Double (0.),
                              "Outer radius of the spherical shell. Units: \\si{\\meter}."
                              "\n\n"
-                             "\\note{The default value of 6,336,000 m equals the "
+                             ":::{note}\n"
+                             "The default value of 6,336,000 m equals the "
                              "radius of a sphere with equal volume as Earth (i.e., "
                              "6371 km) minus the average depth of the mantle-crust "
-                             "interface (i.e., 35 km).}");
+                             "interface (i.e., 35 km).\n"
+                             ":::");
           prm.declare_entry ("Opening angle", "360.",
                              Patterns::Double (0., 360.),
                              "Opening angle in degrees of the section of the shell "
@@ -788,7 +879,7 @@ namespace aspect
                                    "the velocity in direction of the cylinder axes is zero. "
                                    "This is consistent with the definition of what we consider "
                                    "the two-dimension case given in "
-                                   "Section~\\ref{sec:meaning-of-2d}."
+                                   "Section~\\ref{sec:methods:2d-models}."
                                    "\n\n"
                                    "The model assigns boundary indicators as follows: In 2d, "
                                    "inner and outer boundaries get boundary indicators zero "

@@ -132,7 +132,7 @@ namespace aspect
 
       AssertThrow (out, ExcMessage(std::string("Trying to write to file <") +
                                    filename +
-                                   ">, but the file can't be opened!"))
+                                   ">, but the file can't be opened!"));
 
       // now write and then move the tmp file to its final destination
       // if necessary
@@ -389,11 +389,14 @@ namespace aspect
               std::vector<std::vector<std::array<double,3>>> weighted_euler_angles;
 
               weighted_euler_angles.resize(n_minerals);
+              weighted_rotation_matrices.resize(n_minerals);
               std::vector<std::vector<double>> volume_fractions_grains(n_minerals,std::vector<double>(n_grains,-1.));
               for (unsigned int mineral = 0; mineral < n_minerals; ++mineral)
                 {
                   for (unsigned int i_grain = 0; i_grain < n_grains; ++i_grain)
                     {
+                      weighted_euler_angles[mineral].resize(n_grains);
+                      weighted_rotation_matrices[mineral].resize(n_grains);
                       volume_fractions_grains[mineral][i_grain] = cpo_particle_property.get_volume_fractions_grains(
                                                                     cpo_data_position,
                                                                     properties,
@@ -744,7 +747,7 @@ namespace aspect
               Output cpo_fabric_instruction = string_to_output_enum(split_raw_cpo_instructions[1]);
 
               AssertThrow(cpo_fabric_instruction != Output::not_found,
-                          ExcMessage("Value \""+ write_raw_cpo_list[i] +"\", set in \"Write out raw cpo data\", is not a correct option."))
+                          ExcMessage("Value \""+ write_raw_cpo_list[i] +"\", set in \"Write out raw cpo data\", is not a correct option."));
 
               if (cpo_fabric_instruction == Output::EulerAngles)
                 found_euler_angles = true;
@@ -787,7 +790,7 @@ namespace aspect
               Output cpo_fabric_instruction = string_to_output_enum(split_draw_volume_weighted_cpo_instructions[1]);
 
               AssertThrow(cpo_fabric_instruction != Output::not_found,
-                          ExcMessage("Value \""+ write_draw_volume_weighted_cpo_list[i] +"\", set in \"Write out draw volume weighted cpo data\", is not a correct option."))
+                          ExcMessage("Value \""+ write_draw_volume_weighted_cpo_list[i] +"\", set in \"Write out draw volume weighted cpo data\", is not a correct option."));
 
               if (cpo_fabric_instruction == Output::RotationMatrix)
                 found_rotation_matrix = true;

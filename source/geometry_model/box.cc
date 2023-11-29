@@ -196,7 +196,8 @@ namespace aspect
     template <int dim>
     void
     Box<dim>::adjust_positions_for_periodicity (Point<dim> &position,
-                                                const ArrayView<Point<dim>> &connected_positions) const
+                                                const ArrayView<Point<dim>> &connected_positions,
+                                                const ArrayView<Tensor<1, dim>> &/*connected_velocities*/) const
     {
       for (unsigned int i = 0; i < dim; ++i)
         if (periodic[i])
@@ -223,6 +224,13 @@ namespace aspect
     Box<dim>::get_extents () const
     {
       return extents;
+    }
+
+    template <int dim>
+    const std::array<unsigned int, dim> &
+    Box<dim>::get_repetitions () const
+    {
+      return repetitions;
     }
 
     template <int dim>
