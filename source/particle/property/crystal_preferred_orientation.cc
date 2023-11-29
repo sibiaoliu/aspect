@@ -167,11 +167,11 @@ namespace aspect
               {
 #ifdef ASPECT_WITH_WORLD_BUILDER
                 AssertThrow(false,
-                            ExcMessage("Not implemented."))
+                            ExcMessage("Not implemented."));
 #else
                 AssertThrow(false,
                             ExcMessage("The world builder was requested but not provided. Make sure that aspect is "
-                                       "compiled with the World Builder and that you provide a world builder file in the input."))
+                                       "compiled with the World Builder and that you provide a world builder file in the input."));
 #endif
               }
             else
@@ -1139,7 +1139,7 @@ namespace aspect
                 {
                   AssertThrow(false,
                               ExcMessage("The CPO derivatives algorithm needs to be one of the following: "
-                                         "Spin tensor, D-Rex 2004."))
+                                         "Spin tensor, D-Rex 2004."));
                 }
 
               const std::string temp_advection_method = prm.get("Property advection method");
@@ -1206,7 +1206,7 @@ namespace aspect
                         AssertThrow(false,
                                     ExcMessage("The fabric needs to be assigned one of the following comma-delimited values: Olivine: Karato 2008, "
                                                "Olivine: A-fabric, Olivine: B-fabric, Olivine: C-fabric, Olivine: D-fabric,"
-                                               "Olivine: E-fabric, Enstatite, Passive."))
+                                               "Olivine: E-fabric, Enstatite, Passive."));
                       }
                   }
 
@@ -1252,6 +1252,8 @@ namespace aspect
     {
       ASPECT_REGISTER_PARTICLE_PROPERTY(CrystalPreferredOrientation,
                                         "crystal preferred orientation",
+                                        "WARNING: all the CPO plugins are a work in progress and not ready for production use yet. "
+                                        "See https://github.com/geodynamics/aspect/issues/3885 for current status and alternatives. "
                                         "The plugin manages and computes the evolution of Lattice/Crystal Preferred Orientations (LPO/CPO) "
                                         "on particles. Each ASPECT particle can be assigned many grains. Each grain is assigned a size and a orientation "
                                         "matrix. This allows for CPO evolution tracking with polycrystalline kinematic CrystalPreferredOrientation evolution models such "
