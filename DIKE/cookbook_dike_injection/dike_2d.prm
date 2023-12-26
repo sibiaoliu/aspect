@@ -1,0 +1,278 @@
+# This is a reference 2d theromechanical model for
+# dike magma injection and hydrothermal circulation
+
+##################### Global parameters #####################
+# The path where you compiled the 'dike injection' plugin
+set Additional shared libraries = ../dike_src/libprescribed_dike_injection.so
+
+set Dimension                              = 2
+set Adiabatic surface temperature          = 1573
+set Pressure normalization                 = no
+set Nonlinear solver scheme                = single Advection, iterated defect correction Stokes
+set Output directory                       = output_M0.8
+
+set End time                               = 8e6
+set Use years in output instead of seconds = true
+set Maximum first time step                = 5e2
+set Maximum time step                      = 2e3
+set CFL number                             = 0.5
+
+set Max nonlinear iterations               = 20
+set Nonlinear solver tolerance             = 1.e-4
+
+subsection Solver parameters
+  subsection Stokes solver parameters
+    set Number of cheap Stokes solver steps = 100
+    set GMRES solver restart length = 100
+  end
+  subsection Newton solver parameters
+    set Maximum linear Stokes solver tolerance   = 1e-2
+    set Use Eisenstat Walker method for Picard iterations = true
+  end
+end
+# The gravity is constant and points downward. 
+subsection Gravity model
+  set Model name = vertical
+  subsection Vertical
+    set Magnitude = 9.8
+  end
+end
+
+subsection Checkpointing
+  set Steps between checkpoint = 20
+end
+set Resume computation                     = auto
+
+# We don't want the temperature to change during the simulation
+ subsection Temperature field
+   set Temperature method = static
+ end
+
+# This doesn't seem to work in 3D dike models
+subsection Discretization
+  set Use discontinuous temperature discretization    = true
+  subsection Stabilization parameters
+    set Global temperature minimum = 275
+    set Global temperature maximum = 1573
+    set Use limiter for discontinuous temperature solution = true
+  end
+end
+
+########################### Model geometry ###############################
+# Resolution is 400 m within the dike and 800 m outside.
+# If needs less CPUs, decrease the resolution
+subsection Geometry model
+  set Model name = box
+  subsection Box
+    set X extent      = 80e3
+    set Y extent      = 40e3
+    set X repetitions = 100
+    set Y repetitions = 50
+    set Box origin X coordinate = -40e3
+  end
+end
+
+##################### Mesh refinement #########################
+subsection Mesh refinement
+  set Initial adaptive refinement              = 1
+  set Initial global refinement                = 0
+  set Time steps between mesh refinement       = 0
+  set Refinement fraction                      = 1
+  set Coarsening fraction                      = 0
+  set Minimum refinement level                 = 0
+  set Strategy                                 = minimum refinement function #, isosurfaces
+  #subsection Isosurfaces
+  #  set Isosurfaces                            = 2,2,Temperature: 275 | 1273
+  #end
+  subsection Minimum refinement function
+    set Coordinate system   = cartesian
+    set Variable names      = x,y,t
+    # 400 m/element on top 15 km
+    set Function expression = if (y>=25e3, 1, 0)
+  end
+end
+
+########################### Compositional Fields ##############################
+#If don't need the elasticity, remove the first three compositional fields here
+subsection Compositional fields
+  set Number of fields      = 5
+  set Names of fields       = ve_stress_xx, ve_stress_yy, ve_stress_xy, \
+                              plastic_strain, injection_phase
+end
+
+#If don't need the elasticity, remove the first three compositional fields here
+subsection Initial composition model
+  set Model name = function
+  subsection Function
+    set Variable names      =x,y
+    # same function for the dike as below
+    set Function expression = 0;0;0;0; if(x>=-0.4e3 && x<=0.4e3 && y>=34e3, 1, 0)
+  end
+end
+
+subsection Boundary composition model
+  set Fixed composition boundary indicators          = bottom
+  set List of model names                            = initial composition
+end
+
+##################### Velocity Boundary Conditions ########################
+subsection Boundary velocity model
+  set Prescribed velocity boundary indicators = left:function, right :function
+  subsection Function 
+    set Variable names      = x,y
+    set Function constants  = cm=0.01, year=1
+    set Function expression = if(x<0, -1.25*cm/year, 1.25*cm/year); 0
+  end    
+end
+
+subsection Boundary traction model
+ set Prescribed traction boundary indicators = bottom:initial lithostatic pressure
+ subsection Initial lithostatic pressure
+   set Number of integration points = 1000
+   set Representative point         = 40e3, 40e3
+ end
+end
+
+subsection Mesh deformation
+  set Mesh deformation boundary indicators = top: free surface, top: diffusion
+  set Additional tangential mesh velocity boundary indicators = left,right
+  subsection Free surface
+    set Surface velocity projection = normal
+    set Free surface stabilization theta = 1.0
+  end
+  subsection Diffusion
+    set Hillslope transport coefficient = 1.584e-8
+    set Time steps between diffusion    = 1
+  end
+end
+
+##################### Temperature Boundary Conditions ########################
+# Same setup of the T field as Howell et al. (2019)
+subsection Initial temperature model
+  set Model name = ascii data
+  subsection Ascii data model
+    set Data directory = ./
+    set Data file name = T_BDT_6km_700C_w80km_h40km.txt
+  end 
+end
+
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators = bottom, top
+  set List of model names = box
+  subsection Box
+    set Top temperature = 275
+    set Bottom temperature = 1573
+  end
+end
+
+# Include latent heat of crystallization of the injected material 
+# The latent heat source term = dilation_term * (Hf + (T_inject - T)*rho *Cp)
+# TODO: ADD the compositional heating? 
+#subsection Heating model
+#  set List of model names = constant heating, shear heating #, latent heat injection
+#  subsection Constant heating
+#    set Radiogenic heating rate = 6e-12
+#  end
+  # subsection Compositional heating
+  #   set Use compositional field for heat production averaging = 1, 0, 0, 0, 0, 1, 1
+  #   set Compositional heating values = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e-6, 0.25e-6
+  # end
+#  subsection Latent heat injection
+#    set Latent heat of crystallization = 1.1e9 #Unit: J/kg; or 1.5e9
+#    set Temperature of injected melt = 1523
+#  end
+#end
+
+##################### Dike Injection Part ########################
+
+# We need to enable the assembler that allows us to add terms
+# to the Stokes equation. 
+subsection Formulation
+#  set Formulation = Boussinesq approximation
+  set Enable prescribed dilation = true
+  set Enable elasticity = true
+  set Enable dike injection = true
+end
+
+subsection Material model
+  set Model name = prescribed dike injection
+  subsection Prescribed dike injection
+    set Base model = visco plastic
+    subsection Dike injection function
+      # The dike region is 800m * 6km in the middle domain,
+      # its opening rate on the edge is:
+      # U_dike=2*M*u_half = 2 * 0.8 * 1.25 cm/yr = ~ 1 cm/yr
+      set Function constants = M=0.8, u=0.0125, w=800 
+      set Function expression = if(x>=-0.4e3 &x<=0.4e3 &y>=34e3, 2*M*u/w, 0)
+    end
+  end
+ 
+  subsection Visco Plastic
+    # Compositional fields : [background, elastic param., plastic_strain, dike, crust]
+    set Densities             = 3000 #, 1,1,1,1, 3000, 3000
+    set Minimum viscosity     = 1e19
+    set Maximum viscosity     = 1e23
+    set Reference strain rate = 1e-16
+    set Minimum strain rate   = 1e-20
+    # Thermal parameters including hydrothrmal circulation
+    # This model does not calculate T
+    set Reference temperature = 298   #25C-Gerya 2013
+    set Heat capacities       = 0 #1000
+    set Thermal expansivities = 0 #3e-5
+    set Define thermal conductivities = true
+    set Thermal conductivities = 0 #3.0
+    set Define hydrothermal circulation = false
+    set Nusselt numbers = 1
+    set Hydrothermal circulation cutoff temperatures = 873
+    set Hydrothermal circulation cutoff depths = 6e3
+    set Hydrothermal circulation smoothing factors = 0.0
+
+    # Choose to have the viscosity (pre-yield) follow a dislocation flow law.
+    # Oceanic_crust: Maryland Diabase (Mackwell et al. 1998)
+    # Litho. mantle: Dry Olivine (Hirth and Kohlstedt 2003)
+    set Viscous flow law = dislocation
+    set Prefactors for dislocation creep = 5.78e-27 #, 1.00e-50,1.00e-50,1.00e-50,1.00e-50, 5.78e-27, 5.78e-27
+    set Stress exponents for dislocation creep = 4.7 #, 1,1,1,1, 4.7, 4.7
+    set Activation energies for dislocation creep = 485.e3 #, 0,0,0,0, 485.e3, 485.e3
+    set Activation volumes for dislocation creep  = 0
+    set Use adiabatic pressure in creep viscosity = true
+    set Constant viscosity prefactors = 1.
+
+    # Plasticity parameters
+    set Angles of internal friction = 30
+    set Cohesions                   = 30.e6
+    set Strain weakening mechanism  = plastic weakening with plastic strain only
+    set Start plasticity strain weakening intervals = 0.02
+    set End plasticity strain weakening intervals   = 0.1
+    set Cohesion strain weakening factors           = 1e-3
+    set Maximum yield stress        = 1e9
+    #set Strain healing mechanism    = fracture healing
+    #set Strain healing fracture recovery rate = 1.58e-13 #0.2 Ma - fault healing time
+
+    # Elasticity parameters
+    set Elastic shear moduli        = 40e9
+    set Use fixed elastic time step = true
+    set Fixed elastic time step     = 1e4
+  end
+end
+
+##################### Postprocessing ########################
+subsection Postprocess
+  set List of postprocessors = velocity statistics,temperature statistics, \
+                               visualization, topography
+  subsection Visualization
+    set List of output variables = density, viscosity, strain rate, \
+                                   strain rate tensor, named additional outputs, \
+                                   maximum horizontal compressive stress
+    set Output format = vtu
+    set Time between graphical output = 2e5
+    set Interpolate output = false
+    set Write higher order output = false  
+    set Number of grouped files             = 1
+    set Point-wise stress and strain        = true
+  end
+  subsection Topography
+    set Output to file                              = true
+    set Time between text output                    = 5e5
+  end
+end
