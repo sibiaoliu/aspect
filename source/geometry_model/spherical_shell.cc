@@ -142,6 +142,9 @@ namespace aspect
     void
     SphericalShell<dim>::initialize ()
     {
+      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()) ,
+                  ExcMessage("At the moment, only the Zero initial topography model can be used with the SphericalShell geometry model."));
+
       manifold = std::make_unique<internal::SphericalManifoldWithTopography<dim>>();
     }
 
@@ -537,8 +540,18 @@ namespace aspect
     Point<dim>
     SphericalShell<dim>::representative_point(const double depth) const
     {
+      Assert (depth >= 0,
+              ExcMessage ("Given depth must be positive or zero."));
+      Assert (depth <= maximal_depth(),
+              ExcMessage ("Given depth must be less than or equal to the maximal depth of this geometry."));
+
+      // Choose a point along the axes toward the north pole, at the
+      // requested depth.
       Point<dim> p;
-      p(dim-1) = std::min (std::max(R1 - depth, R0), R1);
+      p[dim-1] = std::min (std::max(R1 - depth, R0), R1);
+
+      // TODO: Take into account topography
+
       return p;
     }
 
@@ -621,6 +634,8 @@ namespace aspect
             spherical_point[d] < point1[d]-std::numeric_limits<double>::epsilon()*std::abs(point2[d]))
           return false;
 
+      // TODO: Take into account topography
+
       return true;
     }
 
@@ -630,6 +645,7 @@ namespace aspect
     std::array<double,dim>
     SphericalShell<dim>::cartesian_to_natural_coordinates(const Point<dim> &position) const
     {
+      // TODO: Take into account topography
       return Utilities::Coordinates::cartesian_to_spherical_coordinates<dim>(position);
     }
 
@@ -648,6 +664,7 @@ namespace aspect
     Point<dim>
     SphericalShell<dim>::natural_to_cartesian_coordinates(const std::array<double,dim> &position) const
     {
+      // TODO: Take into account topography
       return Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(position);
     }
 

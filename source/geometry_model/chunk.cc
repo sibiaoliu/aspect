@@ -433,8 +433,8 @@ namespace aspect
     void
     Chunk<dim>::initialize ()
     {
-      AssertThrow(dynamic_cast<const InitialTopographyModel::ZeroTopography<dim>*>(&this->get_initial_topography_model()) != nullptr ||
-                  dynamic_cast<const InitialTopographyModel::AsciiData<dim>*>(&this->get_initial_topography_model()) != nullptr,
+      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()) ||
+                  Plugins::plugin_type_matches<const InitialTopographyModel::AsciiData<dim>>(this->get_initial_topography_model()),
                   ExcMessage("At the moment, only the Zero or AsciiData initial topography model can be used with the Chunk geometry model."));
 
       manifold = std::make_unique<internal::ChunkGeometry<dim>>(this->get_initial_topography_model(),
@@ -449,6 +449,7 @@ namespace aspect
     Chunk<dim>::
     create_coarse_mesh (parallel::distributed::Triangulation<dim> &coarse_grid) const
     {
+      // First create a box in Cartesian coordinates:
       const std::vector<unsigned int> rep_vec(repetitions.begin(), repetitions.end());
       GridGenerator::subdivided_hyper_rectangle (coarse_grid,
                                                  rep_vec,
@@ -456,7 +457,8 @@ namespace aspect
                                                  point2,
                                                  true);
 
-      // Transform box into spherical chunk
+      // Then transform this box into a spherical chunk (possibly with
+      // topography -- the 'manifold' has that built in):
       GridTools::transform (
         [&](const Point<dim> &p) -> Point<dim>
       {
@@ -547,20 +549,6 @@ namespace aspect
       // depth is defined wrt the reference surface point2[0]
       // negative depth is not allowed
       return std::max (0., std::min (point2[0]-position.norm(), maximal_depth()));
-    }
-
-
-
-    template <int dim>
-    double
-    Chunk<dim>::depth_wrt_topo(const Point<dim> &position) const
-    {
-      // depth is defined wrt the reference surface point2[0] + the topography
-      // depth is therefore always positive
-      const double outer_radius = manifold->get_radius(position);
-      const Point<dim> rtopo_phi_theta = manifold->pull_back_sphere(position);
-      Assert (rtopo_phi_theta[0] <= outer_radius, ExcMessage("The radius is bigger than the maximum radius."));
-      return std::max(0.0, outer_radius - rtopo_phi_theta[0]);
     }
 
 
@@ -697,21 +685,33 @@ namespace aspect
     bool
     Chunk<dim>::point_is_in_domain(const Point<dim> &point) const
     {
-      AssertThrow(!this->get_parameters().mesh_deformation_enabled ||
-                  this->simulator_is_past_initialization() == false,
-                  ExcMessage("After displacement of the free surface, this function can no longer be used to determine whether a point lies in the domain or not."));
+      // If mesh deformation is enabled, we have to loop over all the current
+      // grid cells to see if the given point lies in the domain.
+      // If mesh deformation is not enabled, or has not happened yet,
+      // we can use the global extents of the model domain with or without
+      // initial topography instead.
+      // This function only checks if the given point lies in the domain
+      // in its current shape at the current time. It can be called before
+      // mesh deformation is applied in the first timestep (e.g., by the boundary
+      // traction plugins), and therefore there is no guarantee
+      // that the point will still lie in the domain after initial mesh deformation.
+      if (this->get_parameters().mesh_deformation_enabled &&
+          this->simulator_is_past_initialization())
+        {
+          return Utilities::point_is_in_triangulation(this->get_mapping(), this->get_triangulation(), point, this->get_mpi_communicator());
+        }
+      // Without mesh deformation enabled, it is much cheaper to check whether the point lies in the domain.
+      else
+        {
+          const Point<dim> spherical_point = manifold->pull_back(point);
 
-      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
-                  ExcMessage("After adding topography, this function can no longer be used to determine whether a point lies in the domain or not."));
+          for (unsigned int d = 0; d < dim; ++d)
+            if (spherical_point[d] > point2[d]+std::numeric_limits<double>::epsilon()*std::abs(point2[d]) ||
+                spherical_point[d] < point1[d]-std::numeric_limits<double>::epsilon()*std::abs(point2[d]))
+              return false;
 
-      const Point<dim> spherical_point = manifold->pull_back(point);
-
-      for (unsigned int d = 0; d < dim; ++d)
-        if (spherical_point[d] > point2[d]+std::numeric_limits<double>::epsilon()*std::abs(point2[d]) ||
-            spherical_point[d] < point1[d]-std::numeric_limits<double>::epsilon()*std::abs(point2[d]))
-          return false;
-
-      return true;
+          return true;
+        }
     }
 
 

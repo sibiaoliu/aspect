@@ -70,7 +70,7 @@ jobs:
         ./contrib/utilities/indent
         git diff > changes-astyle.diff
     - name: archive indent results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: changes-astyle.diff
         path: changes-astyle.diff
@@ -162,13 +162,13 @@ jobs:
       continue-on-error: true
       run: |
         cd build
-        ninja generate_reference_output
         # TODO: temporary fix for a git incompability.
         # Can likely be removed when the tester image runs on Ubuntu 22.04
         /usr/bin/git config --system --add safe.directory /__w/aspect/aspect
+        ninja generate_reference_output
         git diff ../tests > ${{ matrix.result-file }}
     - name: archive test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.result-file }}
         path: build/${{ matrix.result-file }}
