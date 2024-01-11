@@ -29,7 +29,7 @@ are expressed in Poise with $1~\text{ Poise}=0.1~\text{ Pa s}$.
 
 The setup is shown in {numref}`fig:subduction-initiation-setup`
 and the list of simulations run by the authors is in
-{numref}`tab:quickref`.
+{numref}`tab:subductioninitiation`.
 
 ```{figure-md} fig:subduction-initiation-setup
 <img src="setup.*" width="70%" />
@@ -44,7 +44,7 @@ Taken from {cite:t}`matsumoto:tomoda:1983`.
 ```
 
 ```{table} List of all cases
-:name: tab:quickref
+:name: tab:subductioninitiation
 | Case                 | $\eta_l~(\text{ Pa s})$      | $\eta_a~(\text{ Pa s})$       | domain size  (km)|
 | :------------------- | :-----------: | :------------: | :---------: |
 1 | $10^{22}$ | $10^{21}$ | $400\times 180$ |
@@ -54,7 +54,6 @@ Taken from {cite:t}`matsumoto:tomoda:1983`.
 5 | $10^{22}$ | $10^{20}$ | $800\times 140$ |
 6 | $10^{22}$ | $10^{19}$ | $800\times 140$ |
 ```
-
 
 Rather interestingly the model is built in such a way that the
 lithostatic pressure is uniform at the bottom of the domain.

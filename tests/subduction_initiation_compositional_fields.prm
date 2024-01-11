@@ -1,53 +1,15 @@
 # Parameter file for replicating Matsumoto & Tomoda 1983
+# see cookbooks/subduction_initiation for more details
+
+include $ASPECT_SOURCE_DIR/cookbooks/subduction_initiation/subduction_initiation_basis.prm
 
 set Dimension                              = 2
-set Start time                             = 0
 set End time                               = 0
-set Use years in output instead of seconds = true
-set CFL number                             = 0.25
-set Output directory                       = output-subduction-initiation-comp
-set Pressure normalization                 = surface
-
-subsection Geometry model
-  set Model name = box
-  subsection Box
-    set X extent  = 400e3
-    set Y extent  = 180e3
-    set X repetitions = 2
-  end
-end
-
-subsection Boundary velocity model
-  set Tangential velocity boundary indicators = left, right, bottom, top
-end
-
-subsection Gravity model
-  set Model name = vertical
-  subsection Vertical
-    set Magnitude = 9.81
-  end
-end
-
-subsection Boundary temperature model
-  set Fixed temperature boundary indicators = bottom, top
-  set List of model names = box
-end
-
-subsection Initial temperature model
-  set Model name = function
-  subsection Function
-    set Function expression = 0
-  end
-end
 
 subsection Mesh refinement
   set Initial adaptive refinement   = 0
   set Initial global refinement     = 3
-  set Refinement fraction           = 0.9
-  set Strategy                      = composition
-  set Coarsening fraction           = 0
 end
-
 
 #materials are:
 # asthenosphere left,
@@ -58,6 +20,7 @@ end
 
 subsection Material model
   set Model name = multicomponent
+
   subsection Multicomponent
     set Densities = 3200, 3200, 3300, 3300, 1030
     set Viscosities = 1e21, 1e21, 1e22, 1e22, 1e18
@@ -72,6 +35,7 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Variable names      = x,y
     set Function constants  = L0=300e3, H=180e3

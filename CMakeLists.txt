@@ -597,27 +597,71 @@ IF(ASPECT_WITH_LIBDAP)
   ENDIF()
 ENDIF()
 
-#
-# NETCDF (c including parallel)
-#
-SET(ASPECT_WITH_NETCDF OFF CACHE BOOL "Check if the user wants to compile ASPECT with the NETCDF libraries.")
 
-MESSAGE(STATUS "Using ASPECT_WITH_NETCDF = '${ASPECT_WITH_NETCDF}'")
+# Check for FastScape library and link it to ASPECT if requested
+SET(ASPECT_WITH_FASTSCAPE OFF CACHE BOOL "Whether the user wants to compile ASPECT with the landscape evolution code FastScape, or not.")
+MESSAGE(STATUS "Using ASPECT_WITH_FASTSCAPE = '${ASPECT_WITH_FASTSCAPE}'")
+IF(ASPECT_WITH_FASTSCAPE)
+  FIND_LIBRARY(FASTSCAPE NAMES fastscapelib_fortran PATHS $ENV{FASTSCAPE_DIR} ${FASTSCAPE_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+  IF (FASTSCAPE)
+     MESSAGE(STATUS "FastScape library found at ${FASTSCAPE_DIR}")
+
+    # Get the fastscape source path so we can check the version.
+    FILE (STRINGS "${FASTSCAPE_DIR}/Makefile" _fastscape_makefile)
+    foreach(_line ${_fastscape_makefile})
+        if("${_line}" MATCHES "^CMAKE_SOURCE_DIR")
+          string(REPLACE "CMAKE_SOURCE_DIR = " "" FASTSCAPE_SOURCE_DIR ${_line})
+        endif()
+    endforeach()
+
+    # Now get the version from setup.py
+    MESSAGE(STATUS "Parsing '${FASTSCAPE_SOURCE_DIR}/setup.py' for version information")
+    FILE (STRINGS "${FASTSCAPE_SOURCE_DIR}/setup.py" _fastscape_info)
+    foreach(_line ${_fastscape_info})
+        string(STRIP ${_line} _line)
+        if("${_line}" MATCHES "^version")
+          string(REGEX REPLACE "[^0-9.]" "" FASTSCAPE_VERSION ${_line})
+        endif()
+    endforeach()
+
+    # Throw an error if the version is too old.
+    IF(${FASTSCAPE_VERSION} VERSION_LESS 2.8)
+      MESSAGE(FATAL_ERROR "The linked FastScape version is ${FASTSCAPE_VERSION}, however at least 2.8.0 is required.")
+    ENDIF()
+
+    FOREACH(_T ${TARGETS})
+      TARGET_LINK_LIBRARIES(${_T} ${FASTSCAPE})
+    ENDFOREACH()
+  ELSE()
+     MESSAGE(FATAL_ERROR "Trying to link with FastScape but libfastscapelib_fortran.so was not found in ${FASTSCAPE_DIR}")
+  ENDIF()
+ENDIF()
+
+
+#
+# NetCDF (c including parallel)
+#
+
+SET(ASPECT_WITH_NETCDF ON CACHE BOOL "Check if the user wants to compile ASPECT with the NetCDF libraries.")
 
 IF(ASPECT_WITH_NETCDF)
   FIND_PACKAGE(NETCDF)
   IF(${NETCDF_FOUND})
-    MESSAGE(STATUS "  NETCDF_INCLUDE_DIR: ${NETCDF_INCLUDE_DIR}")
-    MESSAGE(STATUS "  NETCDF_LIBRARY: ${NETCDF_LIBRARY}")
-    MESSAGE(STATUS "  NETCDF_VERSION: ${NETCDF_VERSION}")
-
     INCLUDE_DIRECTORIES(${NETCDF_INCLUDE_DIRS})
     FOREACH(_T ${TARGETS})
       TARGET_LINK_LIBRARIES(${_T} ${NETCDF_LIBRARIES})
     ENDFOREACH()
+
+    MESSAGE(STATUS "Using ASPECT_WITH_NETCDF = '${ASPECT_WITH_NETCDF}'")
+    MESSAGE(STATUS "  NETCDF_INCLUDE_DIR: ${NETCDF_INCLUDE_DIR}")
+    MESSAGE(STATUS "  NETCDF_LIBRARY: ${NETCDF_LIBRARY}")
+    MESSAGE(STATUS "  NETCDF_VERSION: ${NETCDF_VERSION}")
   ELSE()
-    MESSAGE(FATAL_ERROR "NETCDF not found. Disable ASPECT_WITH_NETCDF or specify a hint to your installation directory with NETCDF_DIR.")
+    MESSAGE(STATUS "NetCDF not found. Disabling ASPECT_WITH_NETCDF. You can specify a hint to your installation directory with NETCDF_DIR.")
+    SET(ASPECT_WITH_NETCDF OFF CACHE BOOL "" FORCE)
   ENDIF()
+ELSE()
+  MESSAGE(STATUS "NetCDF support disabled.")
 ENDIF()
 
 IF(WORLD_BUILDER_VERSION VERSION_GREATER_EQUAL 0.6.0 AND ASPECT_WITH_WORLD_BUILDER)

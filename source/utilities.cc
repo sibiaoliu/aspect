@@ -39,8 +39,7 @@
 #include <deal.II/base/exceptions.h>
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/base/patterns.h>
-
-
+#include <deal.II/grid/grid_tools.h>
 
 #include <cerrno>
 #include <dirent.h>
@@ -211,6 +210,9 @@ namespace aspect
 #endif
       }
     }
+
+
+
 
 
 
@@ -725,6 +727,34 @@ namespace aspect
             }
           return unit_support_points;
         }
+    }
+
+
+
+    template <int dim>
+    bool
+    point_is_in_triangulation(const Mapping<dim> &mapping,
+                              const parallel::distributed::Triangulation<dim> &triangulation,
+                              const Point<dim> &point,
+                              const MPI_Comm mpi_communicator)
+    {
+      // Try to find the cell around the given point.
+      bool cell_found = false;
+      std::pair<const typename parallel::distributed::Triangulation<dim>::active_cell_iterator,
+          Point<dim>> it =
+            GridTools::find_active_cell_around_point<>(mapping, triangulation, point);
+
+      // If we found the correct cell on this MPI process, we have found the right cell.
+      if (it.first.state() == IteratorState::valid && it.first->is_locally_owned())
+        cell_found = true;
+
+      // Compute how many processes found the cell.
+      const int n_procs_cell_found = Utilities::MPI::sum(cell_found ? 1 : 0, mpi_communicator);
+      // If at least one process found the cell, the point is in the triangulation.
+      if (n_procs_cell_found > 0)
+        return true;
+      else
+        return false;
     }
 
 
@@ -1336,8 +1366,7 @@ namespace aspect
 
 
     bool
-    fexists(const std::string &filename,
-            MPI_Comm comm)
+    fexists(const std::string &filename, const MPI_Comm comm)
     {
       bool file_exists = false;
       if (Utilities::MPI::this_mpi_process(comm) == 0)
@@ -1366,7 +1395,7 @@ namespace aspect
 
     std::string
     read_and_distribute_file_content(const std::string &filename,
-                                     const MPI_Comm &comm)
+                                     const MPI_Comm comm)
     {
       std::string data_string;
 
@@ -1561,7 +1590,7 @@ namespace aspect
     void
     collect_and_write_file_content(const std::string &filename,
                                    const std::string &file_content,
-                                   const MPI_Comm &comm)
+                                   const MPI_Comm comm)
     {
       const std::vector<std::string> collected_content = Utilities::MPI::gather(comm, file_content);
 
@@ -1639,7 +1668,7 @@ namespace aspect
 
 
     void create_directory(const std::string &pathname,
-                          const MPI_Comm &comm,
+                          const MPI_Comm comm,
                           bool silent)
     {
       // verify that the output directory actually exists. if it doesn't, create
@@ -2890,7 +2919,7 @@ namespace aspect
                                                const std::string &function_name,
                                                const std::vector<SolverControl> &solver_controls,
                                                const std::exception &exc,
-                                               const MPI_Comm &mpi_communicator,
+                                               const MPI_Comm mpi_communicator,
                                                const std::string &output_filename)
     {
       if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
@@ -3427,6 +3456,12 @@ namespace aspect
   template \
   bool polygon_contains_point<dim>(const std::vector<Point<2>> &pointList, \
                                    const dealii::Point<2> &point); \
+  \
+  template \
+  bool point_is_in_triangulation<dim>(const Mapping<dim> &mapping, \
+                                      const parallel::distributed::Triangulation<dim> &triangulation, \
+                                      const Point<dim> &point, \
+                                      const MPI_Comm mpi_communicator); \
   \
   template \
   double signed_distance_to_polygon<dim>(const std::vector<Point<2>> &pointList, \
