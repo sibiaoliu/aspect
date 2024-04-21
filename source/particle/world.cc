@@ -29,7 +29,6 @@
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/grid/grid_tools.h>
 
-#include <deal.II/matrix_free/fe_point_evaluation.h>
 #include <deal.II/fe/mapping_cartesian.h>
 
 #include <boost/serialization/map.hpp>
@@ -544,38 +543,50 @@ namespace aspect
       for (auto particle = begin_particle; particle!=end_particle; ++particle)
         positions.push_back(particle->get_reference_location());
 
-      boost::container::small_vector<double, 100> solution_values(this->get_fe().dofs_per_cell);
-      boost::container::small_vector<double, 100> old_solution_values(this->get_fe().dofs_per_cell);
+      const std::array<bool, 3> required_solution_vectors = integrator->required_solution_vectors();
 
-      cell->get_dof_values(this->get_current_linearization_point(),
-                           solution_values.begin(),
-                           solution_values.end());
+      AssertThrow (required_solution_vectors[0] == false,
+                   ExcMessage("The integrator requires the old old solution vector, but it is not available."));
 
-      cell->get_dof_values(this->get_old_solution(),
-                           old_solution_values.begin(),
-                           old_solution_values.end());
 
       const bool use_fluid_velocity = this->include_melt_transport() &&
                                       property_manager->get_data_info().fieldname_exists("melt_presence");
-      auto &evaluator = evaluators.get_velocity_or_fluid_velocity_evaluator(use_fluid_velocity);
 
+      auto &evaluator = evaluators.get_velocity_or_fluid_velocity_evaluator(use_fluid_velocity);
       auto &mapping_info = evaluators.get_mapping_info();
       mapping_info.reinit(cell, {positions.data(),positions.size()});
-      evaluator.evaluate({solution_values.data(),solution_values.size()},
-                         EvaluationFlags::values);
 
       std::vector<Tensor<1,dim>> velocities;
-      velocities.reserve(n_particles_in_cell);
-      for (unsigned int i=0; i<n_particles_in_cell; ++i)
-        velocities.push_back(evaluator.get_value(i));
-
-      evaluator.evaluate({old_solution_values.data(),old_solution_values.size()},
-                         EvaluationFlags::values);
-
       std::vector<Tensor<1,dim>> old_velocities;
-      old_velocities.reserve(n_particles_in_cell);
-      for (unsigned int i=0; i<n_particles_in_cell; ++i)
-        old_velocities.push_back(evaluator.get_value(i));
+
+      if (required_solution_vectors[1] == true)
+        {
+          boost::container::small_vector<double, 100> old_solution_values(this->get_fe().dofs_per_cell);
+          cell->get_dof_values(this->get_old_solution(),
+                               old_solution_values.begin(),
+                               old_solution_values.end());
+
+          evaluator.evaluate({old_solution_values.data(),old_solution_values.size()},
+                             EvaluationFlags::values);
+
+          old_velocities.resize(n_particles_in_cell);
+          for (unsigned int i=0; i<n_particles_in_cell; ++i)
+            old_velocities[i] = evaluator.get_value(i);
+        }
+
+      if (required_solution_vectors[2] == true)
+        {
+          boost::container::small_vector<double, 100> solution_values(this->get_fe().dofs_per_cell);
+          cell->get_dof_values(this->get_current_linearization_point(),
+                               solution_values.begin(),
+                               solution_values.end());
+          evaluator.evaluate({solution_values.data(),solution_values.size()},
+                             EvaluationFlags::values);
+
+          velocities.resize(n_particles_in_cell);
+          for (unsigned int i=0; i<n_particles_in_cell; ++i)
+            velocities[i] = evaluator.get_value(i);
+        }
 
       integrator->local_integrate_step(begin_particle,
                                        end_particle,
@@ -735,55 +746,6 @@ namespace aspect
 
     namespace internal
     {
-      // This class evaluates the solution vector at arbitrary positions inside a cell.
-      // This base class only provides the interface for SolutionEvaluatorsImplementation.
-      // See there for more details.
-      template <int dim>
-      class SolutionEvaluators
-      {
-        public:
-          // virtual Destructor.
-          virtual ~SolutionEvaluators() = default;
-
-          // Reinitialize all variables to evaluate the given solution for the given cell
-          // and the given positions. The update flags control if only the solution or
-          // also the gradients should be evaluated.
-          // If other flags are set an assertion is triggered.
-          virtual
-          void
-          reinit(const typename DoFHandler<dim>::active_cell_iterator &cell,
-                 const ArrayView<Point<dim>> &positions,
-                 const ArrayView<double> &solution_values,
-                 const UpdateFlags update_flags) = 0;
-
-          // Fill @p solution with all solution components at the given @p evaluation_point. Note
-          // that this function only works after a successful call to reinit(),
-          // because this function only returns the results of the computation that
-          // happened in reinit().
-          virtual
-          void get_solution(const unsigned int evaluation_point,
-                            Vector<double> &solution) = 0;
-
-          // Fill @p gradients with all solution gradients at the given @p evaluation_point. Note
-          // that this function only works after a successful call to reinit(),
-          // because this function only returns the results of the computation that
-          // happened in reinit().
-          virtual
-          void get_gradients(const unsigned int evaluation_point,
-                             std::vector<Tensor<1,dim>> &gradients) = 0;
-
-          // Return the evaluator for velocity or fluid velocity. This is the only
-          // information necessary for advecting particles.
-          virtual
-          FEPointEvaluation<dim, dim> &
-          get_velocity_or_fluid_velocity_evaluator(const bool use_fluid_velocity) = 0;
-
-          // Return the cached mapping information.
-          virtual
-          NonMatching::MappingInfo<dim> &
-          get_mapping_info() = 0;
-      };
-
       // This class evaluates the solution vector at arbitrary positions inside a cell.
       // It uses the deal.II class FEPointEvaluation to do this efficiently. Because
       // FEPointEvaluation only supports a single finite element, but ASPECT uses a FESystem with

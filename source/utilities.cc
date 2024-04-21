@@ -81,11 +81,7 @@ namespace aspect
         inline MPI_Datatype
         mpi_type_id(const bool *)
         {
-#  if DEAL_II_MPI_VERSION_GTE(2, 2)
           return MPI_CXX_BOOL;
-#  else
-          return MPI_C_BOOL;
-#  endif
         }
 
 
@@ -812,12 +808,19 @@ namespace aspect
         std::array<double,dim> scoord;
 
         scoord[0] = position.norm(); // R
-        scoord[1] = std::atan2(position(1),position(0)); // Phi
+
+        // Compute the longitude phi. Note that atan2 is documented to return
+        // its result as a value between -pi and +pi, whereas we use the
+        // convention that we consider eastern longitude between 0 and 2pi.
+        // As a consequence, we correct where necessary.
+        scoord[1] = std::atan2(position(1),position(0));
         if (scoord[1] < 0.0)
           scoord[1] += 2.0*numbers::PI; // correct phi to [0,2*pi]
+
+        // In 3d also compute the polar angle (=colatitude)
         if (dim==3)
           {
-            if (scoord[0] > std::numeric_limits<double>::min())
+            if (/* R= */scoord[0] > std::numeric_limits<double>::min())
               scoord[2] = std::acos(position(2)/scoord[0]);
             else
               scoord[2] = 0.0;
@@ -2522,17 +2525,11 @@ namespace aspect
       if ((strain_rate.norm() == 0) || (dviscosities_dstrain_rate.norm() == 0))
         return 1;
 
-      const double norm_a_b = std::sqrt((strain_rate*strain_rate)*(dviscosities_dstrain_rate*dviscosities_dstrain_rate));//std::sqrt((deviator(strain_rate)*deviator(strain_rate))*(dviscosities_dstrain_rate*dviscosities_dstrain_rate));
-      const double contract_b_a = (dviscosities_dstrain_rate*strain_rate);
-      const double one_minus_part = 1 - (contract_b_a / norm_a_b);
-      const double denom = one_minus_part * one_minus_part * norm_a_b;
-
-      // the case denom == 0 (smallest eigenvalue is zero), should return one,
-      // and it does here, because C_safety * 2.0 * eta is always larger then zero.
-      if (denom <= SPD_safety_factor * 2.0 * eta)
+      const double E = strain_rate * dviscosities_dstrain_rate;
+      if (E >= -eta * SPD_safety_factor)
         return 1.0;
       else
-        return std::max(0.0, SPD_safety_factor * ((2.0 * eta) / denom));
+        return SPD_safety_factor * std::abs(eta / E);
     }
 
 

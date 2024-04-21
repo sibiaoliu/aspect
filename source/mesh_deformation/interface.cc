@@ -1115,7 +1115,7 @@ namespace aspect
                                         level);
         }
 
-      MGTransferMatrixFree<dim, double> mg_transfer(mg_constrained_dofs);
+      MGTransferMF<dim, double> mg_transfer(mg_constrained_dofs);
       mg_transfer.build(mesh_deformation_dof_handler);
 
       using SmootherType =
@@ -1171,8 +1171,9 @@ namespace aspect
       mg.set_edge_matrices(mg_interface, mg_interface);
       PreconditionMG<dim,
                      dealii::LinearAlgebra::distributed::Vector<double>,
-                     MGTransferMatrixFree<dim, double>>
+                     MGTransferMF<dim, double>>
                      preconditioner(mesh_deformation_dof_handler, mg, mg_transfer);
+
 
       // solve
       const double tolerance
@@ -1479,13 +1480,20 @@ namespace aspect
       rwv.reinit(mesh_displacements);
       displacements.import(rwv, VectorOperation::insert);
 
+      const unsigned int n_levels = sim.triangulation.n_global_levels();
+      for (unsigned int level = 0; level < n_levels; ++level)
+        {
+          level_displacements[level].zero_out_ghost_values();
+        }
+
       mg_transfer.interpolate_to_mg(mesh_deformation_dof_handler,
                                     level_displacements,
                                     displacements);
 
-      const unsigned int n_levels = sim.triangulation.n_global_levels();
       for (unsigned int level = 0; level < n_levels; ++level)
-        level_displacements[level].update_ghost_values();
+        {
+          level_displacements[level].update_ghost_values();
+        }
 
     }
 

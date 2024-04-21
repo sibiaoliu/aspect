@@ -43,11 +43,10 @@ namespace aspect
         public:
           /**
            * Constructor.
-           *
-           * @param[in] center The center of the coordinate system. Defaults to the
-           * origin.
            */
-          SphericalManifoldWithTopography(const Point<dim> center = Point<dim>());
+          SphericalManifoldWithTopography(const InitialTopographyModel::Interface<dim> &topography,
+                                          const double inner_radius,
+                                          const double outer_radius);
 
           /**
            * Copy constructor.
@@ -59,6 +58,20 @@ namespace aspect
            */
           virtual std::unique_ptr<Manifold<dim, dim>>
           clone() const override;
+
+          /**
+           * Given a point in the undeformed spherical geometry, push it forward to the
+           * corresponding point in the sphere with surface topography.
+           */
+          Point<dim>
+          push_forward_from_sphere (const Point<dim> &p) const;
+
+          /**
+           * Given a point in the deformed spherical geometry with topography, pull it
+           * back to the corresponding point in the undeformed sphere.
+           */
+          Point<dim>
+          pull_back_to_sphere (const Point<dim> &p) const;
 
           /**
            * Given any two points in space, first project them on the surface
@@ -124,6 +137,23 @@ namespace aspect
           virtual Point<dim>
           get_new_point(const ArrayView<const Point<dim>> &vertices,
                         const ArrayView<const double>          &weights) const override;
+
+        private:
+          /**
+           * A pointer to the topography model.
+           */
+          const InitialTopographyModel::Interface<dim> *topo;
+
+          /**
+           * Inner and outer radii of the spherical shell.
+           */
+          const double R0, R1;
+
+          /**
+           * Return the topography of the surface directly above the point given
+           * by the coordinates stored in the argument.
+           */
+          double topography_for_point (const Point<dim> &x_y_z) const;
       };
 
     }
