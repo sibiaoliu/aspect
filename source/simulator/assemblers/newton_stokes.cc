@@ -362,12 +362,13 @@ namespace aspect
                                      ) * JxW;
             }
 
-          // This is customized for the dike injection process:
-          // If we want to contribute the prescribe dilation term's effect 
-          // only on horizontal x direction (dike opening),
-          // additional RHS of horizontal (x) momentum eqn: - \int 2 eta R, div v
-          // Buck et al., 2005; Howell et al., 2019
+          // This is customized for the dike injection process.
           // Note here: Enable_prescribed_dilation = true
+          // If we expect the effect of the prescribed dilatation term to
+          // occur only in the horizontal x-direction (dike opening), the 
+          // horizontal (x) momentum equation is then additionally augmented
+          // by the RHS：- \int 2 eta R, div v
+          // references: Buck et al., 2005; Howell et al., 2019
           if (this->get_parameters().enable_dike_injection == true)
             for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
               {
