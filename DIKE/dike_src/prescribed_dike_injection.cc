@@ -107,7 +107,7 @@ namespace aspect
         /**
          * Method to calculate reference viscosity. Not used anymore.
          */
-        // double reference_viscosity () const override;
+        double reference_viscosity () const override;
 
         void
         create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const override;
@@ -257,20 +257,6 @@ namespace aspect
       // Finally, we move the additional outputs back into place:
       out.move_additional_outputs_from(base_output);
 
-      // TODO: Limit all chemical compotinal values to be between 0 and 1
-      // for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-      //   {
-      //     const std::vector<double> &composition = in.composition[i];
-      //     for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-      //       {
-      //         // Ensuring the chemical compostional value is set between 0 and 1.
-      //         if (composition[c] > 1.0)
-      //           out.reaction_terms[i][c] = 1.0 - composition[c];
-              
-      //         if (composition[c] < 0.0)
-      //           out.reaction_terms[i][c] = -composition[c];
-      //       }
-      //   }
       // Start to add the additional RHS terms to Stokes equations.
       MaterialModel::PrescribedPlasticDilation<dim>
       *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
@@ -409,7 +395,7 @@ namespace aspect
           // create the base model and initialize its SimulatorAccess base
           // class; it will get a chance to read its parameters below after we
           // leave the current section
-          base_model = create_material_model<dim>(prm.get("Base model"));
+          base_model.reset(create_material_model<dim>(prm.get("Base model")));
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(base_model.get()))
             sim->initialize_simulator (this->get_simulator());
 
@@ -448,6 +434,14 @@ namespace aspect
     is_compressible () const
     {
       return base_model->is_compressible();
+    }
+
+    template <int dim>
+    double
+    PrescribedDikeInjection<dim>::
+    reference_viscosity () const
+    {
+      return base_model->reference_viscosity();
     }
 
     template <int dim>
