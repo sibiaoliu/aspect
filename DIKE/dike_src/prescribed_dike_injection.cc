@@ -17,6 +17,9 @@
 #include <array>
 #include <utility>
 #include <limits>
+#include <algorithm>
+#include <vector>
+#include <iostream>
 
 #include <aspect/simulator_access.h>
 #include <aspect/simulator.h>
@@ -29,7 +32,6 @@
 
 #include <aspect/heating_model/interface.h>
 #include <aspect/material_model/interface.h>
-#include <aspect/material_model/visco_plastic.h>
 
 /* Head file for injection term*/
 namespace aspect
@@ -119,6 +121,11 @@ namespace aspect
         Functions::ParsedFunction<dim> injection_function;
 
         /**
+         * Dike material injection ratio
+         */
+        double dike_material_injection_ratio;
+
+        /**
          * Pointer to the material model used as the base model.
          */
         std::unique_ptr<MaterialModel::Interface<dim> > base_model;
@@ -181,7 +188,11 @@ namespace aspect
          * Properties of injected material.
          */
         double latent_heat_of_crystallization;
-        double temperature_of_injected_melt;
+        double temperature_of_injected_material;
+        /**
+         * Dike material injection ratio
+         */
+        double dike_material_injection_ratio;
     };
   }
 }
@@ -216,6 +227,20 @@ namespace aspect
     PrescribedDikeInjection<dim>::evaluate(const typename Interface<dim>::MaterialModelInputs &in,
                                       typename Interface<dim>::MaterialModelOutputs &out) const
     {
+      AssertThrow(this->introspection().compositional_name_exists("injection_phase"),
+                  ExcMessage("Material model 'prescribed dike injection' only works if "
+                             "there is a compositional field called 'injection_phase'. "));
+
+      // Index for injection phase
+      unsigned int injection_phase_index = this->introspection().compositional_index_for_name("injection_phase");
+
+      // Indices for all chemical compositional fields, and not e.g., plastic strain.
+      // Ensure that chemical fields are kept together, and don't have non-chemical 
+      // fields between chemical fields.
+      const std::vector<unsigned int> chemical_composition_indices = this->introspection().chemical_composition_field_indices();
+      auto min_chemical_indices = std::min_element(chemical_composition_indices.begin(), chemical_composition_indices.end());
+      auto max_chemical_indices = std::max_element(chemical_composition_indices.begin(), chemical_composition_indices.end());
+
       // fill variable out with the results form the base material model
       // The base model may have additional outputs such as frictional angle
       // in visco-plastic model, so we need to copy material properties first.
@@ -247,51 +272,62 @@ namespace aspect
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                              : nullptr;
 
+      // The injection material will replace part of the original material based on the dilation rate and dike's
+      // duration, i.e., ratio of injected material to original material for the existence duration of a dike.
+      double dike_injection_ratio = 0.0;
+
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-        {
-          // If "Enable prescribed dilation" is on, then the injection rate
-          // R (m/s or m/yr) is added to the rhs of the mass eq., i.e.,
-          // -div(u,q) = -(R, q).
-          // Meanwhile, the term - 2.0 / 3.0 * eta * (R, div v) is added to
-          // the rhs of the momentum eq. (if the model is incompressible),
-          // otherwise this term is already present on the left side.
+        {   
           if (prescribed_dilation != nullptr)
             {
-              if (this->convert_output_to_years())
-                prescribed_dilation->dilation[i] = injection_function.value(in.position[i]) / year_in_seconds;
+              // Update dilation value based on the conversion to years or not
+              double dilation_time_factor = this->convert_output_to_years() ? year_in_seconds : 1.0;
+              prescribed_dilation->dilation[i] = injection_function.value(in.position[i]) / dilation_time_factor;
+              
+              // User-defined ratio
+              if (dike_material_injection_ratio != 0.0)
+                dike_injection_ratio = dike_material_injection_ratio;
               else
-                prescribed_dilation->dilation[i] = injection_function.value(in.position[i]);
+                dike_injection_ratio = prescribed_dilation->dilation[i] * this->get_timestep();
             }
-          // NOTE:
-          // If "Enable dike injection" is on, then the motion of dike injection
-          // is prescribed only in the hortizontal direction (x). 
-          // This is internally implemented in the stokes.cc and newton_stokes.cc files
-
-          // We do not mimic the process of magmatic crust generation/accretion through the dike.
-          // We assume that the magma was already present in the dike and will migrate to the
-          // sides of the ridge through dike opening.
-          // We also assume that there is no deformation within the solid dike.
+   
           const std::vector<double> &composition = in.composition[i];
-          for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+          double injection_phase_composition = std::max(std::min(composition[injection_phase_index],1.0),0.0);          
+
+          // Loop only in chemical copositional fields
+          for (unsigned int c = *min_chemical_indices; c <= *max_chemical_indices; ++c)
             {
-              // Lookup the injection area
+              // Find the injection area
               if (injection_function.value(in.position[i]) != 0.0)
                 {
-                  AssertThrow(this->introspection().compositional_name_exists("injection_phase"),
-                              ExcMessage("Material model 'prescribed dike injection' only works if "
-                                         "there is a compositional field called 'injection_phase'. "
-                                         "If you only want the 'injection phase' field in the injection "
-                                         "area, you should prescribe other fields such as 'mantle' "
-                                         "below to be 0."));
-
-                  if (c == this->introspection().compositional_index_for_name("injection_phase"))
-                    out.reaction_terms[i][c] = -1.0 * composition[c] + 1.0;
+                  if (c == injection_phase_index)
+                    {
+                      if (composition[c] < 0.0)
+                        out.reaction_terms[i][c] = -composition[c];
+                      else if ((composition[c] + dike_injection_ratio) >= 1.0)
+                        out.reaction_terms[i][c] = 1.0 - composition[c];
+                      else
+                        out.reaction_terms[i][c] = dike_injection_ratio;
+                    }
                   else
-                    out.reaction_terms[i][c] = -1.0 * composition[c];
-                
+                    {
+                      if (composition[c] < 0.0)
+                        out.reaction_terms[i][c] = -composition[c];
+                      else //To prevent division by 0, we will use 1.0001 instead of 1.0.
+                        out.reaction_terms[i][c] = -composition[c] * std::min(dike_injection_ratio / (1.0001 - injection_phase_composition),1.0);
+                    }
                 }
+              else
+                {
+                  // Limit each chemical compositional value to be between 0 and 1
+                  if (composition[c] >= 1.0)
+                    out.reaction_terms[i][c] = 1.0 - composition[c];
+                  
+                  if (composition[c] < 0.0)
+                    out.reaction_terms[i][c] = -composition[c];
+                }              
             }
-        } 
+        }
     }
 
     template <int dim>
@@ -309,6 +345,10 @@ namespace aspect
                             "are the names of models that are also valid for the "
                             "``Material models/Model name'' parameter. See the documentation for "
                             "that for more information.");
+          prm.declare_entry("Dike material injection ratio", "0.0",
+                            Patterns::Double(0),
+                            "Ratio of injected material to original material for the existence "
+                            "duration of a dike. Units: none.");
           prm.enter_subsection("Dike injection function");
           {
             Functions::ParsedFunction<dim>::declare_parameters(prm,1);
@@ -340,6 +380,7 @@ namespace aspect
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(base_model.get()))
             sim->initialize_simulator (this->get_simulator());
 
+          dike_material_injection_ratio = prm.get_double ("Dike material injection ratio");
           prm.enter_subsection("Dike injection function");
           {
             try
@@ -442,6 +483,7 @@ namespace aspect
 
       // Add the latent heat source term corresponding to prescribed dilation
       // terms in Stokes equations to the rhs of energy conservation equation.
+      double dike_injection_ratio = 0.0;
       for (unsigned int q=0; q<heating_model_outputs.heating_source_terms.size(); ++q)
         {
           heating_model_outputs.heating_source_terms[q] = 0.0;
@@ -449,8 +491,16 @@ namespace aspect
           heating_model_outputs.rates_of_temperature_change[q] = 0.0;
 
           if (prescribed_dilation != nullptr)
-            heating_model_outputs.heating_source_terms[q] = prescribed_dilation->dilation[q] * (latent_heat_of_crystallization + (temperature_of_injected_melt - material_model_inputs.temperature[q]) * material_model_outputs.densities[q] * material_model_outputs.specific_heat[q]);
-
+            {
+              // User-defined ratio
+              if (dike_material_injection_ratio != 0.0)
+                dike_injection_ratio = dike_material_injection_ratio;
+              else
+                dike_injection_ratio = prescribed_dilation->dilation[q] * this->get_timestep();
+                             
+              // adding the laten heat source team
+              heating_model_outputs.heating_source_terms[q] = dike_injection_ratio * prescribed_dilation->dilation[q] * (latent_heat_of_crystallization + (temperature_of_injected_material - material_model_inputs.temperature[q]) * material_model_outputs.densities[q] * material_model_outputs.specific_heat[q]);
+            }
         }
     }
 
@@ -467,10 +517,14 @@ namespace aspect
                              "The latent heat of crystallization that is released when material "
                              "is injected into the model. "
                              "Units: J/m$^3$.");
-          prm.declare_entry ("Temperature of injected melt", "1473",
+          prm.declare_entry ("Temperature of the injected material", "1273",
                              Patterns::Double(0),
                              "The temperature of the material injected into the model. "
                              "Units: K.");
+          prm.declare_entry("Dike material injection ratio", "0.0",
+                            Patterns::Double(0),
+                            "Ratio of injected material to original material for the existence "
+                            "duration of a dike. Units: none.");
         }
         prm.leave_subsection();
       }
@@ -494,7 +548,8 @@ namespace aspect
         prm.enter_subsection("Latent heat dike injection");
         {
           latent_heat_of_crystallization = prm.get_double ("Latent heat of crystallization");
-          temperature_of_injected_melt = prm.get_double ("Temperature of injected melt");
+          temperature_of_injected_material = prm.get_double ("Temperature of the injected material");
+          dike_material_injection_ratio = prm.get_double ("Dike material injection ratio");
         }
         prm.leave_subsection();
       }
@@ -519,7 +574,7 @@ namespace aspect
   {
     ASPECT_REGISTER_HEATING_MODEL(LatentHeatDikeInjection,
                                   "latent heat dike injection",
-                                  "Latent heat releases due to the injection of melt into the model. "
+                                  "Latent heat releases due to the material injection (e.g., melt) into the model. "
                                   "This heating model takes the source term added to the Stokes "
                                   "equation and adds the corresponding source term to the energy "
                                   "equation. This source term includes both the effect of latent "
