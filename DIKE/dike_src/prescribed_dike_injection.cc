@@ -294,6 +294,49 @@ namespace aspect
           const std::vector<double> &composition = in.composition[i];
           double injection_phase_composition = std::max(std::min(composition[injection_phase_index],1.0),0.0);          
 
+          //We assume no elastic and plastic deformation inside the narrow dike.
+          if (this->introspection().compositional_name_exists("plastic_strain"))
+            {
+              unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");
+              out.reaction_terms[i][plastic_strain_index] = -composition[plastic_strain_index];
+            }
+          if (this->introspection().compositional_name_exists("viscous_strain"))
+            {
+              unsigned int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
+              out.reaction_terms[i][viscous_strain_index] = -composition[viscous_strain_index];
+            }
+          if (this->introspection().compositional_name_exists("total_strain"))
+            {
+              unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
+              out.reaction_terms[i][total_strain_index] = -composition[total_strain_index];
+            }
+
+          if (this->get_parameters().enable_elasticity)
+            {
+              unsigned int index_ve_stress_xx = this->introspection().compositional_index_for_name("ve_stress_xx");
+              unsigned int index_ve_stress_yy = this->introspection().compositional_index_for_name("ve_stress_yy");
+              if (dim == 2)
+                {
+                  unsigned int index_ve_stress_xy = this->introspection().compositional_index_for_name("ve_stress_xy");
+                  out.reaction_terms[i][index_ve_stress_xx] = -composition[index_ve_stress_xx];
+                  out.reaction_terms[i][index_ve_stress_yy] = -composition[index_ve_stress_yy];
+                  out.reaction_terms[i][index_ve_stress_xy] = -composition[index_ve_stress_xy];
+                }
+              else //if (dim == 3)
+                {
+                  unsigned int index_ve_stress_zz = this->introspection().compositional_index_for_name("ve_stress_zz");
+                  unsigned int index_ve_stress_xy = this->introspection().compositional_index_for_name("ve_stress_xy");
+                  unsigned int index_ve_stress_xz = this->introspection().compositional_index_for_name("ve_stress_xz");
+                  unsigned int index_ve_stress_yz = this->introspection().compositional_index_for_name("ve_stress_yz");
+                  out.reaction_terms[i][index_ve_stress_xx] = -composition[index_ve_stress_xx];
+                  out.reaction_terms[i][index_ve_stress_yy] = -composition[index_ve_stress_yy];
+                  out.reaction_terms[i][index_ve_stress_xy] = -composition[index_ve_stress_xy];
+                  out.reaction_terms[i][index_ve_stress_zz] = -composition[index_ve_stress_zz];
+                  out.reaction_terms[i][index_ve_stress_yz] = -composition[index_ve_stress_yz];
+                  out.reaction_terms[i][index_ve_stress_xz] = -composition[index_ve_stress_xz];
+                }
+            }
+
           // Loop only in chemical copositional fields
           for (unsigned int c = *min_chemical_indices; c <= *max_chemical_indices; ++c)
             {
