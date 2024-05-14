@@ -462,6 +462,15 @@ namespace aspect
           if (this->get_parameters().enable_dike_injection == true)
             for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
               {
+                // 1. Here we first remove the above prescribed dilation term on mom. eq.
+                if (prescribed_dilation != nullptr && !material_model_is_compressible)
+                  data.local_rhs(i) += (
+                                        // RHS of momentum eqn: - \int 2/3 eta R, div v
+                                        2.0 / 3.0 * eta
+                                        * prescribed_dilation->dilation[q]
+                                        * scratch.div_phi_u[i]
+                                      ) * JxW;
+                // 2. Then we only prescribe the injection term in the x direction
                 const unsigned int index_horizon=fe.system_to_component_index(i).first;
                 if (introspection.is_stokes_component(index_horizon))
                   {
