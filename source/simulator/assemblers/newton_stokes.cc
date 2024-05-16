@@ -459,20 +459,31 @@ namespace aspect
           // horizontal (x) momentum equation is then additionally augmented
           // by the RHS：- \int 2 eta R, div v
           // references: Buck et al., 2005; Howell et al., 2019
-          if (this->get_parameters().enable_dike_injection == true)
-            for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
-              {
-                const unsigned int index_horizon=fe.system_to_component_index(i).first;
-                if (introspection.is_stokes_component(index_horizon))
-                  {
-                    if (prescribed_dilation != nullptr && !material_model_is_compressible && index_horizon==0)
-                      {
-                        data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
-                      }
-                    ++i_stokes;
-                  }
-                ++i;
-              }
+          if (this->get_parameters().enable_dike_injection)
+            {
+              //If the prescribed dilation is activated, we want the deviatoric strain rate on the left-hand matrix
+              for (unsigned int i = 0; i < stokes_dofs_per_cell; ++i)
+                for (unsigned int j = 0; j < stokes_dofs_per_cell; ++j)
+                  if (scratch.dof_component_indices[i] ==
+                      scratch.dof_component_indices[j])
+                    data.local_matrix(i, j) += (- 2.0 / 3.0 * eta * (scratch.div_phi_u[i] * scratch.div_phi_u[j])
+                                              )
+                                              * JxW;
+              
+              for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
+                {
+                  const unsigned int index_horizon=fe.system_to_component_index(i).first;
+                  if (introspection.is_stokes_component(index_horizon))
+                    {
+                      if (prescribed_dilation != nullptr && !material_model_is_compressible && index_horizon==0)
+                        {
+                          data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
+                        }
+                      ++i_stokes;
+                    }
+                  ++i;
+                }
+            }
 
           // and then the matrix, if necessary
           if (scratch.rebuild_newton_stokes_matrix)
