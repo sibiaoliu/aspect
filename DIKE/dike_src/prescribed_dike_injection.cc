@@ -277,28 +277,73 @@ namespace aspect
       double dike_injection_ratio = 0.0;
 
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-        {   
+        {             
+          // Update injection rate based on the conversion to years or not
+          double injection_rate = (this->convert_output_to_years())
+                                  ? injection_function.value(in.position[i]) / year_in_seconds
+                                  : injection_function.value(in.position[i]);
+
           if (prescribed_dilation != nullptr)
-            {
-              // Update dilation value based on the conversion to years or not
-              double dilation_time_factor = this->convert_output_to_years() ? year_in_seconds : 1.0;
-              prescribed_dilation->dilation[i] = injection_function.value(in.position[i]) / dilation_time_factor;
-              
-              // User-defined ratio
-              if (dike_material_injection_ratio != 0.0)
-                dike_injection_ratio = dike_material_injection_ratio;
-              else
-                dike_injection_ratio = prescribed_dilation->dilation[i] * this->get_timestep();
-            }
-   
+            prescribed_dilation->dilation[i] = injection_rate;
+          
+          // User-defined or timestep-dependent injection ratio
+          if (dike_material_injection_ratio != 0.0)
+            dike_injection_ratio = dike_material_injection_ratio;
+          else if (this->simulator_is_past_initialization())
+            dike_injection_ratio = injection_rate * this->get_timestep();
+          
           const std::vector<double> &composition = in.composition[i];
+          // We limit the value of injection phase compostional field is [0,1] 
           double injection_phase_composition = std::max(std::min(composition[injection_phase_index],1.0),0.0);          
 
-          // Loop only in chemical copositional fields
-          for (unsigned int c = *min_chemical_indices; c <= *max_chemical_indices; ++c)
+          // Find the injection area
+          if (injection_rate != 0.0)
             {
-              // Find the injection area
-              if (injection_function.value(in.position[i]) != 0.0)
+              //We assume no elastic and plastic deformation inside the narrow dike.
+              if (this->introspection().compositional_name_exists("plastic_strain"))
+                {
+                  unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");
+                  out.reaction_terms[i][plastic_strain_index] = -composition[plastic_strain_index];
+                }
+              if (this->introspection().compositional_name_exists("viscous_strain"))
+                {
+                  unsigned int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
+                  out.reaction_terms[i][viscous_strain_index] = -composition[viscous_strain_index];
+                }
+              if (this->introspection().compositional_name_exists("total_strain"))
+                {
+                  unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
+                  out.reaction_terms[i][total_strain_index] = -composition[total_strain_index];
+                }
+
+              if (this->get_parameters().enable_elasticity)
+                {
+                  unsigned int index_ve_stress_xx = this->introspection().compositional_index_for_name("ve_stress_xx");
+                  unsigned int index_ve_stress_yy = this->introspection().compositional_index_for_name("ve_stress_yy");
+                  if (dim == 2)
+                    {
+                      unsigned int index_ve_stress_xy = this->introspection().compositional_index_for_name("ve_stress_xy");
+                      out.reaction_terms[i][index_ve_stress_xx] = -composition[index_ve_stress_xx];
+                      out.reaction_terms[i][index_ve_stress_yy] = -composition[index_ve_stress_yy];
+                      out.reaction_terms[i][index_ve_stress_xy] = -composition[index_ve_stress_xy];
+                    }
+                  else //if (dim == 3)
+                    {
+                      unsigned int index_ve_stress_zz = this->introspection().compositional_index_for_name("ve_stress_zz");
+                      unsigned int index_ve_stress_xy = this->introspection().compositional_index_for_name("ve_stress_xy");
+                      unsigned int index_ve_stress_xz = this->introspection().compositional_index_for_name("ve_stress_xz");
+                      unsigned int index_ve_stress_yz = this->introspection().compositional_index_for_name("ve_stress_yz");
+                      out.reaction_terms[i][index_ve_stress_xx] = -composition[index_ve_stress_xx];
+                      out.reaction_terms[i][index_ve_stress_yy] = -composition[index_ve_stress_yy];
+                      out.reaction_terms[i][index_ve_stress_xy] = -composition[index_ve_stress_xy];
+                      out.reaction_terms[i][index_ve_stress_zz] = -composition[index_ve_stress_zz];
+                      out.reaction_terms[i][index_ve_stress_yz] = -composition[index_ve_stress_yz];
+                      out.reaction_terms[i][index_ve_stress_xz] = -composition[index_ve_stress_xz];
+                    }
+                }
+
+              // Loop only in chemical copositional fields
+              for (unsigned int c = *min_chemical_indices; c <= *max_chemical_indices; ++c)
                 {
                   if (c == injection_phase_index)
                     {
@@ -314,18 +359,9 @@ namespace aspect
                       if (composition[c] < 0.0)
                         out.reaction_terms[i][c] = -composition[c];
                       else //To prevent division by 0, we will use 1.0001 instead of 1.0.
-                        out.reaction_terms[i][c] = -composition[c] * std::min(dike_injection_ratio / (1.0001 - injection_phase_composition),1.0);
+                        out.reaction_terms[i][c] = -composition[c] * std::min(dike_injection_ratio / (1.0001 - injection_phase_composition), 1.0);
                     }
                 }
-              else
-                {
-                  // Limit each chemical compositional value to be between 0 and 1
-                  if (composition[c] >= 1.0)
-                    out.reaction_terms[i][c] = 1.0 - composition[c];
-                  
-                  if (composition[c] < 0.0)
-                    out.reaction_terms[i][c] = -composition[c];
-                }              
             }
         }
     }
@@ -484,23 +520,22 @@ namespace aspect
       // Add the latent heat source term corresponding to prescribed dilation
       // terms in Stokes equations to the rhs of energy conservation equation.
       double dike_injection_ratio = 0.0;
+
       for (unsigned int q=0; q<heating_model_outputs.heating_source_terms.size(); ++q)
         {
           heating_model_outputs.heating_source_terms[q] = 0.0;
           heating_model_outputs.lhs_latent_heat_terms[q] = 0.0;
           heating_model_outputs.rates_of_temperature_change[q] = 0.0;
 
-          if (prescribed_dilation != nullptr)
-            {
-              // User-defined ratio
-              if (dike_material_injection_ratio != 0.0)
-                dike_injection_ratio = dike_material_injection_ratio;
-              else
-                dike_injection_ratio = prescribed_dilation->dilation[q] * this->get_timestep();
-                             
-              // adding the laten heat source team
-              heating_model_outputs.heating_source_terms[q] = dike_injection_ratio * prescribed_dilation->dilation[q] * (latent_heat_of_crystallization + (temperature_of_injected_material - material_model_inputs.temperature[q]) * material_model_outputs.densities[q] * material_model_outputs.specific_heat[q]);
-            }
+          // User-defined or timestep-dependent injection ratio
+          if (dike_material_injection_ratio != 0.0)
+            dike_injection_ratio = dike_material_injection_ratio;
+          else if (this->simulator_is_past_initialization())
+            dike_injection_ratio = prescribed_dilation->dilation[q] * this->get_timestep();
+                          
+          // adding the laten heat source team
+          heating_model_outputs.heating_source_terms[q] = dike_injection_ratio * prescribed_dilation->dilation[q] * (latent_heat_of_crystallization + (temperature_of_injected_material - material_model_inputs.temperature[q]) * material_model_outputs.densities[q] * material_model_outputs.specific_heat[q]);
+
         }
     }
 
