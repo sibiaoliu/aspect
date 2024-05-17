@@ -51,52 +51,40 @@ namespace aspect
                 ExcInternalError());
         Assert (input_data.solution_gradients[0].size() == this->introspection().n_components, ExcInternalError());
         
-        // If the material model is prescribed dike injection
-        if (this->get_parameters().enable_dike_injection)
+        MaterialModel::MaterialModelInputs<dim> in(input_data,
+                                                    this->introspection());
+        MaterialModel::MaterialModelOutputs<dim> out(n_quadrature_points,
+                                                      this->n_compositional_fields());
+
+        this->get_material_model().create_additional_named_outputs(out);
+        this->get_material_model().evaluate(in, out);        
+        
+        // This is only used for prescribed_dilation case
+        MaterialModel::PrescribedPlasticDilation<dim>
+        *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
+                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
+                              : nullptr;
+
+        for (unsigned int q=0; q<n_quadrature_points; ++q)
           {
-            MaterialModel::MaterialModelInputs<dim> in(input_data,
-                                                       this->introspection());
-            MaterialModel::MaterialModelOutputs<dim> out(n_quadrature_points,
-                                                         this->n_compositional_fields());
+            Tensor<2,dim> grad_u;
+            for (unsigned int d=0; d<dim; ++d)
+              grad_u[d] = input_data.solution_gradients[q][d];
 
-            this->get_material_model().create_additional_named_outputs(out);
-            this->get_material_model().evaluate(in, out);
+            SymmetricTensor<2,dim> strain_rate = symmetrize(grad_u);
 
-            MaterialModel::PrescribedPlasticDilation<dim>
-            *prescribed_dilation = out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >();
+            // If the material model is prescribed dike injection
+            // Only keep the effect of dilation term on purely horizontal component
+            if (prescribed_dilation != nullptr)
+              strain_rate[0][0] -= prescribed_dilation->dilation[q];
 
-            for (unsigned int q=0; q<n_quadrature_points; ++q)
-              {
-                SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
-                //Only keep the effect of dilation term on purely horizontal component
-                strain_rate[0][0] -= prescribed_dilation->dilation[q];
+            const SymmetricTensor<2,dim> deviatoric_strain_rate
+              = strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>();
 
-                const SymmetricTensor<2,dim> deviatoric_strain_rate
-                  = strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>();
-
-                for (unsigned int d=0; d<dim; ++d)
-                  for (unsigned int e=0; e<dim; ++e)
-                    computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
-                      = deviatoric_strain_rate[d][e];
-              }           
-          }
-        else
-          {
-            for (unsigned int q=0; q<n_quadrature_points; ++q)
-              {
-                Tensor<2,dim> grad_u;
-                for (unsigned int d=0; d<dim; ++d)
-                  grad_u[d] = input_data.solution_gradients[q][d];
-
-                const SymmetricTensor<2,dim> strain_rate = symmetrize(grad_u);
-                const Tensor<2,dim> deviatoric_strain_rate
-                  = strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>();
-
-                for (unsigned int d=0; d<dim; ++d)
-                  for (unsigned int e=0; e<dim; ++e)
-                    computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
-                      = deviatoric_strain_rate[d][e];
-              }
+            for (unsigned int d=0; d<dim; ++d)
+              for (unsigned int e=0; e<dim; ++e)
+                computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
+                  = deviatoric_strain_rate[d][e];
           }
 
         const auto &viz = this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Visualization<dim>>();
