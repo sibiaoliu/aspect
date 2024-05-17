@@ -62,100 +62,64 @@ namespace aspect
         in.requested_properties = MaterialModel::MaterialProperties::viscosity;
 
         this->get_material_model().create_additional_named_outputs(out);
-        this->get_material_model().evaluate(in, out);
-
-        // If the material model is prescribed dike injection
-        if (this->get_parameters().enable_dike_injection)
+        this->get_material_model().evaluate(in, out);      
+        
+        // This is only used for prescribed_dilation case
+        MaterialModel::PrescribedPlasticDilation<dim>
+        *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
+                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
+                              : nullptr;
+        
+        for (unsigned int q=0; q<n_quadrature_points; ++q)
           {
-            MaterialModel::PrescribedPlasticDilation<dim>
-            *prescribed_dilation = out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >();
+            // Compressive stress is negative by the sign convention
+            // used by the engineering community, and as input and used
+            // internally by ASPECT.
+            // Here, we change the sign of the stress to match the
+            // sign convention used by the geoscience community.
+            SymmetricTensor<2,dim> stress = in.pressure[q] * unit_symmetric_tensor<dim>();
+            
+            // Initialization of the deviatoric stress
+            SymmetricTensor<2,dim> deviatoric_sress = stress;
 
-            for (unsigned int q=0; q<n_quadrature_points; ++q)
+            // If elasticity is enabled, the deviatoric stress is stored
+            // in compositional fields, otherwise the deviatoric stress
+            // can be obtained from the viscosity and strain rate.
+            if (this->get_parameters().enable_elasticity)
               {
-                // Compressive stress is negative by the sign convention
-                // used by the engineering community, and as input and used
-                // internally by ASPECT.
-                // Here, we change the sign of the stress to match the
-                // sign convention used by the geoscience community.
-                SymmetricTensor<2,dim> stress = in.pressure[q] * unit_symmetric_tensor<dim>();
+                stress[0][0] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xx")];
+                stress[1][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yy")];
+                stress[0][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xy")];
 
-                // If elasticity is enabled, the deviatoric stress is stored
-                // in compositional fields, otherwise the deviatoric stress
-                // can be obtained from the viscosity and strain rate.
-                if (this->get_parameters().enable_elasticity)
+                if (dim == 3)
                   {
-                    stress[0][0] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xx")];
-                    stress[1][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yy")];
-                    stress[0][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xy")];
-
-                    if (dim == 3)
-                      {
-                        stress[2][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_zz")];
-                        stress[0][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xz")];
-                        stress[1][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yz")];
-                      }
+                    stress[2][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_zz")];
+                    stress[0][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xz")];
+                    stress[1][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yz")];
                   }
-                else
-                  {
-                    SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
-                    //Only keep the effect of dilation term on purely horizontal component
-                    strain_rate[0][0] -= prescribed_dilation->dilation[q];
-
-                    const SymmetricTensor<2,dim> deviatoric_strain_rate
-                      = strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>();
-
-                    const double eta = out.viscosities[q];
-                    stress -= 2. * eta * deviatoric_strain_rate;
-                  }
-
-                for (unsigned int d=0; d<dim; ++d)
-                  for (unsigned int e=0; e<dim; ++e)
-                    computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
-                      = stress[d][e];
-              }        
-          }
-        else
-          {
-            for (unsigned int q=0; q<n_quadrature_points; ++q)
-              {
-                // Compressive stress is negative by the sign convention
-                // used by the engineering community, and as input and used
-                // internally by ASPECT.
-                // Here, we change the sign of the stress to match the
-                // sign convention used by the geoscience community.
-                SymmetricTensor<2,dim> stress = in.pressure[q] * unit_symmetric_tensor<dim>();
-
-                // If elasticity is enabled, the deviatoric stress is stored
-                // in compositional fields, otherwise the deviatoric stress
-                // can be obtained from the viscosity and strain rate.
-                if (this->get_parameters().enable_elasticity)
-                  {
-                    stress[0][0] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xx")];
-                    stress[1][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yy")];
-                    stress[0][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xy")];
-
-                    if (dim == 3)
-                      {
-                        stress[2][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_zz")];
-                        stress[0][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xz")];
-                        stress[1][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yz")];
-                      }
-                  }
-                else
-                  {
-                    const SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
-                    const SymmetricTensor<2,dim> deviatoric_strain_rate
-                      = strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>();
-
-                    const double eta = out.viscosities[q];
-                    stress -= 2. * eta * deviatoric_strain_rate;
-                  }
-
-                for (unsigned int d=0; d<dim; ++d)
-                  for (unsigned int e=0; e<dim; ++e)
-                    computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
-                      = stress[d][e];
+                
+                deviatoric_sress = stress - 1./3 * trace(stress) * unit_symmetric_tensor<dim>();
               }
+            else
+              {
+                SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
+                
+                // If the material model is prescribed dike injection
+                // Only keep the effect of dilation term on purely horizontal component
+                if (prescribed_dilation != nullptr)
+                  strain_rate[0][0] -= prescribed_dilation->dilation[q];
+
+                const SymmetricTensor<2,dim> deviatoric_strain_rate
+                  = strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>();
+
+                const double eta = out.viscosities[q];
+                deviatoric_sress -= 2. * eta * deviatoric_strain_rate;
+              }
+
+            for (unsigned int d=0; d<dim; ++d)
+              for (unsigned int e=0; e<dim; ++e)
+                computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
+                  = deviatoric_sress[d][e];
           }
 
         // average the values if requested
