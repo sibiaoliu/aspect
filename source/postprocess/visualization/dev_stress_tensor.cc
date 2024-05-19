@@ -104,9 +104,12 @@ namespace aspect
               {
                 SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
                 
-                // If the material model is prescribed dike injection
-                // Only keep the effect of dilation term on purely horizontal component
-                if (prescribed_dilation != nullptr)
+                // Note: Since the four cells share one interaction point (vertex), 
+                // at the dike boundaries we only remove injection effects from points
+                // where the injection rate is specified. To locate these prescribed
+                // points, we artificially find points whose values greater than 0.9
+                // times the prescribed values.
+                if (prescribed_dilation != nullptr && prescribed_dilation->dilation[q] != 0.0 && std::fabs(strain_rate[0][0]) > 0.9 * prescribed_dilation->dilation[q])
                   strain_rate[0][0] -= prescribed_dilation->dilation[q];
 
                 const SymmetricTensor<2,dim> deviatoric_strain_rate
