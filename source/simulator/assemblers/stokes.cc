@@ -143,7 +143,7 @@ namespace aspect
                                                      * scratch.phi_p[j]))
                                                  * JxW;
                       
-                      // Only in the prescribed dike injection case, we wanna the deviatoric
+                      // Only in the prescribed dike injection case, we wanna the
                       // deviatoric strain rate on the left-hand matrix.
                       if (this->get_parameters().enable_dike_injection)
                         data.local_matrix(i, j) += (- eta_two_thirds * (scratch.div_phi_u[i] * scratch.div_phi_u[j])) * JxW;

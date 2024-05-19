@@ -277,7 +277,7 @@ namespace aspect
       double dike_injection_ratio = 0.0;
 
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-        {             
+        {
           // Update injection rate based on the conversion to years or not
           double injection_rate = (this->convert_output_to_years())
                                   ? injection_function.value(in.position[i]) / year_in_seconds
@@ -285,7 +285,7 @@ namespace aspect
 
           if (prescribed_dilation != nullptr)
             prescribed_dilation->dilation[i] = injection_rate;
-          
+
           // User-defined or timestep-dependent injection ratio
           if (dike_material_injection_ratio != 0.0)
             dike_injection_ratio = dike_material_injection_ratio;
@@ -326,7 +326,7 @@ namespace aspect
                     out.reaction_terms[i][c] = 1.0 - composition[c];
                   else if (composition[c] < 0.0)
                     out.reaction_terms[i][c] = -composition[c];
-                }              
+                }
             }
         }
     }
