@@ -282,6 +282,14 @@ namespace aspect
           bool use_adiabatic_pressure_in_creep;
 
           /**
+           * Whether to use the adiabatic pressure instead of the full pressure (default)
+           * when calculating plastic yield stress. This may be helpful in models where 
+           * the full pressure has an unusually large negative value arising from large 
+           * negative dynamic pressure, resulting in solver convergence issue.
+           */
+          bool use_adiabatic_pressure_in_plasticity;
+
+          /**
            * List of exponents controlling the behavior of the stress limiter
            * yielding mechanism.
            */
@@ -326,6 +334,11 @@ namespace aspect
            */
           Rheology::DruckerPragerParameters drucker_prager_parameters;
 
+          /**
+           * Parsed function of the dike injection.
+           */
+          Functions::ParsedFunction<dim> injection_function;
+        
       };
     }
   }
