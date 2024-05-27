@@ -85,10 +85,10 @@ namespace aspect
             {
               elastic_out->elastic_shear_moduli[i] = average_elastic_shear_moduli[i];
             }
+        
+          elastic_rheology.fill_elastic_outputs(in, i, in.strain_rate[i], average_elastic_shear_moduli[i], out);
+          elastic_rheology.fill_reaction_outputs(in, i, in.strain_rate[i], average_elastic_shear_moduli[i], out);        
         }
-
-      elastic_rheology.fill_elastic_outputs(in, average_elastic_shear_moduli, out);
-      elastic_rheology.fill_reaction_outputs(in, average_elastic_shear_moduli, out);
 
     }
 

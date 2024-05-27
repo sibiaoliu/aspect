@@ -272,7 +272,9 @@ namespace aspect
       template <int dim>
       void
       Elasticity<dim>::fill_elastic_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                             const std::vector<double> &average_elastic_shear_moduli,
+                                             const unsigned int i,
+                                             const SymmetricTensor<2,dim> &full_strain_rate,
+                                             const double average_elastic_shear_moduli,
                                              MaterialModel::MaterialModelOutputs<dim> &out) const
       {
         // Create a reference to the structure for the elastic outputs
@@ -311,20 +313,18 @@ namespace aspect
             else
               effective_creep_viscosities = out.viscosities;
 
-            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-              {
-                // Get old stresses from compositional fields
-                SymmetricTensor<2,dim> stress_old;
-                for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
-                  stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+            // Get old stresses from compositional fields
+            SymmetricTensor<2,dim> stress_old;
+            for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
+              stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
 
-                elastic_out->elastic_force[i] = -effective_creep_viscosities[i] / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) * stress_old;
-                // The viscoelastic strain rate is needed only when the Newton method is selected.
-                const typename Parameters<dim>::NonlinearSolver::Kind nonlinear_solver = this->get_parameters().nonlinear_solver;
-                if ((nonlinear_solver == Parameters<dim>::NonlinearSolver::iterated_Advection_and_Newton_Stokes) ||
-                    (nonlinear_solver == Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes))
-                  elastic_out->viscoelastic_strain_rate[i] = calculate_viscoelastic_strain_rate(in.strain_rate[i], stress_old, average_elastic_shear_moduli[i]);
-              }
+            elastic_out->elastic_force[i] = -effective_creep_viscosities[i] / calculate_elastic_viscosity(average_elastic_shear_moduli) * stress_old;
+            // The viscoelastic strain rate is needed only when the Newton method is selected.
+            const typename Parameters<dim>::NonlinearSolver::Kind nonlinear_solver = this->get_parameters().nonlinear_solver;
+            if ((nonlinear_solver == Parameters<dim>::NonlinearSolver::iterated_Advection_and_Newton_Stokes) ||
+                (nonlinear_solver == Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes))
+              elastic_out->viscoelastic_strain_rate[i] = calculate_viscoelastic_strain_rate(full_strain_rate, stress_old, average_elastic_shear_moduli);
+
           }
       }
 
@@ -333,7 +333,9 @@ namespace aspect
       template <int dim>
       void
       Elasticity<dim>::fill_reaction_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                              const std::vector<double> &average_elastic_shear_moduli,
+                                              const unsigned int i,
+                                              const SymmetricTensor<2,dim> &full_strain_rate,
+                                              const double average_elastic_shear_moduli,
                                               MaterialModel::MaterialModelOutputs<dim> &out) const
       {
         if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
@@ -390,48 +392,45 @@ namespace aspect
             else
               effective_creep_viscosities = out.viscosities;
 
-            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-              {
-                // Get old stresses from compositional fields
-                SymmetricTensor<2,dim> stress_old;
-                for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
-                  stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+            // Get old stresses from compositional fields
+            SymmetricTensor<2,dim> stress_old;
+            for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
+              stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
 
-                // Calculate the rotated stresses
-                // Rotation (vorticity) tensor (equation 25 in Moresi et al., 2003, J. Comp. Phys.)
-                const Tensor<2,dim> rotation = 0.5 * (evaluator->get_gradient(i) - transpose(evaluator->get_gradient(i)));
+            // Calculate the rotated stresses
+            // Rotation (vorticity) tensor (equation 25 in Moresi et al., 2003, J. Comp. Phys.)
+            const Tensor<2,dim> rotation = 0.5 * (evaluator->get_gradient(i) - transpose(evaluator->get_gradient(i)));
 
-                // Calculate the current (new) stored elastic stress, which is a function of the material
-                // properties (viscoelastic viscosity, shear modulus), elastic time step size, strain rate,
-                // vorticity, prior (inherited) viscoelastic stresses and viscosity of the elastic damper.
-                // In the absence of the elastic damper, the expression for "stress_new" is identical
-                // to the one found in Moresi et al. (2003, J. Comp. Phys., equation 29).
-                const double damped_elastic_viscosity = calculate_elastic_viscosity(average_elastic_shear_moduli[i]);
+            // Calculate the current (new) stored elastic stress, which is a function of the material
+            // properties (viscoelastic viscosity, shear modulus), elastic time step size, strain rate,
+            // vorticity, prior (inherited) viscoelastic stresses and viscosity of the elastic damper.
+            // In the absence of the elastic damper, the expression for "stress_new" is identical
+            // to the one found in Moresi et al. (2003, J. Comp. Phys., equation 29).
+            const double damped_elastic_viscosity = calculate_elastic_viscosity(average_elastic_shear_moduli);
 
-                // stress_0 is the combination of the elastic stress tensor stored at the end of the last time step and the change in that stress generated by local rotation
-                const SymmetricTensor<2,dim> stress_0 = (stress_old + dte * ( symmetrize(rotation * Tensor<2,dim>(stress_old) ) - symmetrize(Tensor<2,dim>(stress_old) * rotation) ) );
+            // stress_0 is the combination of the elastic stress tensor stored at the end of the last time step and the change in that stress generated by local rotation
+            const SymmetricTensor<2,dim> stress_0 = (stress_old + dte * ( symmetrize(rotation * Tensor<2,dim>(stress_old) ) - symmetrize(Tensor<2,dim>(stress_old) * rotation) ) );
 
-                // stress_creep is the stress experienced by the viscous and elastic components.
-                Assert(std::isfinite(in.strain_rate[i].norm()),
-                       ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
-                                  "not filled by the caller."));
-                const SymmetricTensor<2,dim> stress_creep = 2. * effective_creep_viscosities[i] * ( deviator(in.strain_rate[i]) + stress_0 / (2. * damped_elastic_viscosity ) );
+            // stress_creep is the stress experienced by the viscous and elastic components.
+            Assert(std::isfinite(in.strain_rate[i].norm()),
+                    ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
+                              "not filled by the caller."));
+            const SymmetricTensor<2,dim> stress_creep = 2. * effective_creep_viscosities[i] * ( deviator(full_strain_rate) + stress_0 / (2. * damped_elastic_viscosity ) );
 
-                // stress_new is the (new) stored elastic stress
-                SymmetricTensor<2,dim> stress_new = stress_creep * (1. - (elastic_damper_viscosity / damped_elastic_viscosity)) + elastic_damper_viscosity * stress_0 / damped_elastic_viscosity;
+            // stress_new is the (new) stored elastic stress
+            SymmetricTensor<2,dim> stress_new = stress_creep * (1. - (elastic_damper_viscosity / damped_elastic_viscosity)) + elastic_damper_viscosity * stress_0 / damped_elastic_viscosity;
 
-                // Stress averaging scheme to account for difference between the elastic time step
-                // and the numerical time step (see equation 32 in Moresi et al., 2003, J. Comp. Phys.)
-                // Note that if there is no difference between the elastic timestep and the numerical
-                // timestep, then no averaging occurs as dt/dte = 1.
-                stress_new = ( ( 1. - ( dt / dte ) ) * stress_old ) + ( ( dt / dte ) * stress_new ) ;
+            // Stress averaging scheme to account for difference between the elastic time step
+            // and the numerical time step (see equation 32 in Moresi et al., 2003, J. Comp. Phys.)
+            // Note that if there is no difference between the elastic timestep and the numerical
+            // timestep, then no averaging occurs as dt/dte = 1.
+            stress_new = ( ( 1. - ( dt / dte ) ) * stress_old ) + ( ( dt / dte ) * stress_new ) ;
 
-                // Fill reaction terms
-                for (unsigned int j = 0; j < SymmetricTensor<2,dim>::n_independent_components ; ++j)
-                  out.reaction_terms[i][j] = -stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)]
-                                             + stress_new[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)];
+            // Fill reaction terms
+            for (unsigned int j = 0; j < SymmetricTensor<2,dim>::n_independent_components ; ++j)
+              out.reaction_terms[i][j] = -stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)]
+                                          + stress_new[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)];
 
-              }
           }
       }
 

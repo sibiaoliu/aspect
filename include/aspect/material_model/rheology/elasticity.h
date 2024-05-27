@@ -90,7 +90,9 @@ namespace aspect
            */
           void
           fill_elastic_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                const std::vector<double> &average_elastic_shear_moduli,
+                                const unsigned int i,
+                                const SymmetricTensor<2,dim> &full_strain_rate,
+                                const double average_elastic_shear_moduli,
                                 MaterialModel::MaterialModelOutputs<dim> &out) const;
 
           /**
@@ -102,7 +104,9 @@ namespace aspect
            */
           void
           fill_reaction_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                 const std::vector<double> &average_elastic_shear_moduli,
+                                 const unsigned int i,
+                                 const SymmetricTensor<2,dim> &full_strain_rate,
+                                 const double average_elastic_shear_moduli,
                                  MaterialModel::MaterialModelOutputs<dim> &out) const;
 
           /**
