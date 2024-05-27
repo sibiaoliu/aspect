@@ -558,25 +558,7 @@ namespace aspect
                    ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                               "not filled by the caller."));
 
-            // Copy the original strain rate
-            SymmetricTensor<2,dim> full_strain_rate = in.strain_rate[i];
-
-            // This is only required in the case of prescribed dilation.
-            MaterialModel::PrescribedPlasticDilation<dim>
-            *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
-                                  ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
-                                  : nullptr;
-
-            // This is only required in the case of prescribed dilation.
-            // Note: Since the four cells share one interaction point (vertex), 
-            // at the dike boundaries we only remove injection effects from points
-            // where the injection rate is specified. To locate these prescribed
-            // points, we artificially find points whose values greater than 0.9
-            // times the prescribed values.
-            if (prescribed_dilation != nullptr && prescribed_dilation->dilation[i] != 0.0 && std::fabs(full_strain_rate[0][0]) > 0.9 * prescribed_dilation->dilation[i])
-              full_strain_rate[0][0] -= prescribed_dilation->dilation[i];
-
-            const double edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(full_strain_rate)), 0.)),
+            const double edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(in.strain_rate[i])), 0.)),
                                             min_strain_rate);
             double delta_e_ii = edot_ii*this->get_timestep();
 
