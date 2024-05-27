@@ -541,6 +541,7 @@ namespace aspect
       StrainDependent<dim>::
       fill_reaction_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
                              const int i,
+                             const SymmetricTensor<2,dim> &full_strain_rate,
                              const double min_strain_rate,
                              const bool plastic_yielding,
                              MaterialModel::MaterialModelOutputs<dim> &out) const
@@ -558,7 +559,7 @@ namespace aspect
                    ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                               "not filled by the caller."));
 
-            const double edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(in.strain_rate[i])), 0.)),
+            const double edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(full_strain_rate)), 0.)),
                                             min_strain_rate);
             double delta_e_ii = edot_ii*this->get_timestep();
 

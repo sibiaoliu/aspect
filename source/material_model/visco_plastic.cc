@@ -364,7 +364,7 @@ namespace aspect
             out.reaction_terms[i][c] = 0.0;
 
           // Calculate changes in strain invariants and update the reaction terms
-          rheology->strain_rheology.fill_reaction_outputs(in, i, rheology->min_strain_rate, plastic_yielding, out);
+          rheology->strain_rheology.fill_reaction_outputs(in, i, full_strain_rate, rheology->min_strain_rate, plastic_yielding, out);
 
           // Fill plastic outputs if they exist.
           // The values in isostrain_viscosities only make sense when the calculate_isostrain_viscosities function

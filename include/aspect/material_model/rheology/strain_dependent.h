@@ -138,6 +138,7 @@ namespace aspect
            */
           void fill_reaction_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
                                       const int i,
+                                      const SymmetricTensor<2,dim> &full_strain_rate,
                                       const double min_strain_rate,
                                       const bool plastic_yielding,
                                       MaterialModel::MaterialModelOutputs<dim> &out) const;
