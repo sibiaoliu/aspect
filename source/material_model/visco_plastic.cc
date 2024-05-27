@@ -46,18 +46,33 @@ namespace aspect
 
       MaterialModel::MaterialModelInputs <dim> in (/*n_evaluation_points=*/1,
                                                                            this->n_compositional_fields());
+
+      // Copy the strain rate tensor.
+      SymmetricTensor<2, dim> full_strain_rate = strain_rate;
+      // Only in the prescribed dike injection case, we remove the contribution
+      // of dilation term from the full strain rate.
+      if (this->get_parameters().enable_dike_injection)
+        {
+          // Update injection rate based on the conversion to years or not
+          double injection_rate = (this->convert_output_to_years())
+                                  ? injection_function.value(in.position[0]) / year_in_seconds
+                                  : injection_function.value(in.position[0]);               
+          if (injection_rate != 0.0)
+            full_strain_rate[0][0] -= injection_rate;
+        }
+
       unsigned int i = 0;
 
       in.pressure[i] = pressure;
       in.temperature[i] = temperature;
       in.composition[i] = composition;
-      in.strain_rate[i] = strain_rate;
+      in.strain_rate[i] = full_strain_rate;
 
       const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(composition,
                                                    this->introspection().chemical_composition_field_indices());
 
       const IsostrainViscosities isostrain_viscosities
-        = rheology->calculate_isostrain_viscosities(in, i, volume_fractions);
+        = rheology->calculate_isostrain_viscosities(in, i, volume_fractions, full_strain_rate);
 
       std::vector<double>::const_iterator max_composition
         = std::max_element(volume_fractions.begin(),volume_fractions.end());
@@ -114,10 +129,24 @@ namespace aspect
             }
         }
 
+      // Copy the strain rate tensor.
+      SymmetricTensor<2, dim> full_strain_rate = in.strain_rate[0];
+      // Only in the prescribed dike injection case, we remove the contribution
+      // of dilation term from the full strain rate.
+      if (this->get_parameters().enable_dike_injection)
+        {
+          // Update injection rate based on the conversion to years or not
+          double injection_rate = (this->convert_output_to_years())
+                                  ? injection_function.value(in.position[0]) / year_in_seconds
+                                  : injection_function.value(in.position[0]);               
+          if (injection_rate != 0.0)
+            full_strain_rate[0][0] -= injection_rate;
+        }
+
       /* The following returns whether or not the material is plastically yielding
        * as documented in evaluate.
        */
-      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, volume_fractions, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
+      const IsostrainViscosities isostrain_viscosities = rheology->calculate_isostrain_viscosities(in, 0, volume_fractions, full_strain_rate, phase_function_values, phase_function.n_phase_transitions_for_each_composition());
 
       std::vector<double>::const_iterator max_composition = std::max_element(volume_fractions.begin(), volume_fractions.end());
       const bool plastic_yielding = isostrain_viscosities.composition_yielding[std::distance(volume_fractions.begin(), max_composition)];
@@ -258,6 +287,23 @@ namespace aspect
           out.entropy_derivative_pressure[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_pressure, MaterialUtilities::arithmetic);
           out.entropy_derivative_temperature[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_temperature, MaterialUtilities::arithmetic);
 
+          Assert(std::isfinite(in.strain_rate[i].norm()),
+                 ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
+                            "not filled by the caller."));
+          // Copy the strain rate tensor.
+          SymmetricTensor<2, dim> full_strain_rate = in.strain_rate[i];
+          // Only in the prescribed dike injection case, we remove the contribution
+          // of dilation term from the full strain rate.
+          if (this->get_parameters().enable_dike_injection)
+            {
+              // Update injection rate based on the conversion to years or not
+              double injection_rate = (this->convert_output_to_years())
+                                      ? injection_function.value(in.position[i]) / year_in_seconds
+                                      : injection_function.value(in.position[i]);               
+              if (injection_rate != 0.0)
+                full_strain_rate[0][0] -= injection_rate;
+            }
+
           // Compute the effective viscosity if requested and retrieve whether the material is plastically yielding.
           // Also always compute the viscosity if additional outputs are requested, because the viscosity is needed
           // to compute the elastic force term.
@@ -270,7 +316,7 @@ namespace aspect
               // TODO: This is only consistent with viscosity averaging if the arithmetic averaging
               // scheme is chosen. It would be useful to have a function to calculate isostress viscosities.
               isostrain_viscosities =
-                rheology->calculate_isostrain_viscosities(in, i, volume_fractions, phase_function_values, n_phase_transitions_for_each_chemical_composition);
+                rheology->calculate_isostrain_viscosities(in, i, volume_fractions, full_strain_rate, phase_function_values, n_phase_transitions_for_each_chemical_composition);
 
               // The isostrain condition implies that the viscosity averaging should be arithmetic (see above).
               // We have given the user freedom to apply alternative bounds, because in diffusion-dominated
@@ -289,7 +335,7 @@ namespace aspect
               if (MaterialModel::MaterialModelDerivatives<dim> *derivatives =
                     out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>())
 
-                rheology->compute_viscosity_derivatives(i, volume_fractions,
+                rheology->compute_viscosity_derivatives(i, volume_fractions, full_strain_rate,
                                                         isostrain_viscosities.composition_viscosities,
                                                         in, out, phase_function_values,
                                                         n_phase_transitions_for_each_chemical_composition);
@@ -386,6 +432,14 @@ namespace aspect
           EquationOfState::MulticomponentIncompressible<dim>::declare_parameters (prm);
 
           Rheology::ViscoPlastic<dim>::declare_parameters(prm);
+
+          //Adding the same dike injection function for removal_in_vep_rheology
+          prm.enter_subsection("Dike removal on the viscosity function");
+          {
+            Functions::ParsedFunction<dim>::declare_parameters(prm,1);
+            prm.declare_entry("Function expression","0.0");
+          }
+          prm.leave_subsection();
 
           // Equation of state parameters
           prm.declare_entry ("Thermal diffusivities", "0.8e-6",
@@ -507,6 +561,24 @@ namespace aspect
 
           // Establish that a background field is required here
           const bool has_background_field = true;
+
+          //Adding the same dike injection function for removal_in_eta
+          prm.enter_subsection("Dike removal on the viscosity function");
+          {
+            try
+              {
+                injection_function.parse_parameters(prm);
+              }
+            catch (...)
+              {
+                std::cerr << "FunctionParser failed to parse\n"
+                          << "\t Remove dike effect on the rheology function\n"
+                          << "with expression \n"
+                          << "\t' " << prm.get("Function expression") << "'";
+                throw;
+              } 
+          }
+          prm.leave_subsection();
 
           //Hydrothermal circulation parameters.          
           define_hydrothermal_circulation = prm.get_bool ("Define hydrothermal circulation");

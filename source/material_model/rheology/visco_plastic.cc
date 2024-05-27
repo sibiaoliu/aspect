@@ -99,6 +99,7 @@ namespace aspect
       calculate_isostrain_viscosities (const MaterialModel::MaterialModelInputs<dim> &in,
                                        const unsigned int i,
                                        const std::vector<double> &volume_fractions,
+                                       const SymmetricTensor<2,dim> &full_strain_rate,
                                        const std::vector<double> &phase_function_values,
                                        const std::vector<unsigned int> &n_phase_transitions_per_composition) const
       {
@@ -132,7 +133,7 @@ namespace aspect
           edot_ii = ref_strain_rate;
         else
           // Calculate the square root of the second moment invariant for the deviatoric strain rate tensor.
-          edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(in.strain_rate[i])), 0.)),
+          edot_ii = std::max(std::sqrt(std::max(-second_invariant(deviator(full_strain_rate)), 0.)),
                              min_strain_rate);
 
         // Calculate viscosities for each of the individual compositional phases
@@ -262,7 +263,7 @@ namespace aspect
                            ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                                       "not filled by the caller."));
                     const SymmetricTensor<2,dim> effective_strain_rate =
-                      elastic_rheology.calculate_viscoelastic_strain_rate(in.strain_rate[i],
+                      elastic_rheology.calculate_viscoelastic_strain_rate(full_strain_rate,
                                                                           stress_old,
                                                                           elastic_shear_moduli[j]);
 
@@ -306,6 +307,10 @@ namespace aspect
             double pressure_for_plasticity = in.pressure[i];
             if (allow_negative_pressures_in_plasticity == false)
               pressure_for_plasticity = std::max(in.pressure[i],0.0);
+
+            // Note: Use the lithostatic pressure for the plastic part --- dike injection
+            if (use_adiabatic_pressure_in_plasticity)
+              pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
 
             // Step 5a: calculate the Drucker-Prager yield stress
             const double yield_stress = drucker_prager_plasticity.compute_yield_stress(current_cohesion,
@@ -380,6 +385,7 @@ namespace aspect
       ViscoPlastic<dim>::
       compute_viscosity_derivatives(const unsigned int i,
                                     const std::vector<double> &volume_fractions,
+                                    const SymmetricTensor<2,dim> &full_strain_rate,
                                     const std::vector<double> &composition_viscosities,
                                     const MaterialModel::MaterialModelInputs<dim> &in,
                                     MaterialModel::MaterialModelOutputs<dim> &out,
@@ -404,7 +410,7 @@ namespace aspect
                    ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                               "not filled by the caller."));
 
-            const SymmetricTensor<2,dim> deviatoric_strain_rate = deviator(in.strain_rate[i]);
+            const SymmetricTensor<2,dim> deviatoric_strain_rate = deviator(full_strain_rate);
 
             // For each independent component, compute the derivative.
             for (unsigned int component = 0; component < SymmetricTensor<2,dim>::n_independent_components; ++component)
@@ -419,7 +425,7 @@ namespace aspect
                 in_derivatives.strain_rate[i] = strain_rate_difference;
 
                 std::vector<double> eta_component =
-                  calculate_isostrain_viscosities(in_derivatives, i, volume_fractions,
+                  calculate_isostrain_viscosities(in_derivatives, i, volume_fractions, full_strain_rate,
                                                   phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
                 // For each composition of the independent component, compute the derivative.
@@ -443,10 +449,10 @@ namespace aspect
             in_derivatives.pressure[i] = pressure_difference;
 
             // Modify the in_derivatives object again to take the original strain rate.
-            in_derivatives.strain_rate[i] = in.strain_rate[i];
+            in_derivatives.strain_rate[i] = full_strain_rate;
 
             const std::vector<double> viscosity_difference =
-              calculate_isostrain_viscosities(in_derivatives, i, volume_fractions,
+              calculate_isostrain_viscosities(in_derivatives, i, volume_fractions, full_strain_rate,
                                               phase_function_values, n_phase_transitions_per_composition).composition_viscosities;
 
             for (unsigned int composition_index = 0; composition_index < viscosity_difference.size(); ++composition_index)
@@ -568,6 +574,14 @@ namespace aspect
                            "full pressure has an unusually large negative value arising from "
                            "large negative dynamic pressure, resulting in solver convergence "
                            "issue and in some cases a viscosity of zero.");
+        prm.declare_entry ("Use adiabatic pressure in plastic yield stress", "false",
+                           Patterns::Bool (),
+                           "Whether to use the adiabatic pressure instead of the full "
+                           "pressure (default) when calculating plastic yield stress. "
+                           "This may be helpful in models where the full pressure "
+                           "has an unusually large negative value arising from large "
+                           "negative dynamic pressure, resulting in solver convergence "
+                           "issue.");
 
         // Diffusion creep parameters
         Rheology::DiffusionCreep<dim>::declare_parameters(prm);
@@ -698,6 +712,7 @@ namespace aspect
 
         allow_negative_pressures_in_plasticity = prm.get_bool ("Allow negative pressures in plasticity");
         use_adiabatic_pressure_in_creep = prm.get_bool("Use adiabatic pressure in creep viscosity");
+        use_adiabatic_pressure_in_plasticity = prm.get_bool("Use adiabatic pressure in plastic yield stress");
 
         // Diffusion creep parameters
         diffusion_creep.initialize_simulator (this->get_simulator());
@@ -795,6 +810,10 @@ namespace aspect
             double pressure_for_plasticity = in.pressure[i];
             if (allow_negative_pressures_in_plasticity == false)
               pressure_for_plasticity = std::max(in.pressure[i], 0.0);
+
+            // Note: Use the lithostatic pressure for the plastic part --- dike injection
+            if (use_adiabatic_pressure_in_plasticity)
+              pressure_for_plasticity = this->get_adiabatic_conditions().pressure(in.position[i]);
 
             // average over the volume volume fractions
             for (unsigned int j = 0; j < volume_fractions.size(); ++j)

@@ -308,6 +308,11 @@ namespace aspect
          */
         MaterialUtilities::PhaseFunction<dim> phase_function;
 
+        /**
+         * Parsed function of the dike injection.
+         */
+        Functions::ParsedFunction<dim> injection_function;
+
     };
 
   }

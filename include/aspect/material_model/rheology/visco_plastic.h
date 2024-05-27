@@ -133,6 +133,7 @@ namespace aspect
           calculate_isostrain_viscosities ( const MaterialModel::MaterialModelInputs<dim> &in,
                                             const unsigned int i,
                                             const std::vector<double> &volume_fractions,
+                                            const SymmetricTensor<2,dim> &full_strain_rate,
                                             const std::vector<double> &phase_function_values = std::vector<double>(),
                                             const std::vector<unsigned int> &n_phase_transitions_per_composition =
                                               std::vector<unsigned int>()) const;
@@ -148,6 +149,7 @@ namespace aspect
            */
           void compute_viscosity_derivatives(const unsigned int point_index,
                                              const std::vector<double> &volume_fractions,
+                                             const SymmetricTensor<2,dim> &full_strain_rate,
                                              const std::vector<double> &composition_viscosities,
                                              const MaterialModel::MaterialModelInputs<dim> &in,
                                              MaterialModel::MaterialModelOutputs<dim> &out,
@@ -280,6 +282,14 @@ namespace aspect
            * of zero.
            */
           bool use_adiabatic_pressure_in_creep;
+
+          /**
+           * Whether to use the adiabatic pressure instead of the full pressure (default)
+           * when calculating plastic yield stress. This may be helpful in models where 
+           * the full pressure has an unusually large negative value arising from large 
+           * negative dynamic pressure, resulting in solver convergence issue.
+           */
+          bool use_adiabatic_pressure_in_plasticity;
 
           /**
            * List of exponents controlling the behavior of the stress limiter
