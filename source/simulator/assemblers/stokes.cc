@@ -101,6 +101,14 @@ namespace aspect
             }
         }
 
+      const MaterialModel::PrescribedPlasticDilation<dim>
+      *prescribed_dilation =
+        (this->get_parameters().enable_prescribed_dilation)
+        ? scratch.material_model_outputs.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim>>()
+        : nullptr;
+
+      bool material_model_is_compressible = (this->get_material_model().is_compressible());
+
       // Loop over all quadrature points and assemble their contributions to
       // the preconditioner matrix
       for (unsigned int q = 0; q < n_q_points; ++q)
@@ -110,17 +118,20 @@ namespace aspect
               if (introspection.is_stokes_component(fe.system_to_component_index(i).first))
                 {
                   if (this->get_parameters().use_full_A_block_preconditioner == false)
-                    scratch.grads_phi_u[i_stokes] =
-                      scratch.finite_element_values[introspection.extractors
-                                                    .velocities].symmetric_gradient(i, q);
-                  scratch.phi_p[i_stokes] = scratch.finite_element_values[introspection
-                                                                          .extractors.pressure].value(i, q);
+                    {
+                      scratch.grads_phi_u[i_stokes] = scratch.finite_element_values[introspection.extractors.velocities].symmetric_gradient(i, q);
+                      scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence(i, q);                                                      
+                    }
+
+                  scratch.phi_p[i_stokes] = scratch.finite_element_values[introspection.extractors.pressure].value(i, q);
+
                   ++i_stokes;
                 }
               ++i;
             }
 
           const double eta = scratch.material_model_outputs.viscosities[q];
+          const double eta_two_thirds = eta * 2.0 / 3.0;
           const double one_over_eta = 1. / eta;
 
           const double JxW = scratch.finite_element_values.JxW(q);
@@ -139,6 +150,11 @@ namespace aspect
                                                   * (scratch.phi_p[i]
                                                      * scratch.phi_p[j]))
                                                  * JxW;
+                      
+                      // Only in the prescribed dike injection case, we wanna the deviatoric
+                      // deviatoric strain rate on the left-hand matrix if incompressible.
+                      if (prescribed_dilation != nullptr && !material_model_is_compressible && this->get_parameters().enable_dike_injection && prescribed_dilation->dilation[q] != 0)
+                        data.local_matrix(i, j) += (- eta_two_thirds * (scratch.div_phi_u[i] * scratch.div_phi_u[j])) * JxW;
                     }
 
             }
@@ -228,7 +244,7 @@ namespace aspect
               if (introspection.is_stokes_component(fe.system_to_component_index(i).first))
                 {
                   scratch.grads_phi_u[i_stokes] = scratch.finite_element_values[introspection.extractors.velocities].symmetric_gradient(i,q);
-                  scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence (i, q);
+                  scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence(i, q);
 
                   ++i_stokes;
                 }
@@ -278,7 +294,7 @@ namespace aspect
         ? scratch.material_model_outputs.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim>>()
         : nullptr;
 
-      const bool material_model_is_compressible = (this->get_material_model().is_compressible());
+      bool material_model_is_compressible = (this->get_material_model().is_compressible());
 
       // When using the Q1-Q1 equal order element, we need to compute the
       // projection of the Q1 pressure shape functions onto the constants
@@ -338,7 +354,7 @@ namespace aspect
                   if (scratch.rebuild_stokes_matrix)
                     {
                       scratch.grads_phi_u[i_stokes] = scratch.finite_element_values[introspection.extractors.velocities].symmetric_gradient(i,q);
-                      scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence (i, q);
+                      scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence(i, q);
                     }
                   else if (this->get_parameters().enable_elasticity)
                     {
@@ -346,7 +362,7 @@ namespace aspect
                     }
                   else if (prescribed_dilation && !material_model_is_compressible)
                     {
-                      scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence (i, q);
+                      scratch.div_phi_u[i_stokes]   = scratch.finite_element_values[introspection.extractors.velocities].divergence(i, q);
                     }
                   ++i_stokes;
                 }
