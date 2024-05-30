@@ -287,10 +287,11 @@ namespace aspect
             prescribed_dilation->dilation[i] = injection_rate;
 
           // User-defined or timestep-dependent injection ratio
+          if (this->simulator_is_past_initialization())
+            dike_injection_ratio = injection_rate * this->get_timestep();
+
           if (dike_material_injection_ratio != 0.0)
             dike_injection_ratio = dike_material_injection_ratio;
-          else if (this->simulator_is_past_initialization())
-            dike_injection_ratio = injection_rate * this->get_timestep();
           
           const std::vector<double> &composition = in.composition[i];
           // We limit the value of injection phase compostional field is [0,1] 
