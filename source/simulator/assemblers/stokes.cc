@@ -412,16 +412,46 @@ namespace aspect
                                        * scratch.phi_p[i]
                                      ) * JxW;
 
-              // // Only assemble this term if we are running incompressible, otherwise this term
-              // // is already included on the LHS of the equation.
-              // if (prescribed_dilation != nullptr && !material_model_is_compressible)
-              //   data.local_rhs(i) += (
-              //                          // RHS of momentum eqn: - \int 2/3 eta R, div v
-              //                          - 2.0 / 3.0 * eta
-              //                          * prescribed_dilation->dilation[q]
-              //                          * scratch.div_phi_u[i]
-              //                        ) * JxW;
+              // Only assemble this term if we are running incompressible, otherwise this term
+              // is already included on the LHS of the equation.
+              if (prescribed_dilation != nullptr && !material_model_is_compressible)
+                data.local_rhs(i) += (
+                                       // RHS of momentum eqn: - \int 2/3 eta R, div v
+                                       - 2.0 / 3.0 * eta
+                                       * prescribed_dilation->dilation[q]
+                                       * scratch.div_phi_u[i]
+                                     ) * JxW;
 
+            }
+
+          // This is customized for the dike injection process that the dike only opens in the direction of spreading.
+          if (this->get_parameters().enable_dike_injection && prescribed_dilation->dilation[q] != 0)
+            {
+              //If the dike injection is activated, we wanna the deviatoric strain rate on the left-hand matrix
+              if (!material_model_is_compressible) // incompressible model
+                {
+                  for (unsigned int i = 0; i < stokes_dofs_per_cell; ++i)
+                    for (unsigned int j = 0; j < stokes_dofs_per_cell; ++j)
+                      {
+                        data.local_matrix(i, j) += (-2.0 / 3.0 * eta * (scratch.div_phi_u[i] * scratch.div_phi_u[j])) * JxW;
+                      }
+                }
+              // If we expect the effect of the prescribed dilation term to
+              // occur only in the horizontal x-direction (dike opening), the 
+              // horizontal (x) momentum equation is then additionally augmented
+              // by the RHS：- \int 2 eta R, div v
+              for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
+                {
+                  const unsigned int index_horizon=fe.system_to_component_index(i).first;
+                  if (introspection.is_stokes_component(index_horizon))
+                    {
+                      if (index_horizon==0) //horizontal x direction
+                        data.local_rhs(i_stokes) += 2.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
+
+                      ++i_stokes;
+                    }
+                  ++i;
+                }
             }
 
           if (scratch.rebuild_stokes_matrix)
@@ -456,38 +486,6 @@ namespace aspect
                                                    (scratch.phi_p[j] - average_pressure_shape_function[j])))
                                               * JxW;
                   }
-            }
-          // This is customized for the dike injection process that the dike only opens in the direction of spreading.
-          if (prescribed_dilation != nullptr && !material_model_is_compressible && this->get_parameters().enable_dike_injection)
-            {
-              //If the dike injection is activated, we wanna the deviatoric strain rate on the left-hand matrix
-              for (unsigned int i = 0; i < stokes_dofs_per_cell; ++i)
-                for (unsigned int j = 0; j < stokes_dofs_per_cell; ++j)
-                  {
-                    data.local_matrix(i, j) += (- 2.0 / 3.0 * eta * (scratch.div_phi_u[i] * scratch.div_phi_u[j])) * JxW;
-                  }
-              // If we expect the effect of the prescribed dilation term to
-              // occur only in the horizontal x-direction (dike opening)
-              for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
-                {
-                  const unsigned int index_horizon=fe.system_to_component_index(i).first;
-                  if (introspection.is_stokes_component(index_horizon))
-                    {
-                      if (index_horizon==introspection.component_indices.velocities[0]) //horizontal Vx direction
-                        data.local_rhs(i_stokes) += 4.0 / 3.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
-                      else if (index_horizon==introspection.component_indices.velocities[1])
-                        data.local_rhs(i_stokes) += - 2.0 / 3.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW;
-                      
-                      if (dim==3)
-                        {
-                          if (index_horizon==introspection.component_indices.velocities[dim-1])
-                            data.local_rhs(i_stokes) += - 2.0 / 3.0 * eta * prescribed_dilation->dilation[q] * scratch.div_phi_u[i_stokes] * JxW; 
-                        }
-
-                      ++i_stokes;
-                    }
-                  ++i;
-                }
             }
         }
     }
