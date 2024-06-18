@@ -41,6 +41,8 @@
 #include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/read_write_vector.templates.h>
 #include <deal.II/lac/solver_idr.h>
+#include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_bicgstab.h>
 
 #include <deal.II/grid/manifold.h>
 
@@ -61,13 +63,8 @@ namespace aspect
                 const dealii::LinearAlgebra::distributed::Vector<double> &in)
       {
         dealii::LinearAlgebra::ReadWriteVector<double> rwv(out.locally_owned_elements());
-#if DEAL_II_VERSION_GTE(9,5,0)
         rwv.import_elements(in, VectorOperation::insert);
         out.import_elements(rwv,VectorOperation::insert);
-#else
-        rwv.import(in, VectorOperation::insert);
-        out.import(rwv,VectorOperation::insert);
-#endif
       }
 
       void copy(dealii::LinearAlgebra::distributed::Vector<double> &out,
@@ -116,6 +113,7 @@ namespace aspect
          *     the matrix $A_block$, or only apply one preconditioner step with it.
          * @param do_solve_Schur_complement A flag indicating whether we should actually solve with
          *     the matrix $Schur_complement_block$, or only apply one preconditioner step with it.
+         * @param A_block_is_symmetric A flag indicating whether the A block is symmetric.
          * @param A_block_tolerance The tolerance for the CG solver which computes
          *     the inverse of the A block.
          * @param Schur_complement_tolerance The tolerance for the CG solver which computes
@@ -128,6 +126,7 @@ namespace aspect
                                      const SchurComplementPreconditionerType &Schur_complement_preconditioner,
                                      const bool                               do_solve_A,
                                      const bool                               do_solve_Schur_complement,
+                                     const bool                               A_block_is_symmetric,
                                      const double                             A_block_tolerance,
                                      const double                             Schur_complement_tolerance);
 
@@ -157,6 +156,7 @@ namespace aspect
          */
         const bool                                                      do_solve_A;
         const bool                                                      do_solve_Schur_complement;
+        const bool                                                      A_block_is_symmetric;
         mutable unsigned int                                            n_iterations_A_;
         mutable unsigned int                                            n_iterations_Schur_complement_;
         const double                                                    A_block_tolerance;
@@ -175,6 +175,7 @@ namespace aspect
                                                              const SchurComplementPreconditionerType &Schur_complement_preconditioner,
                                                              const bool                               do_solve_A,
                                                              const bool                               do_solve_Schur_complement,
+                                                             const bool                               A_block_symmetric,
                                                              const double                             A_block_tolerance,
                                                              const double                             Schur_complement_tolerance)
                                   :
@@ -185,6 +186,7 @@ namespace aspect
                                   Schur_complement_preconditioner (Schur_complement_preconditioner),
                                   do_solve_A                      (do_solve_A),
                                   do_solve_Schur_complement       (do_solve_Schur_complement),
+                                  A_block_is_symmetric            (A_block_symmetric),
                                   n_iterations_A_                 (0),
                                   n_iterations_Schur_complement_  (0),
                                   A_block_tolerance               (A_block_tolerance),
@@ -286,11 +288,30 @@ namespace aspect
       if (do_solve_A == true)
         {
           SolverControl solver_control(1000, utmp.block(0).l2_norm() * A_block_tolerance);
-          SolverCG<dealii::LinearAlgebra::distributed::Vector<double>> solver(solver_control);
+          PrimitiveVectorMemory<dealii::LinearAlgebra::distributed::Vector<double>> mem;
+
           try
             {
-              solver.solve(A_block, dst.block(0), utmp.block(0),
-                           A_block_preconditioner);
+              if (A_block_is_symmetric)
+                {
+                  SolverCG<dealii::LinearAlgebra::distributed::Vector<double>> solver(solver_control,mem);
+                  solver.solve(A_block, dst.block(0), utmp.block(0),
+                               A_block_preconditioner);
+                }
+              else
+                {
+                  // Use BiCGStab for non-symmetric matrices.
+                  // BiCGStab can also solve indefinite systems if necessary.
+                  // Do not compute the exact residual, as this
+                  // is more expensive, and we only need an approximate solution.
+                  SolverBicgstab<dealii::LinearAlgebra::distributed::Vector<double>>
+                  solver(solver_control,
+                         mem,
+                         SolverBicgstab<dealii::LinearAlgebra::distributed::Vector<double>>::AdditionalData(/*exact_residual=*/ false));
+                  solver.solve(A_block, dst.block(0), utmp.block(0),
+                               A_block_preconditioner);
+                }
+
               n_iterations_A_ += solver_control.last_step();
             }
           // if the solver fails, report the error from processor 0 with some additional
@@ -333,11 +354,10 @@ namespace aspect
     OperatorCellData<dim,number>::clear()
     {
       enable_newton_derivatives = false;
-      // TODO: use Table::clear() once implemented in 10.0.pre
-      viscosity.reinit(TableIndices<2>(0,0));
-      newton_factor_wrt_pressure_table.reinit(TableIndices<2>(0,0));
-      strain_rate_table.reinit(TableIndices<2>(0,0));
-      newton_factor_wrt_strain_rate_table.reinit(TableIndices<2>(0,0));
+      viscosity.clear();
+      newton_factor_wrt_pressure_table.clear();
+      strain_rate_table.clear();
+      newton_factor_wrt_strain_rate_table.clear();
     }
   }
 
@@ -410,8 +430,8 @@ namespace aspect
 
         // Store the symmetric gradients of the velocity field and the
         // values of the pressure field
-        std::vector<SymmetricTensor<2,dim,VectorizedArray<number>>> sym_grad_u;
-        std::vector<VectorizedArray<number>> val_p;
+        AlignedVector<SymmetricTensor<2,dim,VectorizedArray<number>>> sym_grad_u;
+        AlignedVector<VectorizedArray<number>> val_p;
         if (cell_data->enable_newton_derivatives)
           {
             sym_grad_u.resize(u_eval.n_q_points);
@@ -1047,18 +1067,6 @@ namespace aspect
       AssertThrow(sim.parameters.formulation_mass_conservation !=
                   Parameters<dim>::Formulation::MassConservation::implicit_reference_density_profile,
                   ExcNotImplemented());
-
-    {
-      const unsigned int n_vect_doubles =
-        VectorizedArray<double>::size();
-      const unsigned int n_vect_bits = 8 * sizeof(double) * n_vect_doubles;
-
-      sim.pcout << "Vectorization over " << n_vect_doubles
-                << " doubles = " << n_vect_bits << " bits ("
-                << dealii::Utilities::System::get_current_vectorization_level()
-                << "), VECTORIZATION_LEVEL=" << DEAL_II_COMPILER_VECTORIZATION_LEVEL
-                << std::endl;
-    }
   }
 
 
@@ -1140,6 +1148,7 @@ namespace aspect
           FEQ_cell,
           quadrature_formula,
           *sim.mapping,
+          in.requested_properties,
           out);
 
         for (unsigned int i=0; i<values.size(); ++i)
@@ -1392,6 +1401,7 @@ namespace aspect
                                                             in.current_cell,
                                                             fe_values.get_quadrature(),
                                                             *sim.mapping,
+                                                            in.requested_properties,
                                                             out);
 
                   Assert(std::isfinite(in.strain_rate[0].norm()),
@@ -1774,7 +1784,7 @@ namespace aspect
 
     // Estimate the eigenvalues for the Chebyshev smoothers.
 
-    types::global_dof_index coarse_A_size, coarse_S_size;
+    types::global_dof_index coarse_A_size = numbers::invalid_dof_index, coarse_S_size = numbers::invalid_dof_index;
 
     //TODO: The setup for the smoother (as well as the entire GMG setup) should
     //       be moved to an assembly timing block instead of the Stokes solve
@@ -2016,6 +2026,7 @@ namespace aspect
                           prec_A, prec_Schur,
                           /*do_solve_A*/false,
                           /*do_solve_Schur*/false,
+                          sim.stokes_A_block_is_symmetric(),
                           sim.parameters.linear_solver_A_block_tolerance,
                           sim.parameters.linear_solver_S_block_tolerance);
 
@@ -2025,6 +2036,7 @@ namespace aspect
                               prec_A, prec_Schur,
                               /*do_solve_A*/true,
                               /*do_solve_Schur*/true,
+                              sim.stokes_A_block_is_symmetric(),
                               sim.parameters.linear_solver_A_block_tolerance,
                               sim.parameters.linear_solver_S_block_tolerance);
 
@@ -2392,12 +2404,14 @@ namespace aspect
 
       DoFRenumbering::hierarchical(dof_handler_v);
 
-      constraints_v.clear();
       IndexSet locally_relevant_dofs;
       DoFTools::extract_locally_relevant_dofs (dof_handler_v,
                                                locally_relevant_dofs);
+#if DEAL_II_VERSION_GTE(9,6,0)
+      constraints_v.reinit(dof_handler_v.locally_owned_dofs(), locally_relevant_dofs);
+#else
       constraints_v.reinit(locally_relevant_dofs);
-
+#endif
 
       {
         const auto &pbs = sim.geometry_model->get_periodic_boundary_pairs();
@@ -2432,11 +2446,14 @@ namespace aspect
 
       DoFRenumbering::hierarchical(dof_handler_p);
 
-      constraints_p.clear();
       IndexSet locally_relevant_dofs;
       DoFTools::extract_locally_relevant_dofs (dof_handler_p,
                                                locally_relevant_dofs);
-      constraints_p.reinit(locally_relevant_dofs);
+      constraints_p.reinit(
+#if DEAL_II_VERSION_GTE(9,6,0)
+        dof_handler_p.locally_owned_dofs(),
+#endif
+        locally_relevant_dofs);
       {
         const auto &pbs = sim.geometry_model->get_periodic_boundary_pairs();
 
@@ -2626,7 +2643,13 @@ namespace aspect
           {
             IndexSet relevant_dofs;
             DoFTools::extract_locally_relevant_level_dofs(dof_handler_p, level, relevant_dofs);
+
+#if DEAL_II_VERSION_GTE(9,6,0)
+            level_constraints_p.reinit(dof_handler_p.locally_owned_mg_dofs(level), relevant_dofs);
+#else
             level_constraints_p.reinit(relevant_dofs);
+#endif
+
             level_constraints_p.close();
           }
 

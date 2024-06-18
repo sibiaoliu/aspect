@@ -43,7 +43,7 @@ namespace aspect
   {
     using namespace dealii;
 
-    template <int dim> struct MaterialModelOutputs;
+    template <int dim> class MaterialModelOutputs;
     template <int dim> struct EquationOfStateOutputs;
 
     /**
@@ -280,8 +280,8 @@ namespace aspect
              */
             void
             initialize(const MPI_Comm comm,
-                       const std::string data_directory,
-                       const std::string material_file_name);
+                       const std::string &data_directory,
+                       const std::string &material_file_name);
 
             /**
              * Returns the specific heat for a given entropy and pressure.
@@ -597,6 +597,11 @@ namespace aspect
            * phase transition number @p phase_index.
            */
           double get_transition_slope (const unsigned int phase_index) const;
+
+          /**
+           * Return the depth for phase transition number @p phase_index.
+           */
+          double get_transition_depth (const unsigned int phase_index) const;
 
           /**
            * Return how many phase transitions there are for each composition.

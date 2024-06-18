@@ -23,9 +23,12 @@
 #define _aspect_model_grain_size_h
 
 #include <aspect/material_model/interface.h>
+#include <aspect/material_model/utilities.h>
 #include <aspect/simulator_access.h>
+#include <aspect/material_model/rheology/drucker_prager.h>
 
 #include <deal.II/matrix_free/fe_point_evaluation.h>
+#include <deal.II/sundials/arkode.h>
 
 #include <array>
 
@@ -322,20 +325,13 @@ namespace aspect
         double max_thermal_expansivity;
         unsigned int max_latent_heat_substeps;
         double min_grain_size;
-        double pv_grain_size_scaling;
-
-        /**
-         * Whether to advect the real grain size, or the logarithm of the
-         * grain size. The logarithm reduces jumps.
-         */
-        bool advect_log_grainsize;
 
         double diffusion_viscosity (const double temperature,
                                     const double adiabatic_temperature,
                                     const double adiabatic_pressure,
                                     const double grain_size,
                                     const double second_strain_rate_invariant,
-                                    const Point<dim> &position) const;
+                                    const unsigned int phase_index) const;
 
         /**
          * This function calculates the dislocation viscosity. For this purpose
@@ -352,7 +348,7 @@ namespace aspect
                                       const double adiabatic_temperature,
                                       const double adiabatic_pressure,
                                       const SymmetricTensor<2,dim> &strain_rate,
-                                      const Point<dim> &position,
+                                      const unsigned int phase_index,
                                       const double diffusion_viscosity,
                                       const double viscosity_guess = 0) const;
 
@@ -407,56 +403,35 @@ namespace aspect
          * Evans, 2007) and the paleopiezometer (Hall and Parmentier, 2003)
          * as described in the parameter use_paleowattmeter.
          */
-        double
-        grain_size_change (const double                  temperature,
-                           const double                  pressure,
-                           const std::vector<double>    &compositional_fields,
-                           const SymmetricTensor<2,dim> &strain_rate,
-                           const Tensor<1,dim>          &velocity,
-                           const Point<dim>             &position,
-                           const unsigned int            grain_size_index,
-                           const int                     crossed_transition) const;
-
-        /**
-         * Function that defines the phase transition interface
-         * (0 above, 1 below the phase transition).This is done
-         * individually for each transition and summed up in the end.
-         */
-        double
-        phase_function (const Point<dim> &position,
-                        const double temperature,
-                        const double pressure,
-                        const unsigned int phase) const;
+        std::vector<std::vector<double>>
+        grain_size_change (const typename Interface<dim>::MaterialModelInputs &in,
+                           const std::vector<double>                          &adiabatic_pressure,
+                           const std::vector<unsigned int>                    &phase_indices) const;
 
         /**
          * Function that returns the phase for a given
-         * position, temperature, pressure and compositional
-         * field index.
+         * temperature, depth, pressure, and density gradient
+         * (which are all contained in the @p in argument).
+         * Because the function returns just the dominant
+         * phase, phase transitions are discrete in this
+         * material model (they have a zero width).
          */
         unsigned int
-        get_phase_index (const Point<dim> &position,
-                         const double temperature,
-                         const double pressure) const;
+        get_phase_index (const MaterialUtilities::PhaseFunctionInputs<dim> &in) const;
+
 
         /**
-         * Function that takes an object in the same format
-         * as in.composition as argument and converts the
-         * vector that corresponds to the grain size to its
-         * logarithms and limits the grain size to
-         * a global minimum. The input argument @p compositional_fields
-         * is modified in-place.
+         * Number of phase transitions for the one chemical composition used in this model.
          */
-        void
-        convert_log_grain_size (std::vector<double> &compositional_fields) const;
+        unsigned int n_phase_transitions;
 
         /**
-         * list of depth, width and Clapeyron slopes for the different phase
-         * transitions and in which phase they occur
+         * Object that handles phase transitions.
+         * Allows it to compute the phase function for each individual phase
+         * transition in the model, given the temperature, pressure, depth,
+         * and density gradient.
          */
-        std::vector<double> transition_depths;
-        std::vector<double> transition_temperatures;
-        std::vector<double> transition_slopes;
-        std::vector<double> transition_widths;
+        MaterialUtilities::PhaseFunction<dim> phase_function;
 
 
         /**
@@ -497,6 +472,16 @@ namespace aspect
          */
         mutable std::unique_ptr<FEPointEvaluation<1, dim>> temperature_evaluator;
         mutable std::unique_ptr<FEPointEvaluation<1, dim>> pressure_evaluator;
+
+      private:
+        /*
+         * Object for computing plastic stresses, viscosities, and additional outputs,
+         * as well as an object for the required input parameters.
+         */
+        bool enable_drucker_prager_rheology;
+        bool use_adiabatic_pressure_for_yielding;
+        Rheology::DruckerPrager<dim> drucker_prager_plasticity;
+        Rheology::DruckerPragerParameters drucker_prager_parameters;
     };
 
   }

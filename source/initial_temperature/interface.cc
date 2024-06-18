@@ -32,26 +32,6 @@ namespace aspect
 {
   namespace InitialTemperature
   {
-    template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::
-    declare_parameters (dealii::ParameterHandler &)
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (dealii::ParameterHandler &)
-    {}
-
-
-
     // ------------------------------ Manager -----------------------------
     // -------------------------------- Deal with registering initial_temperature models and automating
     // -------------------------------- their setup and selection at run time
@@ -139,6 +119,17 @@ namespace aspect
           initial_temperature_objects.back()->initialize ();
         }
     }
+
+
+
+    template <int dim>
+    void
+    Manager<dim>::update()
+    {
+      for (auto &initial_temperature_object : initial_temperature_objects)
+        initial_temperature_object->update();
+    }
+
 
 
     template <int dim>

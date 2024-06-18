@@ -145,10 +145,7 @@ namespace aspect
                     {
                       data.local_matrix(i, j) += ((2.0 * eta * (scratch.grads_phi_u[i]
                                                                 * scratch.grads_phi_u[j]))
-                                                  + one_over_eta * pressure_scaling
-                                                  * pressure_scaling
-                                                  * (scratch.phi_p[i]
-                                                     * scratch.phi_p[j]))
+                                                 )
                                                  * JxW;
                       
                       // Only in the prescribed dike injection case, we wanna the deviatoric
@@ -157,21 +154,49 @@ namespace aspect
                         data.local_matrix(i, j) += (- eta_two_thirds * (scratch.div_phi_u[i] * scratch.div_phi_u[j])) * JxW;
                     }
 
+
+            }
+          if (this->get_parameters().use_bfbt == true)
+            {
+              const double sqrt_eta = sqrt(eta);
+              const unsigned int pressure_component_index = this->introspection().component_indices.pressure;
+
+              for (unsigned int i = 0; i < stokes_dofs_per_cell; ++i)
+                {
+                  for (unsigned int j = 0; j < stokes_dofs_per_cell; ++j)
+                    {
+
+
+                      // i and j are not pressures
+                      if (scratch.dof_component_indices[i] != pressure_component_index && scratch.dof_component_indices[j] != pressure_component_index)
+                        data.local_inverse_lumped_mass_matrix[i] += sqrt_eta*scalar_product(scratch.phi_u[i],scratch.phi_u[j])*JxW;
+
+
+                      // i and j are pressures
+                      if (scratch.dof_component_indices[i] == pressure_component_index && scratch.dof_component_indices[j] == pressure_component_index)
+                        data.local_matrix(i, j) += (
+                                                     1.0/sqrt_eta * pressure_scaling
+                                                     * pressure_scaling
+                                                     * (scratch.grad_phi_p[i]
+                                                        * scratch.grad_phi_p[j] + 1e-6*scratch.phi_p[i]*scratch.phi_p[j] ))
+                                                   * JxW;
+                    }
+                }
             }
           else
             {
-              const unsigned int pressure_component_index = this->introspection().component_indices.pressure;
               for (unsigned int i = 0; i < stokes_dofs_per_cell; ++i)
-                if (scratch.dof_component_indices[i] == pressure_component_index)
-                  for (unsigned int j = 0; j < stokes_dofs_per_cell; ++j)
-                    if (scratch.dof_component_indices[j] == pressure_component_index)
-                      {
-                        data.local_matrix(i, j) += (one_over_eta * pressure_scaling
-                                                    * pressure_scaling
-                                                    * (scratch.phi_p[i]
-                                                       * scratch.phi_p[j]))
-                                                   * JxW;
-                      }
+                for (unsigned int j = 0; j < stokes_dofs_per_cell; ++j)
+                  if (scratch.dof_component_indices[i] ==
+                      scratch.dof_component_indices[j])
+                    {
+                      data.local_matrix(i, j) += (
+                                                   one_over_eta * pressure_scaling
+                                                   * pressure_scaling
+                                                   * (scratch.phi_p[i]
+                                                      * scratch.phi_p[j]))
+                                                 * JxW;
+                    }
             }
 
           // If we are using the equal order Q1-Q1 element, then we also need
@@ -497,7 +522,7 @@ namespace aspect
     StokesIncompressibleTerms<dim>::
     create_additional_material_model_outputs(MaterialModel::MaterialModelOutputs<dim> &outputs) const
     {
-      const unsigned int n_points = outputs.viscosities.size();
+      const unsigned int n_points = outputs.n_evaluation_points();
 
       // Stokes RHS:
       if (this->get_parameters().enable_additional_stokes_rhs

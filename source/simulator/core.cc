@@ -63,7 +63,6 @@
 
 #include <fstream>
 #include <iostream>
-#include <iomanip>
 #include <locale>
 #include <string>
 
@@ -110,12 +109,8 @@ namespace aspect
       if (geometry_model.has_curved_elements())
         return std::make_unique<MappingQCache<dim>>(4);
 
-#if DEAL_II_VERSION_GTE(9,4,1)
       if (Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(initial_topography_model))
         return std::make_unique<MappingCartesian<dim>>();
-#else
-      (void) initial_topography_model;
-#endif
 
       return std::make_unique<MappingQ1<dim>>();
     }
@@ -208,7 +203,7 @@ namespace aspect
     // important as it does not improve accuracy. Otherwise, these flags
     // correspond to smoothing_on_refinement|smoothing_on_coarsening.
     triangulation (mpi_communicator,
-                   typename Triangulation<dim>::MeshSmoothing
+                   static_cast<typename Triangulation<dim>::MeshSmoothing>
                    (
                      Triangulation<dim>::limit_level_difference_at_vertices |
                      (Triangulation<dim>::eliminate_unrefined_islands |
@@ -217,9 +212,10 @@ namespace aspect
                       Triangulation<dim>::do_not_produce_unrefined_islands)
                    )
                    ,
-                   (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg
+                   (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg ||
+                    parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::default_solver
                     ?
-                    typename parallel::distributed::Triangulation<dim>::Settings
+                    static_cast<typename parallel::distributed::Triangulation<dim>::Settings>
                     (parallel::distributed::Triangulation<dim>::mesh_reconstruction_after_repartitioning |
                      parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy)
                     :
@@ -428,6 +424,9 @@ namespace aspect
         newton_handler->parameters.parse_parameters(prm);
       }
 
+    // choose the default solver and averaging scheme
+    select_default_solver_and_averaging();
+
     if (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg)
       {
         switch (parameters.stokes_velocity_degree)
@@ -453,7 +452,7 @@ namespace aspect
         if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(particle_world.get()))
           sim->initialize_simulator (*this);
 
-        particle_world->parse_parameters(prm);
+        particle_world->parse_parameters(prm,0);
         particle_world->initialize();
       }
 
@@ -482,9 +481,12 @@ namespace aspect
     if (MappingQCache<dim> *map = dynamic_cast<MappingQCache<dim>*>(&(*mapping)))
       map->initialize(MappingQGeneric<dim>(4), triangulation);
 
+    bool dg_limiter_enabled = parameters.use_limiter_for_discontinuous_temperature_solution;
+    for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+      dg_limiter_enabled = dg_limiter_enabled || parameters.use_limiter_for_discontinuous_composition_solution[c];
+
     // Check that DG limiters are only used with cartesian mapping
-    if (parameters.use_limiter_for_discontinuous_temperature_solution ||
-        parameters.use_limiter_for_discontinuous_composition_solution)
+    if (dg_limiter_enabled)
       AssertThrow(geometry_model->natural_coordinate_system() == Utilities::Coordinates::CoordinateSystem::cartesian,
                   ExcMessage("The limiter for the discontinuous temperature and composition solutions "
                              "has not been tested in non-Cartesian geometries and currently requires "
@@ -547,7 +549,7 @@ namespace aspect
     // check that the setup of equations, material models, and heating terms is consistent
     check_consistency_of_formulation();
 
-    if (parameters.use_discontinuous_temperature_discretization || parameters.use_discontinuous_composition_discretization)
+    if (parameters.use_discontinuous_temperature_discretization || parameters.have_discontinuous_composition_discretization)
       CitationInfo::add("dg");
 
     // now that all member variables have been set up, also
@@ -628,6 +630,7 @@ namespace aspect
     // notify different system components that we started the next time step
     // TODO: implement this for all plugins that might need it at one place.
     // Temperature BC are currently updated in compute_current_constraints
+    geometry_model->update();
     material_model->update();
     gravity_model->update();
     heating_model_manager.update();
@@ -638,6 +641,9 @@ namespace aspect
 
     if (prescribed_stokes_solution.get())
       prescribed_stokes_solution->update();
+
+    if (particle_world.get() != nullptr)
+      particle_world->update();
 
     // do the same for the traction boundary conditions and other things
     // that end up in the bilinear form. we update those that end up in
@@ -718,13 +724,13 @@ namespace aspect
     if (!boundary_composition_manager.allows_fixed_composition_on_outflow_boundaries())
       replace_outflow_boundary_ids(boundary_id_offset);
 
-    // now do the same for the composition variable:
-    if (!parameters.use_discontinuous_composition_discretization)
-      {
-        // obtain the boundary indicators that belong to Dirichlet-type
-        // composition boundary conditions and interpolate the composition
-        // there
-        for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+    // now do the same for the composition variables:
+    {
+      // obtain the boundary indicators that belong to Dirichlet-type
+      // composition boundary conditions and interpolate the composition
+      // there
+      for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+        if (parameters.use_discontinuous_composition_discretization[c] == false)
           for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
             {
               VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
@@ -742,7 +748,7 @@ namespace aspect
                                                         new_current_constraints,
                                                         introspection.component_masks.compositional_fields[c]);
             }
-      }
+    }
 
     if (!boundary_composition_manager.allows_fixed_composition_on_outflow_boundaries())
       restore_outflow_boundary_ids(boundary_id_offset);
@@ -799,7 +805,6 @@ namespace aspect
 #if DEAL_II_VERSION_GTE(9,6,0)
     current_constraints = std::move(new_current_constraints);
 #else
-    current_constraints.clear();
     current_constraints.reinit (introspection.index_sets.system_relevant_set);
     current_constraints.copy_from(new_current_constraints);
 #endif
@@ -1042,7 +1047,7 @@ namespace aspect
 
 
     if ((parameters.use_discontinuous_temperature_discretization) ||
-        (parameters.use_discontinuous_composition_discretization) ||
+        (parameters.have_discontinuous_composition_discretization) ||
         (parameters.volume_of_fluid_tracking_enabled))
       {
         Table<2,DoFTools::Coupling> face_coupling (introspection.n_components,
@@ -1057,7 +1062,7 @@ namespace aspect
             parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::static_field)
           face_coupling[x.temperature][x.temperature] = DoFTools::always;
 
-        if (parameters.use_discontinuous_composition_discretization &&
+        if (parameters.have_discontinuous_composition_discretization &&
             solver_scheme_solves_advection_equations(parameters) &&
             compositional_fields_need_matrix_block(introspection))
           face_coupling[x.compositional_fields[0]][x.compositional_fields[0]] = DoFTools::always;
@@ -1279,6 +1284,8 @@ namespace aspect
       }
 
     system_preconditioner_matrix.reinit (sp);
+    if (parameters.use_bfbt)
+      inverse_lumped_mass_matrix.reinit(introspection.index_sets.stokes_partitioning);
   }
 
 
@@ -1459,7 +1466,6 @@ namespace aspect
 
 
     // Reconstruct the constraint-matrix:
-    constraints.clear();
 #if DEAL_II_VERSION_GTE(9,6,0)
     constraints.reinit (dof_handler.locally_owned_dofs(), introspection.index_sets.system_relevant_set);
 #else
@@ -1896,13 +1902,13 @@ namespace aspect
 
         case NonlinearSolver::iterated_Advection_and_Newton_Stokes:
         {
-          solve_iterated_advection_and_newton_stokes();
+          solve_iterated_advection_and_newton_stokes(/*use_newton_iterations =*/ true);
           break;
         }
 
         case NonlinearSolver::single_Advection_iterated_Newton_Stokes:
         {
-          solve_single_advection_and_iterated_newton_stokes();
+          solve_single_advection_and_iterated_newton_stokes(/*use_newton_iterations =*/ true);
           break;
         }
 

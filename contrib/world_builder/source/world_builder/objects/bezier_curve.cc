@@ -313,7 +313,7 @@ namespace WorldBuilder
               const double min_squared_distance_temp = (est_min_cp_end_0*est_min_cp_end_0)+(est_min_cp_end_1*est_min_cp_end_1);
               if (min_squared_distance_temp < min_squared_distance)
                 {
-                  if (est >= -1e-8 && cp_i+est > 0 && est-1. <= 1e-8 && est-1. < cp_i)
+                  if (est >= -1e-8 && static_cast<double>(cp_i)+est > 0 && est-1. <= 1e-8 && est-1. < static_cast<double>(cp_i))
                     {
                       min_squared_distance = min_squared_distance_temp;
                       const Point<2> point_on_curve = Point<2>(a_0*est*est*est+b_0*est*est+c_0*est+d_0,a_1*est*est*est+b_1*est*est+c_1*est+d_1,cp.get_coordinate_system());
@@ -378,10 +378,10 @@ namespace WorldBuilder
 
               Point<2> estimate_point = a*est*est*est+b*est*est+c*est+d;
 
-              double cos_lat_dg;
-              double sin_d_long_h_dg;
-              double sin_d_lat_h_dg;
-              double min_squared_distance_cartesian_temp_dg;
+              double cos_lat_dg = NaN::DSNAN;
+              double sin_d_long_h_dg = NaN::DSNAN;
+              double sin_d_lat_h_dg = NaN::DSNAN;
+              double min_squared_distance_cartesian_temp_dg = NaN::DSNAN;
               if (verbose == true)
                 {
                   cos_lat_dg = cos(estimate_point[1]);
@@ -505,7 +505,7 @@ namespace WorldBuilder
 
               if (min_squared_distance_cartesian_temp < min_squared_distance)
                 {
-                  if (est >= -1e-8 && cp_i+est > 0 && est-1. <= 1e-8 && est-1. < cp_i)
+                  if (est >= -1e-8 && static_cast<double>(cp_i)+est > 0 && est-1. <= 1e-8 && est-1. < static_cast<double>(cp_i))
                     {
                       min_squared_distance = min_squared_distance_cartesian_temp;
                       const Point<2> point_on_curve = a*est*est*est+b*est*est+c*est+d;

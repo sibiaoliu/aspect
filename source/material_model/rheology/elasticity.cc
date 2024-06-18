@@ -207,21 +207,22 @@ namespace aspect
                                "'single Advection, iterated defect correction Stokes' "));
 
         // Functionality to average the additional RHS terms over the cell is not implemented.
+        // Also, there is no option implemented in this rheology module to project to Q1 the viscosity
+        // in the elastic force term for the RHS.
         // Consequently, it is only possible to use elasticity with the Material averaging schemes
-        // 'none', 'harmonic average only viscosity', 'geometric average only viscosity', and
-        // 'project to Q1 only viscosity'.
+        // 'none', 'harmonic average only viscosity', and 'geometric average only viscosity'.
+        // TODO: Find a way to include 'project to Q1 only viscosity'.
         AssertThrow((this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::none
                      ||
                      this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::harmonic_average_only_viscosity
                      ||
                      this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::geometric_average_only_viscosity
                      ||
-                     this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::project_to_Q1_only_viscosity),
+                     this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::default_averaging),
                     ExcMessage("Material models with elasticity can only be used with the material "
-                               "averaging schemes 'none', 'harmonic average only viscosity', "
-                               "'geometric average only viscosity', and 'project to Q1 only viscosity'. "
-                               "This parameter ('Material averaging') is located within the 'Material "
-                               "model' subsection."));
+                               "averaging schemes 'none', 'harmonic average only viscosity' and "
+                               "'geometric average only viscosity'. This parameter ('Material averaging') "
+                               "is located within the 'Material model' subsection."));
       }
 
 
@@ -285,14 +286,8 @@ namespace aspect
         if (in.requests_property(MaterialProperties::additional_outputs))
           {
             // The viscosity should be averaged if material averaging is applied.
-            // Here the averaging scheme "project to Q1 (only viscosity)"  is
-            // excluded, because there is no way to know the quadrature formula
-            // used for evaluation.
-            // TODO: find a way to include "project to Q1 (only viscosity)" as well.
             std::vector<double> effective_creep_viscosities;
-            if (this->get_parameters().material_averaging != MaterialAveraging::none &&
-                this->get_parameters().material_averaging != MaterialAveraging::project_to_Q1 &&
-                this->get_parameters().material_averaging != MaterialAveraging::project_to_Q1_only_viscosity)
+            if (this->get_parameters().material_averaging != MaterialAveraging::none)
               {
                 MaterialModelOutputs<dim> out_copy(out.n_evaluation_points(),
                                                    this->introspection().n_compositional_fields);
@@ -304,6 +299,7 @@ namespace aspect
                                            in.current_cell,
                                            this->introspection().quadratures.velocities,
                                            this->get_mapping(),
+                                           in.requested_properties,
                                            out_copy);
 
                 effective_creep_viscosities = out_copy.viscosities;
@@ -314,9 +310,8 @@ namespace aspect
             for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
               {
                 // Get old stresses from compositional fields
-                SymmetricTensor<2,dim> stress_old;
-                for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
-                  stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+                const SymmetricTensor<2,dim> stress_old (Utilities::Tensors::to_symmetric_tensor<dim>(&in.composition[i][0],
+                                                         &in.composition[i][0]+SymmetricTensor<2,dim>::n_independent_components));
 
                 elastic_out->elastic_force[i] = -effective_creep_viscosities[i] / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) * stress_old;
                 // The viscoelastic strain rate is needed only when the Newton method is selected.
@@ -383,6 +378,7 @@ namespace aspect
                                            in.current_cell,
                                            this->introspection().quadratures.compositional_fields,
                                            this->get_mapping(),
+                                           in.requested_properties,
                                            out_copy);
 
                 effective_creep_viscosities = out_copy.viscosities;
@@ -393,9 +389,8 @@ namespace aspect
             for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
               {
                 // Get old stresses from compositional fields
-                SymmetricTensor<2,dim> stress_old;
-                for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
-                  stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+                const SymmetricTensor<2,dim> stress_old(Utilities::Tensors::to_symmetric_tensor<dim>(&in.composition[i][0],
+                                                        &in.composition[i][0]+SymmetricTensor<2,dim>::n_independent_components));
 
                 // Calculate the rotated stresses
                 // Rotation (vorticity) tensor (equation 25 in Moresi et al., 2003, J. Comp. Phys.)
@@ -426,11 +421,12 @@ namespace aspect
                 // timestep, then no averaging occurs as dt/dte = 1.
                 stress_new = ( ( 1. - ( dt / dte ) ) * stress_old ) + ( ( dt / dte ) * stress_new ) ;
 
-                // Fill reaction terms
-                for (unsigned int j = 0; j < SymmetricTensor<2,dim>::n_independent_components ; ++j)
-                  out.reaction_terms[i][j] = -stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)]
-                                             + stress_new[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)];
+                const SymmetricTensor<2,dim> stress_update = stress_new - stress_old;
 
+                // Fill reaction terms
+                Utilities::Tensors::unroll_symmetric_tensor_into_array(stress_update,
+                                                                       &out.reaction_terms[i][0],
+                                                                       &out.reaction_terms[i][0]+SymmetricTensor<2,dim>::n_independent_components);
               }
           }
       }

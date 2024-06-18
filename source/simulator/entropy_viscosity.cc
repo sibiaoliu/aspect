@@ -584,6 +584,7 @@ namespace aspect
                                                    cell,
                                                    scratch.finite_element_values.get_quadrature(),
                                                    scratch.finite_element_values.get_mapping(),
+                                                   scratch.material_model_inputs.requested_properties,
                                                    scratch.material_model_outputs);
 
         if (parameters.advection_stabilization_method == Parameters<dim>::AdvectionStabilizationMethod::entropy_viscosity)
@@ -626,13 +627,7 @@ namespace aspect
                 }
             }
 
-            const double fe_order
-              = (advection_field.is_temperature()
-                 ?
-                 parameters.temperature_degree
-                 :
-                 parameters.composition_degree
-                );
+            const double fe_order = advection_field.polynomial_degree(introspection);
             const double h = cell->diameter();
             const double eps = max_conductivity_on_cell;
 

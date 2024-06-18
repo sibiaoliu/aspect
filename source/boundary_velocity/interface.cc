@@ -33,34 +33,6 @@ namespace aspect
 {
   namespace BoundaryVelocity
   {
-    template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::update ()
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::
-    declare_parameters (dealii::ParameterHandler &)
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (dealii::ParameterHandler &)
-    {}
-
-
-
     // ------------------------------ Manager -----------------------------
     // -------------------------------- Deal with registering boundary_velocity models and automating
     // -------------------------------- their setup and selection at run time
@@ -305,7 +277,7 @@ namespace aspect
                                      + ">."));
 
             // the easy part: get the value
-            const std::string value = split_parts[1];
+            const std::string &value = split_parts[1];
 
             // now for the rest. since we don't know whether there is a
             // component selector, start reading at the end and subtracting

@@ -200,13 +200,6 @@ namespace aspect
 
       template <int dim>
       void
-      Interface<dim>::initialize ()
-      {}
-
-
-
-      template <int dim>
-      void
       Interface<dim>::initialize_one_particle_property (const Point<dim> &,
                                                         std::vector<double> &) const
       {}
@@ -216,17 +209,21 @@ namespace aspect
       DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
       template <int dim>
       void
-      Interface<dim>::update_particle_property (const unsigned int data_position,
-                                                const Vector<double> &solution,
-                                                const std::vector<Tensor<1,dim>> &gradients,
-                                                typename ParticleHandler<dim>::particle_iterator &particle) const
+      Interface<dim>::update_particle_properties (const unsigned int data_position,
+                                                  const std::vector<Vector<double>> &solution,
+                                                  const std::vector<std::vector<Tensor<1,dim>>> &gradients,
+                                                  typename ParticleHandler<dim>::particle_iterator_range &particles) const
       {
-        // call the deprecated version of this function
-        update_one_particle_property(data_position,
-                                     particle->get_location(),
-                                     solution,
-                                     gradients,
-                                     particle->get_properties());
+        unsigned int i = 0;
+        for (typename ParticleHandler<dim>::particle_iterator particle = particles.begin();
+             particle != particles.end(); ++particle, ++i)
+          {
+            // call the deprecated version of this function
+            update_particle_property(data_position,
+                                     solution[i],
+                                     gradients[i],
+                                     particle);
+          }
       }
       DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 
@@ -234,11 +231,10 @@ namespace aspect
 
       template <int dim>
       void
-      Interface<dim>::update_one_particle_property (const unsigned int,
-                                                    const Point<dim> &,
-                                                    const Vector<double> &,
-                                                    const std::vector<Tensor<1,dim>> &,
-                                                    const ArrayView<double> &) const
+      Interface<dim>::update_particle_property (const unsigned int /*data_position*/,
+                                                const Vector<double> &/*solution*/,
+                                                const std::vector<Tensor<1,dim>> &/*gradients*/,
+                                                typename ParticleHandler<dim>::particle_iterator &/*particle*/) const
       {}
 
 
@@ -272,20 +268,6 @@ namespace aspect
 
       template <int dim>
       void
-      Interface<dim>::declare_parameters (ParameterHandler &)
-      {}
-
-
-
-      template <int dim>
-      void
-      Interface<dim>::parse_parameters (ParameterHandler &)
-      {}
-
-
-
-      template <int dim>
-      void
       IntegratorProperties<dim>::initialize_one_particle_property(const Point<dim> &/*position*/,
                                                                   std::vector<double> &data) const
       {
@@ -308,26 +290,18 @@ namespace aspect
       IntegratorProperties<dim>::parse_parameters (ParameterHandler &prm)
       {
         std::string name;
-        prm.enter_subsection ("Postprocess");
-        {
-          prm.enter_subsection ("Particles");
-          {
-            name = prm.get ("Integration scheme");
+        name = prm.get ("Integration scheme");
 
-            if (name == "rk2")
-              n_integrator_properties = Particle::Integrator::RK2<dim>::n_integrator_properties;
-            else if (name == "rk4")
-              n_integrator_properties = Particle::Integrator::RK4<dim>::n_integrator_properties;
-            else if (name == "euler")
-              n_integrator_properties = Particle::Integrator::Euler<dim>::n_integrator_properties;
-            else
-              AssertThrow(false,
-                          ExcMessage("Unknown integrator scheme. The particle property 'Integrator properties' "
-                                     "does not know how many particle properties to store for this integration scheme."));
-          }
-          prm.leave_subsection ();
-        }
-        prm.leave_subsection ();
+        if (name == "rk2")
+          n_integrator_properties = Particle::Integrator::RK2<dim>::n_integrator_properties;
+        else if (name == "rk4")
+          n_integrator_properties = Particle::Integrator::RK4<dim>::n_integrator_properties;
+        else if (name == "euler")
+          n_integrator_properties = Particle::Integrator::Euler<dim>::n_integrator_properties;
+        else
+          AssertThrow(false,
+                      ExcMessage("Unknown integrator scheme. The particle property 'Integrator properties' "
+                                 "does not know how many particle properties to store for this integration scheme."));
       }
 
 
@@ -364,6 +338,16 @@ namespace aspect
           {
             p->initialize();
           }
+      }
+
+
+
+      template <int dim>
+      void
+      Manager<dim>::update ()
+      {
+        for (const auto &p : property_list)
+          p->update();
       }
 
 
@@ -553,18 +537,18 @@ namespace aspect
 
       template <int dim>
       void
-      Manager<dim>::update_one_particle (typename ParticleHandler<dim>::particle_iterator &particle,
-                                         const Vector<double> &solution,
-                                         const std::vector<Tensor<1,dim>> &gradients) const
+      Manager<dim>::update_particles (typename ParticleHandler<dim>::particle_iterator_range &particles,
+                                      const std::vector<Vector<double>> &solution,
+                                      const std::vector<std::vector<Tensor<1,dim>>> &gradients) const
       {
         unsigned int plugin_index = 0;
         for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
              p = property_list.begin(); p!=property_list.end(); ++p,++plugin_index)
           {
-            (*p)->update_particle_property(property_information.get_position_by_plugin_index(plugin_index),
-                                           solution,
-                                           gradients,
-                                           particle);
+            (*p)->update_particle_properties(property_information.get_position_by_plugin_index(plugin_index),
+                                             solution,
+                                             gradients,
+                                             particles);
           }
       }
 
@@ -694,27 +678,20 @@ namespace aspect
       void
       Manager<dim>::declare_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
-        {
-          prm.enter_subsection("Particles");
-          {
-            // finally also construct a string for Patterns::MultipleSelection that
-            // contains the names of all registered particle properties
-            const std::string pattern_of_names
-              = std::get<dim>(registered_plugins).get_pattern_of_names ();
-            prm.declare_entry("List of particle properties",
-                              "",
-                              Patterns::MultipleSelection(pattern_of_names),
-                              "A comma separated list of particle properties that should be tracked. "
-                              "By default none is selected, which means only position, velocity "
-                              "and id of the particles are output. \n\n"
-                              "The following properties are available:\n\n"
-                              +
-                              std::get<dim>(registered_plugins).get_description_string());
-          }
-          prm.leave_subsection();
-        }
-        prm.leave_subsection();
+        // finally also construct a string for Patterns::MultipleSelection that
+        // contains the names of all registered particle properties
+        const std::string pattern_of_names
+          = std::get<dim>(registered_plugins).get_pattern_of_names ();
+
+        prm.declare_entry("List of particle properties",
+                          "",
+                          Patterns::MultipleSelection(pattern_of_names),
+                          "A comma separated list of particle properties that should be tracked. "
+                          "By default none is selected, which means only position, velocity "
+                          "and id of the particles are output. \n\n"
+                          "The following properties are available:\n\n"
+                          +
+                          std::get<dim>(registered_plugins).get_description_string());
 
         // now declare the parameters of each of the registered
         // particle properties in turn
@@ -730,33 +707,25 @@ namespace aspect
         Assert (std::get<dim>(registered_plugins).plugins != nullptr,
                 ExcMessage ("No postprocessors registered!?"));
 
-        prm.enter_subsection("Postprocess");
-        {
-          prm.enter_subsection("Particles");
-          {
-            // now also see which derived quantities we are to compute
-            plugin_names = Utilities::split_string_list(prm.get("List of particle properties"));
-            AssertThrow(Utilities::has_unique_entries(plugin_names),
-                        ExcMessage("The list of strings for the parameter "
-                                   "'Postprocess/Particles/List of particle properties' contains entries more than once. "
-                                   "This is not allowed. Please check your parameter file."));
+        // now also see which derived quantities we are to compute
+        plugin_names = Utilities::split_string_list(prm.get("List of particle properties"));
+        AssertThrow(Utilities::has_unique_entries(plugin_names),
+                    ExcMessage("The list of strings for the parameter "
+                               "'Particles/List of particle properties' contains entries more than once. "
+                               "This is not allowed. Please check your parameter file."));
 
-            // see if 'all' was selected (or is part of the list). if so
-            // simply replace the list with one that contains all names
-            if (std::find (plugin_names.begin(),
-                           plugin_names.end(),
-                           "all") != plugin_names.end())
-              {
-                plugin_names.clear();
-                for (typename std::list<typename aspect::internal::Plugins::PluginList<aspect::Particle::Property::Interface<dim>>::PluginInfo>::const_iterator
-                     p = std::get<dim>(registered_plugins).plugins->begin();
-                     p != std::get<dim>(registered_plugins).plugins->end(); ++p)
-                  plugin_names.push_back (std::get<0>(*p));
-              }
+        // see if 'all' was selected (or is part of the list). if so
+        // simply replace the list with one that contains all names
+        if (std::find (plugin_names.begin(),
+                       plugin_names.end(),
+                       "all") != plugin_names.end())
+          {
+            plugin_names.clear();
+            for (typename std::list<typename aspect::internal::Plugins::PluginList<aspect::Particle::Property::Interface<dim>>::PluginInfo>::const_iterator
+                 p = std::get<dim>(registered_plugins).plugins->begin();
+                 p != std::get<dim>(registered_plugins).plugins->end(); ++p)
+              plugin_names.push_back (std::get<0>(*p));
           }
-          prm.leave_subsection();
-        }
-        prm.leave_subsection();
 
         // then go through the list, create objects and let them parse
         // their own parameters

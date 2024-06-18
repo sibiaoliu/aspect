@@ -71,35 +71,9 @@ namespace aspect
      * @ingroup MeshRefinement
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Does nothing but is virtual so that derived classes
-         * destructors are also virtual.
-         */
-        virtual ~Interface () = default;
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual void initialize ();
-
-        /**
-         * A function that is called once at the beginning of each timestep.
-         * The default implementation of the function does nothing, but
-         * derived classes that need more elaborate setups for a given time
-         * step may overload the function.
-         *
-         * The point of this function is to allow refinement plugins to do an
-         * initialization once during each time step.
-         */
-        virtual
-        void
-        update ();
-
         /**
          * Execute this mesh refinement criterion. The default implementation
          * sets all the error indicators to zero.
@@ -126,33 +100,6 @@ namespace aspect
         virtual
         void
         tag_additional_cells () const;
-
-        /**
-         * Declare the parameters this class takes through input files.
-         * Derived classes should overload this function if they actually do
-         * take parameters; this class declares a fall-back function that does
-         * nothing, so that postprocessor classes that do not take any
-         * parameters do not have to do anything at all.
-         *
-         * This function is static (and needs to be static in derived classes)
-         * so that it can be called without creating actual objects (because
-         * declaring parameters happens before we read the input file and thus
-         * at a time when we don't even know yet which postprocessor objects
-         * we need).
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation in this class does nothing, so that
-         * derived classes that do not need any parameters do not need to
-         * implement it.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
     };
 
 
@@ -167,7 +114,7 @@ namespace aspect
      * @ingroup MeshRefinement
      */
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public SimulatorAccess<dim>
     {
       public:
         /**
@@ -239,7 +186,7 @@ namespace aspect
          * Go through the list of all mesh refinement strategies that have been selected
          * in the input file (and are consequently currently active) and see
          * if one of them has the type specified by the template
-         * argument or can be casted to that type. If so, return a reference
+         * argument or can be cast to that type. If so, return a reference
          * to it. If no mesh refinement strategy is active that matches the
          * given type, throw an exception.
          *
@@ -336,10 +283,8 @@ namespace aspect
     bool
     Manager<dim>::has_matching_mesh_refinement_strategy () const
     {
-      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p)
-        if (Plugins::plugin_type_matches<MeshRefinementType>(*(*p)))
+      for (const auto &p : mesh_refinement_objects)
+        if (Plugins::plugin_type_matches<MeshRefinementType>(*p))
           return true;
 
       return false;
@@ -359,11 +304,9 @@ namespace aspect
                              "that could not be found in the current model. Activate this "
                              "mesh refinement strategy in the input file."));
 
-      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p)
-        if (Plugins::plugin_type_matches<MeshRefinementType>(*(*p)))
-          return Plugins::get_plugin_as_type<MeshRefinementType>(*(*p));
+      for (const auto &p : mesh_refinement_objects)
+        if (Plugins::plugin_type_matches<MeshRefinementType>(*p))
+          return Plugins::get_plugin_as_type<MeshRefinementType>(*p);
 
       // We will never get here, because we had the Assert above. Just to avoid warnings.
       typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator mesh_refinement_strategy;

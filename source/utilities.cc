@@ -44,7 +44,6 @@
 #include <cerrno>
 #include <dirent.h>
 #include <fstream>
-#include <locale>
 #include <string>
 #include <sys/stat.h>
 #include <iostream>
@@ -484,7 +483,7 @@ namespace aspect
                   AssertThrow((n_expected_values == n_values || n_values == 1),
                               ExcMessage("The key <" + field_name + "> in <"+ options.property_name + "> does not have "
                                          + "the expected number of values. It expects " + std::to_string(n_expected_values)
-                                         + "or 1 values, but we found " + std::to_string(n_values) + " values."));
+                                         + " or 1 values, but we found " + std::to_string(n_values) + " values."));
 
                   // If we expect multiple values for a key, but found exactly one: assume
                   // the one value stands for every expected value. This allows
@@ -762,6 +761,8 @@ namespace aspect
       std::array<double,dim>
       WGS84_coordinates(const Point<dim> &position)
       {
+        Assert (dim==3, ExcNotImplemented());
+
         std::array<double,dim> ecoord;
 
         // Define WGS84 ellipsoid constants.
@@ -778,19 +779,14 @@ namespace aspect
                                                                            * std::cos(th) * std::cos(th)))))
                     * constants::radians_to_degree;
 
-        if (dim == 3)
-          {
-            ecoord[1] = std::atan2(position(1), position(0))
-                        * constants::radians_to_degree;
+        ecoord[1] = std::atan2(position(1), position(0))
+                    * constants::radians_to_degree;
 
-            /* Set all longitudes between [0,360]. */
-            if (ecoord[1] < 0.)
-              ecoord[1] += 360.;
-            else if (ecoord[1] > 360.)
-              ecoord[1] -= 360.;
-          }
-        else
-          ecoord[1] = 0.0;
+        // Set all longitudes between [0,360]:
+        if (ecoord[1] < 0.)
+          ecoord[1] += 360.;
+        else if (ecoord[1] > 360.)
+          ecoord[1] -= 360.;
 
 
         ecoord[0] = radius/std::sqrt(1- ellipticity * ellipticity
@@ -2158,7 +2154,7 @@ namespace aspect
         // find the closest point m_x[idx] < x, idx=0 even if x<m_x[0]
         std::vector<double>::const_iterator it;
         it = std::lower_bound(m_x.begin(),m_x.end(),x);
-        int idx = std::max( int(it-m_x.begin())-1, 0);
+        const int idx = std::max( static_cast<int>(it-m_x.begin())-1, 0);
 
         double h = x-m_x[idx];
         double interpol;
@@ -2188,7 +2184,7 @@ namespace aspect
     {
       // Check for environment variable override to ASPECT_SOURCE_DIR
       char const *ASPECT_SOURCE_DIR_env = getenv("ASPECT_SOURCE_DIR");
-      if (ASPECT_SOURCE_DIR_env != NULL)
+      if (ASPECT_SOURCE_DIR_env != nullptr)
         {
           return Utilities::replace_in_string(location,
                                               "$ASPECT_SOURCE_DIR",
@@ -2209,6 +2205,52 @@ namespace aspect
         return " (\"" + s + "\")";
       else
         return "";
+    }
+
+
+
+    bool
+    string_to_bool(const std::string &s)
+    {
+      return (s == "true" || s == "yes");
+    }
+
+
+
+    std::vector<bool>
+    string_to_bool(const std::vector<std::string> &s)
+    {
+      std::vector<bool> result;
+      result.reserve(s.size());
+
+      for (auto &i : s)
+        result.push_back(string_to_bool(i));
+
+      return result;
+    }
+
+
+
+    unsigned int
+    string_to_unsigned_int(const std::string &s)
+    {
+      const int value = dealii::Utilities::string_to_int(s);
+      AssertThrow (value >= 0, ExcMessage("Negative number in string_to_unsigned_int() detected."));
+      return static_cast<unsigned int>(value);
+    }
+
+
+
+    std::vector<unsigned int>
+    string_to_unsigned_int(const std::vector<std::string> &s)
+    {
+      std::vector<unsigned int> result;
+      result.reserve(s.size());
+
+      for (auto &str : s)
+        result.emplace_back(string_to_unsigned_int(str));
+
+      return result;
     }
 
 
@@ -2525,11 +2567,32 @@ namespace aspect
       if ((strain_rate.norm() == 0) || (dviscosities_dstrain_rate.norm() == 0))
         return 1;
 
-      const double E = strain_rate * dviscosities_dstrain_rate;
-      if (E >= -eta * SPD_safety_factor)
+
+      // The factor in the Newton matrix is going to be of the form
+      //   2*eta I + (a \otimes b + b \otimes a)
+      // where a=strain_rate and b=dviscosities_dstrain_rate.
+      //
+      // If a,b are parallel, this simplifies to
+      //   [2*eta + 2 a:b] I =  2 [eta + a:b] I
+      // and we need to make sure that
+      //   [eta + alpha a:b] > (1-safety_factor)*eta
+      // by choosing alpha appropriately.
+
+      // So, first check: If
+      //   [eta + a:b] > (1-safety_factor)*eta
+      // is already satisfied, then we can choose alpha=1
+      const double a_colon_b = strain_rate * dviscosities_dstrain_rate;
+      if (eta + a_colon_b > eta * (1. - SPD_safety_factor))
         return 1.0;
       else
-        return SPD_safety_factor * std::abs(eta / E);
+        {
+          // Otherwise solve the equation above for alpha, which yields
+          //   a:b = -safety_factor*eta / a:b
+          // This can only ever happen if a:b < 0, so we get
+          //   a:b = safety_factor * abs(eta / a:b)
+          Assert (a_colon_b < 0, ExcInternalError());
+          return SPD_safety_factor * std::abs(eta / a_colon_b);
+        }
     }
 
 
@@ -2979,8 +3042,8 @@ namespace aspect
 
 
     std::vector<Tensor<2,3>>
-    rotation_matrices_random_draw_volume_weighting(const std::vector<double> volume_fraction,
-                                                   const std::vector<Tensor<2,3>> rotation_matrices,
+    rotation_matrices_random_draw_volume_weighting(const std::vector<double> &volume_fraction,
+                                                   const std::vector<Tensor<2,3>> &rotation_matrices,
                                                    const unsigned int n_output_matrices,
                                                    std::mt19937 &random_number_generator)
     {
@@ -3448,9 +3511,6 @@ namespace aspect
                                                                 const Point<dim> &position); \
   \
   template \
-  std::array<double,dim> Coordinates::WGS84_coordinates<dim>(const Point<dim> &position); \
-  \
-  template \
   bool polygon_contains_point<dim>(const std::vector<Point<2>> &pointList, \
                                    const dealii::Point<2> &point); \
   \
@@ -3520,6 +3580,11 @@ namespace aspect
     ASPECT_INSTANTIATE(INSTANTIATE)
 
 #undef INSTANTIATE
+
+    // only instantiate for dim=3:
+    template                \
+    std::array<double,3> Coordinates::WGS84_coordinates<3>(const Point<3> &position);
+
 
     template double
     derivative_of_weighted_p_norm_average (const double averaged_parameter,

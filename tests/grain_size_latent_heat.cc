@@ -51,13 +51,13 @@ namespace aspect
     class GrainSizeLatentHeat : public MaterialModel::GrainSize<dim>
     {
       public:
-        virtual bool is_compressible () const
+        virtual bool is_compressible () const override
         {
           return false;
         }
 
         virtual void evaluate(const typename MaterialModel::Interface<dim>::MaterialModelInputs &in,
-                              typename MaterialModel::Interface<dim>::MaterialModelOutputs &out) const
+                              typename MaterialModel::Interface<dim>::MaterialModelOutputs &out) const override
         {
           double dHdT = 0.0;
           double dHdp = 0.0;
@@ -127,50 +127,29 @@ namespace aspect
                 }
             }
 
+          std::vector<double> adiabatic_pressures (in.n_evaluation_points());
+          std::vector<unsigned int> phase_indices (in.n_evaluation_points());
+
           for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
-              // convert the grain size from log to normal
               std::vector<double> composition (in.composition[i]);
-              if (this->advect_log_grainsize)
-                this->convert_log_grain_size(composition);
-              else
-                for (unsigned int c=0; c<composition.size(); ++c)
-                  composition[c] = std::max(this->min_grain_size,composition[c]);
+              for (unsigned int c=0; c<composition.size(); ++c)
+                composition[c] = std::max(this->min_grain_size,composition[c]);
 
-              // set up an integer that tells us which phase transition has been crossed inside of the cell
-              int crossed_transition(-1);
+              const double gravity_norm = this->get_gravity_model().gravity_vector(in.position[i]).norm();
 
-              if (this->get_adiabatic_conditions().is_initialized())
-                for (unsigned int phase=0; phase<this->transition_depths.size(); ++phase)
-                  {
-                    // first, get the pressure at which the phase transition occurs normally
-                    const Point<dim,double> transition_point = this->get_geometry_model().representative_point(this->transition_depths[phase]);
-                    const Point<dim,double> transition_plus_width = this->get_geometry_model().representative_point(this->transition_depths[phase] + this->transition_widths[phase]);
-                    const Point<dim,double> transition_minus_width = this->get_geometry_model().representative_point(this->transition_depths[phase] - this->transition_widths[phase]);
-                    const double transition_pressure = this->get_adiabatic_conditions().pressure(transition_point);
-                    const double pressure_width = 0.5 * (this->get_adiabatic_conditions().pressure(transition_plus_width)
-                                                         - this->get_adiabatic_conditions().pressure(transition_minus_width));
+              out.densities[i] = this->density(in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
 
-
-                    // then calculate the deviation from the transition point (both in temperature
-                    // and in pressure)
-                    double pressure_deviation = in.pressure[i] - transition_pressure
-                                                - this->transition_slopes[phase] * (in.temperature[i] - this->transition_temperatures[phase]);
-
-                    if ((std::abs(pressure_deviation) < pressure_width)
-                        &&
-                        ((in.velocity[i] * this->get_gravity_model().gravity_vector(in.position[i])) * pressure_deviation > 0))
-                      crossed_transition = phase;
-                  }
-              else
-                for (unsigned int j=0; j<in.n_evaluation_points(); ++j)
-                  for (unsigned int k=0; k<this->transition_depths.size(); ++k)
-                    if ((this->phase_function(in.position[i], in.temperature[i], in.pressure[i], k)
-                         != this->phase_function(in.position[j], in.temperature[j], in.pressure[j], k))
-                        &&
-                        ((in.velocity[i] * this->get_gravity_model().gravity_vector(in.position[i]))
-                         * ((in.position[i] - in.position[j]) * this->get_gravity_model().gravity_vector(in.position[i])) > 0))
-                      crossed_transition = k;
+              // We do not fill the phase function index, because that will be done internally in the get_phase_index() function
+              adiabatic_pressures[i] = this->get_adiabatic_conditions().is_initialized()
+                                       ?
+                                       this->get_adiabatic_conditions().pressure(in.position[i])
+                                       :
+                                       in.pressure[i];
+              const double depth = this->get_geometry_model().depth(in.position[i]);
+              const double rho_g = out.densities[i] * gravity_norm;
+              MaterialUtilities::PhaseFunctionInputs<dim> phase_inputs(in.temperature[i], adiabatic_pressures[i], depth, rho_g, numbers::invalid_unsigned_int);
+              phase_indices[i] = this->get_phase_index(phase_inputs);
 
               if (in.requests_property(MaterialProperties::viscosity))
                 {
@@ -187,24 +166,19 @@ namespace aspect
                                                        this->get_adiabatic_conditions().temperature(in.position[i])
                                                        :
                                                        in.temperature[i];
-                  const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
-                                                    ?
-                                                    this->get_adiabatic_conditions().pressure(in.position[i])
-                                                    :
-                                                    in.pressure[i];
 
                   const unsigned int grain_size_index = this->introspection().compositional_index_for_name("grain_size");
 
                   const double diff_viscosity = this->diffusion_viscosity(in.temperature[i],
                                                                           adiabatic_temperature,
-                                                                          adiabatic_pressure,
+                                                                          adiabatic_pressures[i],
                                                                           composition[grain_size_index],
                                                                           second_strain_rate_invariant,
-                                                                          in.position[i]);
+                                                                          phase_indices[i]);
 
                   if (std::abs(second_strain_rate_invariant) > 1e-30)
                     {
-                      disl_viscosity = this->dislocation_viscosity(in.temperature[i], adiabatic_temperature, adiabatic_pressure, in.strain_rate[i], in.position[i],diff_viscosity);
+                      disl_viscosity = this->dislocation_viscosity(in.temperature[i], adiabatic_temperature, adiabatic_pressures[i], in.strain_rate[i], phase_indices[i], diff_viscosity);
                       effective_viscosity = disl_viscosity * diff_viscosity / (disl_viscosity + diff_viscosity);
                     }
                   else
@@ -212,8 +186,6 @@ namespace aspect
 
                   out.viscosities[i] = std::min(std::max(this->min_eta,effective_viscosity),this->max_eta);
                 }
-
-              out.densities[i] = this->density(in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
 
               if (this->get_adiabatic_conditions().is_initialized())
                 {
@@ -238,22 +210,9 @@ namespace aspect
 
               out.thermal_conductivities[i] = this->k_value;
               out.compressibilities[i] = this->compressibility(in.temperature[i], in.pressure[i], composition, in.position[i]);
-
-              // TODO: make this more general for not just olivine grains
-              if (in.requests_property(MaterialProperties::reaction_terms))
-                for (unsigned int c=0; c<composition.size(); ++c)
-                  {
-                    if (this->introspection().name_for_compositional_index(c) == "olivine_grain_size")
-                      {
-                        out.reaction_terms[i][c] = this->grain_size_change(in.temperature[i], in.pressure[i], composition,
-                                                                           in.strain_rate[i], in.velocity[i], in.position[i], c, crossed_transition);
-                        if (this->advect_log_grainsize)
-                          out.reaction_terms[i][c] = - out.reaction_terms[i][c] / composition[c];
-                      }
-                    else
-                      out.reaction_terms[i][c] = 0.0;
-                  }
             }
+          if (in.requests_property(MaterialProperties::reaction_terms))
+            out.reaction_terms = this->grain_size_change(in, adiabatic_pressures, phase_indices);
         }
     };
   }

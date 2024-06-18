@@ -305,23 +305,9 @@ namespace aspect
        * @ingroup ParticleProperties
        */
       template <int dim>
-      class Interface
+      class Interface : public Plugins::InterfaceBase
       {
         public:
-          /**
-           * Destructor. Made virtual so that derived classes can be created
-           * and destroyed through pointers to the base class.
-           */
-          virtual ~Interface () = default;
-
-          /**
-           * Initialization function. This function is called once at the
-           * beginning of the program after parse_parameters is run.
-           */
-          virtual
-          void
-          initialize ();
-
           /**
            * Initialization function. This function is called once at the
            * creation of every particle for every property to initialize its
@@ -337,6 +323,39 @@ namespace aspect
           void
           initialize_one_particle_property (const Point<dim> &position,
                                             std::vector<double> &particle_properties) const;
+
+          /**
+           * Update function. This function is called every time an update is
+           * requested by need_update() for every cell for every property.
+           * It is expected to update the properties of all particles in the
+           * given range @p particles, which are all in one cell.
+           * It is obvious that
+           * this function is called a lot, so its code should be efficient.
+           * The interface provides a default implementation that does nothing,
+           * therefore derived plugins that do not require an update do not
+           * need to implement this function.
+           *
+           * @param [in] data_position An unsigned integer that denotes which
+           * component of each particle property vector is associated with the
+           * current property. For properties that own several components it
+           * denotes the first component of this property, all other components
+           * fill consecutive entries in the properties vector.
+           *
+           * @param [in] solution A vector of values of the solution variables
+           * at the given particle positions.
+           *
+           * @param [in] gradients A vector of gradients of the solution
+           * variables at the given particle positions.
+           *
+           * @param [in,out] particles The particles that are to be updated
+           * within this function.
+           */
+          virtual
+          void
+          update_particle_properties (const unsigned int data_position,
+                                      const std::vector<Vector<double>> &solution,
+                                      const std::vector<std::vector<Tensor<1,dim>>> &gradients,
+                                      typename ParticleHandler<dim>::particle_iterator_range &particles) const;
 
           /**
            * Update function. This function is called every time an update is
@@ -363,7 +382,10 @@ namespace aspect
            * the call of this function. The particle location can be accessed
            * using particle->get_location() and its properties using
            * particle->get_properties().
+           *
+           * @deprecated Use update_particle_properties() instead.
            */
+          DEAL_II_DEPRECATED
           virtual
           void
           update_particle_property (const unsigned int data_position,
@@ -371,42 +393,6 @@ namespace aspect
                                     const std::vector<Tensor<1,dim>> &gradients,
                                     typename ParticleHandler<dim>::particle_iterator &particle) const;
 
-          /**
-           * Update function. This function is called every time an update is
-           * request by need_update() for every particle for every property.
-           * It is obvious that
-           * this function is called a lot, so its code should be efficient.
-           * The interface provides a default implementation that does nothing,
-           * therefore derived plugins that do not require an update do not
-           * need to implement this function.
-           *
-           * @param [in] data_position An unsigned integer that denotes which
-           * component of the particle property vector is associated with the
-           * current property. For properties that own several components it
-           * denotes the first component of this property, all other components
-           * fill consecutive entries in the @p particle_properties vector.
-           *
-           * @param [in] position The current particle position.
-           *
-           * @param [in] solution The values of the solution variables at the
-           * current particle position.
-           *
-           * @param [in] gradients The gradients of the solution variables at
-           * the current particle position.
-           *
-           * @param [in,out] particle_properties The properties of the particle
-           * that is updated within the call of this function.
-           *
-           * @deprecated Use update_particle_property() instead.
-           */
-          DEAL_II_DEPRECATED
-          virtual
-          void
-          update_one_particle_property (const unsigned int data_position,
-                                        const Point<dim> &position,
-                                        const Vector<double> &solution,
-                                        const std::vector<Tensor<1,dim>> &gradients,
-                                        const ArrayView<double> &particle_properties) const;
 
           /**
            * Returns an enum, which determines at what times particle properties
@@ -470,34 +456,6 @@ namespace aspect
           virtual
           std::vector<std::pair<std::string, unsigned int>>
           get_property_information() const = 0;
-
-
-          /**
-           * Declare the parameters this class takes through input files.
-           * Derived classes should overload this function if they actually do
-           * take parameters; this class declares a fall-back function that
-           * does nothing, so that property classes that do not take any
-           * parameters do not have to do anything at all.
-           *
-           * This function is static (and needs to be static in derived
-           * classes) so that it can be called without creating actual objects
-           * (because declaring parameters happens before we read the input
-           * file and thus at a time when we don't even know yet which
-           * property objects we need).
-           */
-          static
-          void
-          declare_parameters (ParameterHandler &prm);
-
-          /**
-           * Read the parameters this class declares from the parameter file.
-           * The default implementation in this class does nothing, so that
-           * derived classes that do not need any parameters do not need to
-           * implement it.
-           */
-          virtual
-          void
-          parse_parameters (ParameterHandler &prm);
       };
 
       /**
@@ -576,6 +534,13 @@ namespace aspect
           initialize ();
 
           /**
+           * Update function. This function is called once at the
+           * beginning of each timestep.
+           */
+          void
+          update ();
+
+          /**
            * Initialization function for particle properties. This function is
            * called once for each of the particles of a particle
            * collection after it was created.
@@ -597,12 +562,19 @@ namespace aspect
 
           /**
            * Update function for particle properties. This function is
-           * called once every time step for every particle.
+           * called once every time step for every cell.
+           *
+           * @param particles The particles that are to be updated within
+           * this function.
+           * @param solution The values of the solution variables at the
+           * given particle positions.
+           * @param gradients The gradients of the solution variables at
+           * the given particle positions.
            */
           void
-          update_one_particle (typename ParticleHandler<dim>::particle_iterator &particle,
-                               const Vector<double> &solution,
-                               const std::vector<Tensor<1,dim>> &gradients) const;
+          update_particles (typename ParticleHandler<dim>::particle_iterator_range &particles,
+                            const std::vector<Vector<double>> &solution,
+                            const std::vector<std::vector<Tensor<1,dim>>> &gradients) const;
 
           /**
            * Returns an enum, which denotes at what time this class needs to
@@ -669,7 +641,7 @@ namespace aspect
            * Go through the list of all particle properties that have been selected
            * in the input file (and are consequently currently active) and see
            * if one of them has the type specified by the template
-           * argument or can be casted to that type. If so, return a reference
+           * argument or can be cast to that type. If so, return a reference
            * to it. If no property is active that matches the given type,
            * throw an exception.
            *

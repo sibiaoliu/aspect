@@ -53,51 +53,14 @@ namespace aspect
      * @ingroup InitialTemperatures
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface() = default;
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual
-        void
-        initialize ();
-
         /**
          * Return the initial temperature as a function of position.
          */
         virtual
         double initial_temperature (const Point<dim> &position) const = 0;
-
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
     };
 
 
@@ -107,7 +70,7 @@ namespace aspect
      * @ingroup InitialTemperatures
      */
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public SimulatorAccess<dim>
     {
       public:
         /**
@@ -115,6 +78,12 @@ namespace aspect
          * functions.
          */
         ~Manager () override;
+
+        /**
+         * Update function. Called once at the beginning of a timestep to
+         * update all plugin objects.
+        */
+        void update();
 
         /**
          * Declare the parameters of all known initial conditions plugins, as
@@ -197,7 +166,7 @@ namespace aspect
          * Go through the list of all initial temperature models that have been selected
          * in the input file (and are consequently currently active) and see
          * if one of them has the type specified by the template
-         * argument or can be casted to that type. If so, return a reference
+         * argument or can be cast to that type. If so, return a reference
          * to it. If no initial temperature model is active that matches the given type,
          * throw an exception.
          *
@@ -280,15 +249,12 @@ namespace aspect
                              "that could not be found in the current model. Activate this "
                              "initial temperature model in the input file."));
 
-      typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator initial_temperature_model;
-      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
-           p = initial_temperature_objects.begin();
-           p != initial_temperature_objects.end(); ++p)
-        if (Plugins::plugin_type_matches<InitialTemperatureType>(*(*p)))
-          return Plugins::get_plugin_as_type<InitialTemperatureType>(*(*p));
+      for (const auto &p : initial_temperature_objects)
+        if (Plugins::plugin_type_matches<InitialTemperatureType>(*p))
+          return Plugins::get_plugin_as_type<InitialTemperatureType>(*p);
 
       // We will never get here, because we had the Assert above. Just to avoid warnings.
-      return Plugins::get_plugin_as_type<InitialTemperatureType>(*(*initial_temperature_model));
+      return Plugins::get_plugin_as_type<InitialTemperatureType>(**(initial_temperature_objects.begin()));
     }
 
 

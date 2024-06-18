@@ -119,39 +119,9 @@ namespace aspect
      * @ingroup HeatingModels
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface() = default;
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual
-        void
-        initialize ();
-
-        /**
-         * A function that is called at the beginning of each time step. The
-         * default implementation of the function does nothing, but derived
-         * classes that need more elaborate setups for a given time step may
-         * overload the function.
-         *
-         * The point of this function is to allow complex heating models to do
-         * an initialization step once at the beginning of each time step. An
-         * example would be a model that take into account the decay of heat
-         * generating elements.
-         */
-        virtual
-        void
-        update ();
-
         /**
          * Function to compute the heating terms in @p heating_model_outputs
          * given the inputs in @p material_model_inputs and the outputs of the
@@ -169,27 +139,6 @@ namespace aspect
         evaluate (const MaterialModel::MaterialModelInputs<dim> &material_model_inputs,
                   const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
                   HeatingModel::HeatingModelOutputs &heating_model_outputs) const = 0;
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
 
         /**
          * Allow the heating model to attach additional material model outputs.
@@ -220,15 +169,9 @@ namespace aspect
      * @ingroup HeatingModels
      */
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public Plugins::ManagerBase<Interface<dim>>, public SimulatorAccess<dim>
     {
       public:
-        /**
-         * Destructor. Made virtual since this class has virtual member
-         * functions.
-         */
-        ~Manager () override;
-
         /**
          * Returns true if the adiabatic heating plugin is found in the
          * list of active heating models.
@@ -258,15 +201,7 @@ namespace aspect
          * let these objects read their parameters as well.
          */
         void
-        parse_parameters (ParameterHandler &prm);
-
-        /**
-         * A function that is called at the beginning of each time step,
-         * calling the update function of the individual heating models.
-         */
-        void
-        update ();
-
+        parse_parameters (ParameterHandler &prm) override;
 
         /**
          * A function that calls the evaluate function of all the individual
@@ -348,7 +283,7 @@ namespace aspect
          * Go through the list of all heating models that have been selected
          * in the input file (and are consequently currently active) and see
          * if one of them has the type specified by the template
-         * argument or can be casted to that type. If so, return a reference
+         * argument or can be cast to that type. If so, return a reference
          * to it. If no heating model is active that matches the given type,
          * throw an exception.
          *
@@ -384,12 +319,6 @@ namespace aspect
                         << "> among the names of registered heating model objects.");
       private:
         /**
-         * A list of heating model objects that have been requested in the
-         * parameter file.
-         */
-        std::list<std::unique_ptr<Interface<dim>>> heating_model_objects;
-
-        /**
          * A list of names of heating model objects that have been requested
          * in the parameter file.
          */
@@ -404,10 +333,7 @@ namespace aspect
     bool
     Manager<dim>::has_matching_heating_model () const
     {
-      for (const auto &p : heating_model_objects)
-        if (Plugins::plugin_type_matches<HeatingModelType>(*p))
-          return true;
-      return false;
+      return this->template has_matching_plugin_object<HeatingModelType>();
     }
 
 
@@ -417,21 +343,7 @@ namespace aspect
     const HeatingModelType &
     Manager<dim>::get_matching_heating_model () const
     {
-      AssertThrow(has_matching_heating_model<HeatingModelType> (),
-                  ExcMessage("You asked HeatingModel::Manager::get_heating_model() for a "
-                             "heating model of type <" + boost::core::demangle(typeid(HeatingModelType).name()) + "> "
-                             "that could not be found in the current model. Activate this "
-                             "heating model in the input file."));
-
-      typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator heating_model;
-      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
-           p = heating_model_objects.begin();
-           p != heating_model_objects.end(); ++p)
-        if (Plugins::plugin_type_matches<HeatingModelType>(*(*p)))
-          return Plugins::get_plugin_as_type<HeatingModelType>(*(*p));
-
-      // We will never get here, because we had the Assert above. Just to avoid warnings.
-      return Plugins::get_plugin_as_type<HeatingModelType>(*(*heating_model));
+      return this->template get_matching_plugin_object<HeatingModelType>();
     }
 
 

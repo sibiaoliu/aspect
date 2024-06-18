@@ -73,7 +73,7 @@ namespace aspect
         AssertThrow(manager.check_plugin_order("crystal preferred orientation","cpo elastic tensor"),
                     ExcMessage("To use the cpo elastic tensor plugin, the cpo plugin needs to be defined before this plugin."));
 
-        cpo_data_position = manager.get_data_info().get_position_by_plugin_index(manager.get_plugin_index_by_name("cpo"));
+        cpo_data_position = manager.get_data_info().get_position_by_plugin_index(manager.get_plugin_index_by_name("crystal preferred orientation"));
       }
 
 
@@ -88,23 +88,23 @@ namespace aspect
         const SymmetricTensor<2,6> *stiffness_matrix = &stiffness_matrix_olivine;
         for (size_t mineral_i = 0; mineral_i < n_minerals; ++mineral_i)
           {
-            if (cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == (unsigned int)DeformationTypeSelector::olivine_a_fabric
-                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == (unsigned int)DeformationTypeSelector::olivine_b_fabric
-                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == (unsigned int)DeformationTypeSelector::olivine_c_fabric
-                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == (unsigned int)DeformationTypeSelector::olivine_d_fabric
-                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == (unsigned int)DeformationTypeSelector::olivine_e_fabric
-                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == (unsigned int)DeformationTypeSelector::olivine_karato_2008
+            if (cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == DeformationType::olivine_a_fabric
+                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == DeformationType::olivine_b_fabric
+                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == DeformationType::olivine_d_fabric
+                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == DeformationType::olivine_c_fabric
+                || cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == DeformationType::olivine_e_fabric
                )
               {
                 stiffness_matrix = &stiffness_matrix_olivine;
               }
-            else if (cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == (unsigned int)DeformationTypeSelector::enstatite)
+            else if (cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i) == DeformationType::enstatite)
               {
                 stiffness_matrix = &stiffness_matrix_enstatite;
               }
             else
               {
-                AssertThrow(false, ExcMessage("Stiffness matrix not implemented for deformation type " + std::to_string(cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i))));
+                AssertThrow(false, ExcMessage("Stiffness matrix not implemented for deformation type "
+                                              + std::to_string(static_cast<unsigned int>(cpo_particle_property.get_deformation_type(cpo_data_position,data,mineral_i)))));
               }
 
             for (size_t grain_i = 0; grain_i < n_grains; grain_i++)
@@ -125,17 +125,12 @@ namespace aspect
                                                               std::vector<double> &data) const
       {
 
-        // Get a reference to the CPO particle property.
-        const Particle::Property::CrystalPreferredOrientation<dim> &cpo_particle_property =
-          this->get_particle_world().get_property_manager().template get_matching_property<Particle::Property::CrystalPreferredOrientation<dim>>();
-
-        const SymmetricTensor<2,6> C_average = voigt_average_elastic_tensor(cpo_particle_property,
-                                                                            cpo_data_position,
-                                                                            data);
+        // At initialization, the deformation type for cpo is initialized to -1.
+        // Initialize with the stiffness matrix of olivine to avoid errors in the computation.
 
         for (unsigned int i = 0; i < SymmetricTensor<2,6>::n_independent_components ; ++i)
           {
-            data.push_back(C_average[SymmetricTensor<2,6>::unrolled_to_component_indices(i)]);
+            data.push_back(stiffness_matrix_olivine[SymmetricTensor<2,6>::unrolled_to_component_indices(i)]);
           }
 
 
@@ -145,11 +140,10 @@ namespace aspect
 
       template <int dim>
       void
-      CpoElasticTensor<dim>::update_one_particle_property(const unsigned int data_position,
-                                                          const Point<dim> &,
-                                                          const Vector<double> &,
-                                                          const std::vector<Tensor<1,dim>> &,
-                                                          const ArrayView<double> &data) const
+      CpoElasticTensor<dim>::update_particle_property(const unsigned int data_position,
+                                                      const Vector<double> &/*solution*/,
+                                                      const std::vector<Tensor<1,dim>> &/*gradients*/,
+                                                      typename ParticleHandler<dim>::particle_iterator &particle) const
       {
         // Get a reference to the CPO particle property.
         const Particle::Property::CrystalPreferredOrientation<dim> &cpo_particle_property =
@@ -158,10 +152,10 @@ namespace aspect
 
         const SymmetricTensor<2,6> C_average = voigt_average_elastic_tensor(cpo_particle_property,
                                                                             cpo_data_position,
-                                                                            data);
+                                                                            particle->get_properties());
 
         Particle::Property::CpoElasticTensor<dim>::set_elastic_tensor(data_position,
-                                                                      data,
+                                                                      particle->get_properties(),
                                                                       C_average);
 
 
@@ -174,10 +168,8 @@ namespace aspect
       CpoElasticTensor<dim>::get_elastic_tensor(unsigned int cpo_data_position,
                                                 const ArrayView<double> &data)
       {
-        SymmetricTensor<2,6> elastic_tensor;
-        for (unsigned int i = 0; i < SymmetricTensor<2,6>::n_independent_components ; ++i)
-          elastic_tensor[SymmetricTensor<2,6>::unrolled_to_component_indices(i)] = data[cpo_data_position + i];
-        return elastic_tensor;
+        return Utilities::Tensors::to_symmetric_tensor<6>(&data[cpo_data_position],
+                                                          &data[cpo_data_position]+SymmetricTensor<2,6>::n_independent_components);
       }
 
 
@@ -188,8 +180,9 @@ namespace aspect
                                                 const ArrayView<double> &data,
                                                 const SymmetricTensor<2,6> &elastic_tensor)
       {
-        for (unsigned int i = 0; i < SymmetricTensor<2,6>::n_independent_components ; ++i)
-          data[cpo_data_position + i] = elastic_tensor[SymmetricTensor<2,6>::unrolled_to_component_indices(i)];
+        Utilities::Tensors::unroll_symmetric_tensor_into_array(elastic_tensor,
+                                                               &data[cpo_data_position],
+                                                               &data[cpo_data_position]+SymmetricTensor<2,6>::n_independent_components);
       }
 
 
@@ -218,8 +211,7 @@ namespace aspect
       {
         std::vector<std::pair<std::string,unsigned int>> property_information;
 
-        property_information.push_back(std::make_pair("cpo_elastic_tensor",SymmetricTensor<2,6>::n_independent_components));
-
+        property_information.emplace_back("cpo_elastic_tensor", SymmetricTensor<2,6>::n_independent_components);
         return property_information;
       }
 
@@ -236,24 +228,16 @@ namespace aspect
       void
       CpoElasticTensor<dim>::parse_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
+        prm.enter_subsection("Crystal Preferred Orientation");
         {
-          prm.enter_subsection("Particles");
+          n_grains = prm.get_integer("Number of grains per particle");
+          prm.enter_subsection("Initial grains");
           {
-            prm.enter_subsection("Crystal Preferred Orientation");
-            {
-              n_grains = prm.get_integer("Number of grains per particle");
-              prm.enter_subsection("Initial grains");
-              {
-                n_minerals = dealii::Utilities::split_string_list(prm.get("Minerals")).size();
-              }
-              prm.leave_subsection();
-            }
-            prm.leave_subsection();
+            n_minerals = dealii::Utilities::split_string_list(prm.get("Minerals")).size();
           }
-          prm.leave_subsection ();
+          prm.leave_subsection();
         }
-        prm.leave_subsection ();
+        prm.leave_subsection();
       }
     }
   }

@@ -67,7 +67,7 @@ namespace aspect
      * cases, use a `dynamic_cast`.
      */
     template <typename TestType, typename PluginType,
-              typename = typename std::enable_if<std::is_base_of<PluginType,TestType>::value>::type>
+              typename = typename std::enable_if_t<std::is_base_of<PluginType,TestType>::value>>
     inline
     bool
     plugin_type_matches (const PluginType &object)
@@ -93,7 +93,7 @@ namespace aspect
      * class `PluginType`. For these cases, use a `dynamic_cast`.
      */
     template <typename TestType, typename PluginType,
-              typename = typename std::enable_if<std::is_base_of<PluginType,TestType>::value>::type>
+              typename = typename std::enable_if_t<std::is_base_of<PluginType,TestType>::value>>
     inline
     TestType &
     get_plugin_as_type (PluginType &object)
@@ -112,6 +112,198 @@ namespace aspect
     }
   }
 
+  namespace Plugins
+  {
+    using namespace dealii;
+
+
+    /**
+     * A base class for all plugin systems. The class ensures that a
+     * common set of functions is declared as `virtual` (namely, the
+     * destructor, `initialize()`, `update()`, and
+     * `parse_parameters()`) and implemented with empty bodies so that
+     * derived interface classes do not have to declare these
+     * functions themselves. Furthermore, the class provides an empty,
+     * `static` function `declare_parameters()` that derived classes
+     * can re-implement to declare their parameters.
+     */
+    class InterfaceBase
+    {
+      public:
+        /**
+         * Destructor. Made virtual to enforce that derived classes also have
+         * virtual destructors.
+         */
+        virtual ~InterfaceBase() = default;
+
+        /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters() is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         *
+         * The default implementation of this function does nothing, but
+         * plugins that derive from this class (via the <code>Interface</code>
+         * classes of their respective plugin systems) may overload it
+         * if they want something to happen upon startup of the
+         * Simulator object to which the plugin contributes.
+         */
+        virtual
+        void
+        initialize ();
+
+        /**
+         * A function that is called at the beginning of each time step.
+         *
+         * The default implementation of this function does nothing, but
+         * plugins that derive from this class (via the <code>Interface</code>
+         * classes of their respective plugin systems) may overload it
+         * if they want something to happen upon startup of the
+         * Simulator object to which the plugin contributes.
+         */
+        virtual
+        void
+        update ();
+
+        /**
+         * Declare the parameters the plugin takes through input files. The
+         * default implementation of this function does not describe any
+         * parameters. Consequently, derived classes do not have to overload
+         * this function if they do not take any runtime parameters. On
+         * the other hand, most plugins do have run-time parameters, and
+         * they may then overload this function.
+         */
+        static
+        void
+        declare_parameters (ParameterHandler &prm);
+
+        /**
+         * Read the parameters this class declares from the parameter file.
+         * The default implementation of this function does not read any
+         * parameters. Consequently, derived classes do not have to overload
+         * this function if they do not take any runtime parameters. On
+         * the other hand, most plugins do have run-time parameters, and
+         * they may then overload this function.
+         */
+        virtual
+        void
+        parse_parameters (ParameterHandler &prm);
+    };
+
+
+
+    /**
+     * A base class for "plugin manager" classes. Plugin manager classes are
+     * used in places where one can legitimately use more than one plugin of
+     * a certain kind. For example, while there can only ever be one geometry
+     * (and consequently, the Simulator class only stores a single object of
+     * type derived from GeometryModels::Interface), one can have many different
+     * postprocessor objects at the same time. In these circumstances, the
+     * Simulator class stores a Postprocess::Manager object that internally
+     * stores zero or more objects of type derived from Postprocess::Interface.
+     * Since there are many places inside ASPECT where we need these "plugin
+     * manager" classes, the current class provides some common functionality
+     * to all of these classes.
+     *
+     * The class takes as template argument the type of the derived
+     * class's interface type. Since a manager is always also a plugin
+     * (to the Simulator class) itself, the current class is derived from
+     * the `InterfaceBase` class as well.
+     */
+    template <typename InterfaceType>
+    class ManagerBase : public InterfaceBase
+    {
+      public:
+        /**
+         * A function that is called at the beginning of each time step,
+         * calling the update function of the individual heating models.
+         */
+        void
+        update () override;
+
+        /**
+         * Go through the list of all plugins that have been selected
+         * in the input file (and are consequently currently active) and return
+         * true if one of them has the desired type specified by the template
+         * argument.
+         *
+         * This function can only be called if the given template type (the first template
+         * argument) is a class derived from the Interface class in this namespace.
+         */
+        template <typename PluginType,
+                  typename = typename std::enable_if_t<std::is_base_of<InterfaceType,PluginType>::value>>
+        bool
+        has_matching_plugin_object () const;
+
+        /**
+         * Go through the list of all plugins that have been selected
+         * in the input file (and are consequently currently active) and see
+         * if one of them has the type specified by the template
+         * argument or can be cast to that type. If so, return a reference
+         * to it. If no postprocessor is active that matches the given type,
+         * throw an exception.
+         *
+         * This function can only be called if the given template type (the first template
+         * argument) is a class derived from the Interface class in this namespace.
+         */
+        template <typename PluginType,
+                  typename = typename std::enable_if_t<std::is_base_of<InterfaceType,PluginType>::value>>
+        const PluginType &
+        get_matching_plugin_object () const;
+
+      protected:
+        /**
+         * A list of plugin objects that have been requested in the
+         * parameter file.
+         */
+        std::list<std::unique_ptr<InterfaceType>> plugin_objects;
+    };
+
+
+    template <typename InterfaceType>
+    void ManagerBase<InterfaceType>::update()
+    {
+      for (const auto &plugin : plugin_objects)
+        {
+          plugin->update();
+        }
+    }
+
+
+    template <typename InterfaceType>
+    template <typename PluginType, typename>
+    inline
+    bool
+    ManagerBase<InterfaceType>::has_matching_plugin_object () const
+    {
+      for (const auto &p : plugin_objects)
+        if (Plugins::plugin_type_matches<PluginType>(*p))
+          return true;
+      return false;
+    }
+
+
+    template <typename InterfaceType>
+    template <typename PluginType, typename>
+    inline
+    const PluginType &
+    ManagerBase<InterfaceType>::get_matching_plugin_object () const
+    {
+      AssertThrow(has_matching_plugin_object<PluginType> (),
+                  ExcMessage("You asked the object managing a collection of plugins for a "
+                             "plugin object of type <" + boost::core::demangle(typeid(PluginType).name()) + "> "
+                             "that could not be found in the current model. You need to "
+                             "activate this plugin in the input file for it to be "
+                             "available."));
+
+      for (const auto &p : plugin_objects)
+        if (Plugins::plugin_type_matches<PluginType>(*p))
+          return Plugins::get_plugin_as_type<PluginType>(*p);
+
+      // We will never get here, because we had the Assert above. Just to avoid warnings.
+      return Plugins::get_plugin_as_type<PluginType>(**(plugin_objects.begin()));
+    }
+  }
+
   namespace internal
   {
     /**
@@ -121,6 +313,8 @@ namespace aspect
     namespace Plugins
     {
       using namespace dealii;
+
+
 
       /**
        * An internal class that is used in the definition of the

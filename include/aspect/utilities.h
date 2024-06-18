@@ -746,6 +746,30 @@ namespace aspect
     std::string parenthesize_if_nonempty (const std::string &s);
 
     /**
+     * Given a string @p s, convert it to a boolean value.
+     */
+    bool
+    string_to_bool(const std::string &s);
+
+    /**
+     * Given a vector of strings @p s, convert it to a vector of boolean values.
+     */
+    std::vector<bool>
+    string_to_bool(const std::vector<std::string> &s);
+
+    /**
+     * Given a string @p s, convert it to an unsigned int.
+     */
+    unsigned int
+    string_to_unsigned_int(const std::string &s);
+
+    /**
+     * Given a vector of strings @p s, convert it to a vector of unsigned int values.
+     */
+    std::vector<unsigned int>
+    string_to_unsigned_int(const std::vector<std::string> &s);
+
+    /**
      * Returns if a vector of strings @p strings only contains unique
      * entries.
      */
@@ -816,17 +840,30 @@ namespace aspect
      *
      * The goal of this function is to find a factor $\alpha$ so that
      * $2\eta(\varepsilon(\mathbf u)) I \otimes I +  \alpha\left[a \otimes b + b \otimes a\right]$ remains a
-     * positive definite matrix. Here, $a=\varepsilon(\mathbf u)$ is the @p strain_rate
+     * positive definite rank-4 tensor (i.e., a positive definite operator mapping
+     * rank-2 tensors to rank-2 tensors). By definition, the whole operator
+     * is symmetric. In the definition above, $a=\varepsilon(\mathbf u)$ is the @p strain_rate
      * and $b=\frac{\partial\eta(\varepsilon(\mathbf u),p)}{\partial \varepsilon}$ is the derivative of the viscosity
      * with respect to the strain rate and is given by @p dviscosities_dstrain_rate. Since the viscosity $\eta$
      * must be positive, there is always a value of $\alpha$ (possibly small) so that the result is a positive
-     * definite matrix. In the best case, we want to choose $\alpha=1$ because that corresponds to the full Newton step,
+     * definite operator. In the best case, we want to choose $\alpha=1$ because that corresponds to the full Newton step,
      * and so the function never returns anything larger than one.
      *
-     * The factor is defined by:
-     * $\frac{2\eta(\varepsilon(\mathbf u))}{\left[1-\frac{b:a}{\|a\| \|b\|} \right]^2\|a\|\|b\|}$. Alpha is
-     * reset to a maximum of one, and if it is smaller then one, a safety_factor scales the alpha to make
-     * sure that the 1-alpha won't get to close to zero.
+     * One can do some algebra to determine what the optimal factor is. We did
+     * this in the Newton paper (Fraters et al., Geophysical Journal
+     * International, 2019) where we derived a factor of
+     * $\frac{2\eta(\varepsilon(\mathbf u))}{\left[1-\frac{b:a}{\|a\| \|b\|} \right]^2\|a\|\|b\|}$,
+     * which we reset to a maximum of one, and if it is smaller then one,
+     * a safety_factor scales the value to make sure that 1-alpha won't get to
+     * close to zero. However, as later pointed out by Yimin Jin, the computation
+     * is wrong, see https://github.com/geodynamics/aspect/issues/5555. Instead,
+     * the function now computes the factor as
+     * $(2 \eta) / (a:b + b:a)$, again capped at a maximal value of 1,
+     * and using a safety factor from below.
+     *
+     * In practice, $a$ and $b$ are almost always parallel to each other,
+     * and $a:b + b:a = 2a:b$, in which case one can drop the factor
+     * of $2$ everywhere in the computations.
      */
     template <int dim>
     double compute_spd_factor(const double eta,
@@ -1127,8 +1164,8 @@ namespace aspect
      * @param random_number_generator a reference to a mt19937 random number generator.
      */
     std::vector<Tensor<2,3>>
-    rotation_matrices_random_draw_volume_weighting(const std::vector<double> volume_fractions,
-                                                   const std::vector<Tensor<2,3>> rotation_matrices,
+    rotation_matrices_random_draw_volume_weighting(const std::vector<double> &volume_fractions,
+                                                   const std::vector<Tensor<2,3>> &rotation_matrices,
                                                    const unsigned int n_output_matrices,
                                                    std::mt19937 &random_number_generator);
 
@@ -1245,6 +1282,47 @@ namespace aspect
      */
     namespace Tensors
     {
+      /**
+       * Convert a series of doubles to a SymmetricTensor of the same size.
+       * The input is expected to be ordered according to the
+       * SymmetricTensor::unrolled_to_component_indices() function.
+       */
+      template <int dim, class Iterator>
+      inline
+      SymmetricTensor<2,dim>
+      to_symmetric_tensor(const Iterator begin,
+                          const Iterator end)
+      {
+        AssertDimension(std::distance(begin, end), (SymmetricTensor<2,dim>::n_independent_components));
+        (void) end;
+
+        SymmetricTensor<2,dim> output;
+
+        Iterator next = begin;
+        for (unsigned int i=0; i < SymmetricTensor<2,dim>::n_independent_components; ++i, ++next)
+          output[SymmetricTensor<2,dim>::unrolled_to_component_indices(i)] = *next;
+
+        return output;
+      }
+
+      /**
+       * Unroll a SymmetricTensor into a series of doubles. The output is ordered
+       * according to the SymmetricTensor::unrolled_to_component_indices() function.
+       */
+      template <int dim, class Iterator>
+      inline
+      void
+      unroll_symmetric_tensor_into_array(const SymmetricTensor<2,dim> &tensor,
+                                         const Iterator begin,
+                                         const Iterator end)
+      {
+        AssertDimension(std::distance(begin, end), (SymmetricTensor<2,dim>::n_independent_components));
+        (void) end;
+
+        Iterator next = begin;
+        for (unsigned int i=0; i < SymmetricTensor<2,dim>::n_independent_components; ++i, ++next)
+          *next = tensor[SymmetricTensor<2,dim>::unrolled_to_component_indices(i)];
+      }
 
       /**
        * Rotate a 3D 4th order tensor representing the full stiffnexx matrix using a 3D 2nd order rotation tensor

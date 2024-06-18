@@ -33,14 +33,10 @@ namespace aspect
               const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
               HeatingModel::HeatingModelOutputs &heating_model_outputs) const
     {
-      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.position.size(),
+      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.n_evaluation_points(),
              ExcMessage ("Heating outputs need to have the same number of entries as the material model inputs."));
 
-      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.strain_rate.size(),
-             ExcMessage ("The shear heating plugin needs the strain rate!"));
-
-      // Some material models provide dislocation viscosities and boundary area work fractions
-      // as additional material outputs. If they are attached, use them.
+      // Check if the material model has additional outputs relevant for the shear heating.
       const ShearHeatingOutputs<dim> *shear_heating_out =
         material_model_outputs.template get_additional_output<ShearHeatingOutputs<dim>>();
 

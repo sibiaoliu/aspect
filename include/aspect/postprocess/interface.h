@@ -68,26 +68,9 @@ namespace aspect
      * @ingroup Postprocessing
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Does nothing but is virtual so that derived classes
-         * destructors are also virtual.
-         */
-        virtual ~Interface () = default;
-
-        /**
-         * Initialize function.
-         */
-        virtual void initialize ();
-
-        /**
-         * Update function. This should be called before each postprocessor
-         * is run and allows an opportunity to prepare/update temporary data
-         */
-        virtual void update ();
-
         /**
          * Execute this postprocessor. Derived classes will implement this
          * function to do whatever they want to do to evaluate the solution at
@@ -108,33 +91,6 @@ namespace aspect
         virtual
         std::pair<std::string,std::string>
         execute (TableHandler &statistics) = 0;
-
-        /**
-         * Declare the parameters this class takes through input files.
-         * Derived classes should overload this function if they actually do
-         * take parameters; this class declares a fall-back function that does
-         * nothing, so that postprocessor classes that do not take any
-         * parameters do not have to do anything at all.
-         *
-         * This function is static (and needs to be static in derived classes)
-         * so that it can be called without creating actual objects (because
-         * declaring parameters happens before we read the input file and thus
-         * at a time when we don't even know yet which postprocessor objects
-         * we need).
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation in this class does nothing, so that
-         * derived classes that do not need any parameters do not need to
-         * implement it.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
 
         /**
          * A function that is used to indicate to the postprocessor manager which
@@ -215,7 +171,7 @@ namespace aspect
      * @ingroup Postprocessing
      */
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public Plugins::ManagerBase<Interface<dim>>, public SimulatorAccess<dim>
     {
       public:
         /**
@@ -247,7 +203,7 @@ namespace aspect
          * Go through the list of all postprocessors that have been selected
          * in the input file (and are consequently currently active) and see
          * if one of them has the type specified by the template
-         * argument or can be casted to that type. If so, return a reference
+         * argument or can be cast to that type. If so, return a reference
          * to it. If no postprocessor is active that matches the given type,
          * throw an exception.
          *
@@ -273,7 +229,7 @@ namespace aspect
          * let these objects read their parameters as well.
          */
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         /**
          * Write the data of this object to a stream for the purpose of
@@ -339,12 +295,6 @@ namespace aspect
                         << "Could not find entry <"
                         << arg1
                         << "> among the names of registered postprocessors.");
-      private:
-        /**
-         * A list of postprocessor objects that have been requested in the
-         * parameter file.
-         */
-        std::vector<std::unique_ptr<Interface<dim>>> postprocessors;
     };
 
 
@@ -358,7 +308,7 @@ namespace aspect
       // let all the postprocessors save their data in a map and then
       // serialize that
       std::map<std::string,std::string> saved_text;
-      for (const auto &p : postprocessors)
+      for (const auto &p : this->plugin_objects)
         p->save (saved_text);
 
       ar &saved_text;
@@ -377,7 +327,7 @@ namespace aspect
       std::map<std::string,std::string> saved_text;
       ar &saved_text;
 
-      for (auto &p : postprocessors)
+      for (auto &p : this->plugin_objects)
         p->load (saved_text);
     }
 
@@ -389,11 +339,7 @@ namespace aspect
     bool
     Manager<dim>::has_matching_postprocessor () const
     {
-      for (const auto &p : postprocessors)
-        if (Plugins::plugin_type_matches<PostprocessorType>(*p))
-          return true;
-
-      return false;
+      return this->template has_matching_plugin_object<PostprocessorType>();
     }
 
 
@@ -404,19 +350,7 @@ namespace aspect
     const PostprocessorType &
     Manager<dim>::get_matching_postprocessor () const
     {
-      AssertThrow(has_matching_postprocessor<PostprocessorType> (),
-                  ExcMessage("You asked Postprocess::Manager::get_matching_postprocessor() for a "
-                             "postprocessor of type <" + boost::core::demangle(typeid(PostprocessorType).name()) + "> "
-                             "that could not be found in the current model. Activate this "
-                             "postprocessor in the input file."));
-
-      typename std::vector<std::unique_ptr<Interface<dim>>>::const_iterator postprocessor;
-      for (const auto &p : postprocessors)
-        if (Plugins::plugin_type_matches<PostprocessorType>(*p))
-          return Plugins::get_plugin_as_type<PostprocessorType>(*p);
-
-      // We will never get here, because we had the Assert above. Just to avoid warnings.
-      return Plugins::get_plugin_as_type<PostprocessorType>(*(*postprocessor));
+      return this->template get_matching_plugin_object<PostprocessorType>();
     }
 
 

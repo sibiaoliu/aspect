@@ -793,8 +793,8 @@ namespace aspect
 
         void
         EntropyReader::initialize(const MPI_Comm comm,
-                                  const std::string data_directory,
-                                  const std::string material_file_name)
+                                  const std::string &data_directory,
+                                  const std::string &material_file_name)
         {
           material_lookup = std::make_unique<Utilities::StructuredDataLookup<2>>(7,1.0);
           material_lookup->load_file(data_directory+material_file_name,
@@ -1319,12 +1319,23 @@ namespace aspect
       }
 
 
+
       template <int dim>
       double
       PhaseFunction<dim>::
       get_transition_slope (const unsigned int phase_index) const
       {
         return transition_slopes[phase_index];
+      }
+
+
+
+      template <int dim>
+      double
+      PhaseFunction<dim>::
+      get_transition_depth (const unsigned int phase_index) const
+      {
+        return transition_depths[phase_index];
       }
 
 

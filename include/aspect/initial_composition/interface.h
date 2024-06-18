@@ -53,51 +53,14 @@ namespace aspect
      * @ingroup InitialCompositions
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface() = default;
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual
-        void
-        initialize ();
-
         /**
          * Return the initial composition as a function of position.
          */
         virtual
         double initial_composition (const Point<dim> &position, const unsigned int n_comp) const = 0;
-
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
     };
 
 
@@ -108,7 +71,7 @@ namespace aspect
      * @ingroup InitialCompositions
      */
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public SimulatorAccess<dim>
     {
       public:
         /**
@@ -116,6 +79,12 @@ namespace aspect
          * functions.
          */
         ~Manager () override;
+
+        /**
+         * Update function. Called once at the beginning of a timestep to
+         * update all plugin objects.
+        */
+        void update();
 
         /**
          * Declare the parameters of all known initial composition plugins, as
@@ -200,7 +169,7 @@ namespace aspect
          * Go through the list of all initial composition models that have been selected
          * in the input file (and are consequently currently active) and see
          * if one of them has the type specified by the template
-         * argument or can be casted to that type. If so, return a reference
+         * argument or can be cast to that type. If so, return a reference
          * to it. If no initial composition model is active that matches the given type,
          * throw an exception.
          *
@@ -282,13 +251,12 @@ namespace aspect
                              "that could not be found in the current model. Activate this "
                              "initial composition model in the input file."));
 
-      typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator initial_composition_model;
       for (const auto &p : initial_composition_objects)
         if (Plugins::plugin_type_matches<InitialCompositionType>(*p))
           return Plugins::get_plugin_as_type<InitialCompositionType>(*p);
 
       // We will never get here, because we had the Assert above. Just to avoid warnings.
-      return Plugins::get_plugin_as_type<InitialCompositionType>(*(*initial_composition_model));
+      return Plugins::get_plugin_as_type<InitialCompositionType>(**(initial_composition_objects.begin()));
     }
 
 

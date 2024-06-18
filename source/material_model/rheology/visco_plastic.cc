@@ -140,25 +140,25 @@ namespace aspect
           {
             // Step 1: viscous behavior
             double non_yielding_viscosity = numbers::signaling_nan<double>();
+
+            // Choice of activation volume depends on whether there is an adiabatic temperature
+            // gradient used when calculating the viscosity. This allows the same activation volume
+            // to be used in incompressible and compressible models.
+            const double temperature_for_viscosity = (this->simulator_is_past_initialization())
+                                                     ?
+                                                     in.temperature[i] + adiabatic_temperature_gradient_for_viscosity*in.pressure[i]
+                                                     :
+                                                     this->get_adiabatic_conditions().temperature(in.position[i]);
+
+            AssertThrow(temperature_for_viscosity != 0, ExcMessage(
+                          "The temperature used in the calculation of the visco-plastic rheology is zero. "
+                          "This is not allowed, because this value is used to divide through. It is probably "
+                          "being caused by the temperature being zero somewhere in the model. The relevant "
+                          "values for debugging are: temperature (" + Utilities::to_string(in.temperature[i]) +
+                          "), adiabatic_temperature_gradient_for_viscosity ("
+                          + Utilities::to_string(adiabatic_temperature_gradient_for_viscosity) + ") and pressure ("
+                          + Utilities::to_string(in.pressure[i]) + ")."));
             {
-
-              // Choice of activation volume depends on whether there is an adiabatic temperature
-              // gradient used when calculating the viscosity. This allows the same activation volume
-              // to be used in incompressible and compressible models.
-              const double temperature_for_viscosity = (this->simulator_is_past_initialization())
-                                                       ?
-                                                       in.temperature[i] + adiabatic_temperature_gradient_for_viscosity*in.pressure[i]
-                                                       :
-                                                       this->get_adiabatic_conditions().temperature(in.position[i]);
-
-              AssertThrow(temperature_for_viscosity != 0, ExcMessage(
-                            "The temperature used in the calculation of the visco-plastic rheology is zero. "
-                            "This is not allowed, because this value is used to divide through. It is probably "
-                            "being caused by the temperature being zero somewhere in the model. The relevant "
-                            "values for debugging are: temperature (" + Utilities::to_string(in.temperature[i]) +
-                            "), adiabatic_temperature_gradient_for_viscosity ("
-                            + Utilities::to_string(adiabatic_temperature_gradient_for_viscosity) + ") and pressure ("
-                            + Utilities::to_string(in.pressure[i]) + ")."));
 
               // Step 1a: compute viscosity from diffusion creep law, at least if it is going to be used
 
@@ -188,28 +188,38 @@ namespace aspect
                    :
                    numbers::signaling_nan<double>());
 
-              // Step 1c: select what form of viscosity to use (diffusion, dislocation, fk, or composite)
+              // Step 1c: select which form of viscosity to use (diffusion, dislocation, fk, or composite), and apply
+              // pre-exponential weakening, if required.
               switch (viscous_flow_law)
                 {
                   case diffusion:
                   {
-                    non_yielding_viscosity = viscosity_diffusion;
+                    non_yielding_viscosity = compositional_viscosity_prefactors.compute_viscosity(in, viscosity_diffusion, j, i, \
+                                                                                                  CompositionalViscosityPrefactors<dim>::ModifiedFlowLaws::diffusion);
                     break;
                   }
                   case dislocation:
                   {
-                    non_yielding_viscosity = viscosity_dislocation;
+                    non_yielding_viscosity = compositional_viscosity_prefactors.compute_viscosity(in, viscosity_dislocation, j, i, \
+                                                                                                  CompositionalViscosityPrefactors<dim>::ModifiedFlowLaws::dislocation);
                     break;
                   }
                   case frank_kamenetskii:
                   {
-                    non_yielding_viscosity = frank_kamenetskii_rheology->compute_viscosity(in.temperature[i], j);
+                    non_yielding_viscosity = frank_kamenetskii_rheology->compute_viscosity(in.temperature[i], j,
+                                                                                           in.pressure[i],
+                                                                                           this->get_adiabatic_conditions().density(this->get_geometry_model().representative_point(0)),
+                                                                                           this->get_gravity_model().gravity_vector(in.position[0]).norm());
                     break;
                   }
                   case composite:
                   {
-                    non_yielding_viscosity = (viscosity_diffusion * viscosity_dislocation)/
-                                             (viscosity_diffusion + viscosity_dislocation);
+                    const double scaled_viscosity_diffusion = compositional_viscosity_prefactors.compute_viscosity(in, viscosity_diffusion, j, i, \
+                                                              CompositionalViscosityPrefactors<dim>::ModifiedFlowLaws::diffusion);
+                    const double scaled_viscosity_dislocation = compositional_viscosity_prefactors.compute_viscosity(in, viscosity_dislocation, j, i, \
+                                                                CompositionalViscosityPrefactors<dim>::ModifiedFlowLaws::dislocation);
+                    non_yielding_viscosity = (scaled_viscosity_diffusion * scaled_viscosity_dislocation)/
+                                             (scaled_viscosity_diffusion + scaled_viscosity_dislocation);
                     break;
                   }
                   default:
@@ -235,7 +245,11 @@ namespace aspect
 
             // Step 2: calculate strain weakening factors for the cohesion, friction, and pre-yield viscosity
             // If no strain weakening is applied, the factors are 1.
-            const std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(j, in.composition[i]);
+            std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(in.composition[i], j);
+
+            if (strain_rheology.use_temperature_activated_strain_softening)
+              weakening_factors = strain_rheology.apply_temperature_dependence_to_strain_weakening_factors(weakening_factors,temperature_for_viscosity,j);
+
             // Apply strain weakening to the viscous viscosity.
             non_yielding_viscosity *= weakening_factors[2];
 
@@ -588,6 +602,9 @@ namespace aspect
         // Constant viscosity prefactor parameters
         Rheology::ConstantViscosityPrefactors<dim>::declare_parameters(prm);
 
+        // Variable viscosity prefactor parameters
+        Rheology::CompositionalViscosityPrefactors<dim>::declare_parameters(prm);
+
         // Drucker Prager plasticity parameters
         Rheology::DruckerPrager<dim>::declare_parameters(prm);
 
@@ -727,6 +744,9 @@ namespace aspect
         // Constant viscosity prefactor parameters
         constant_viscosity_prefactors.initialize_simulator (this->get_simulator());
         constant_viscosity_prefactors.parse_parameters(prm);
+
+        compositional_viscosity_prefactors.initialize_simulator (this->get_simulator());
+        compositional_viscosity_prefactors.parse_parameters(prm);
 
         // Plasticity parameters
         drucker_prager_plasticity.initialize_simulator (this->get_simulator());
