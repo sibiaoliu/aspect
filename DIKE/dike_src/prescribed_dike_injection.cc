@@ -14,10 +14,13 @@
   <http://www.gnu.org/licenses/>.
 */
 
+#include <algorithm>
+#include <vector>
+#include <random>
+
 #include "prescribed_dike_injection.h"
 #include <aspect/geometry_model/box.h>
 #include <aspect/mesh_deformation/free_surface.h>
-#include <aspect/mesh_deformation/fastscape.h>
 #include <aspect/utilities.h>
 #include <aspect/parameters.h>
 
@@ -36,6 +39,8 @@ namespace aspect
     void
     PrescribedDikeInjection<dim>::update()
     {
+      base_model->update();
+
       // we get time passed as seconds (always) but may want
       // to reinterpret it in years
       if (this->convert_output_to_years())
@@ -53,23 +58,24 @@ namespace aspect
           // 1. generate a random number
           // We use a fixed number as seed for random generator
           // this is important if we run the code on more than 1 processor
-          std::srand(static_cast<unsigned int>((seed + 1) * this->get_timestep_number()));
+          std::mt19937 random_number_generator (static_cast<unsigned int>((seed + 1) * this->get_timestep_number()));
+          std::uniform_real_distribution<> dist(0, 1.0);
 
           // 2. Determine the location (x_coordinate) of the generated dike
-          // by appling transfer function, which is a parabolic relationship
-          // between the generated random number and the dike x-coordinate.
+          // by appling quadratic transfer function, which is a parabolic
+          // relationship between the random number and the dike x-coordinate.
           // i.e., rad_num =  (coefficent_a * (x_dike - (x_center_dike_generation_zone
           //                 - width_dike_generation_zone / 2)) ^2
-          // rad_num = (std::rand() % 10000) / 10000.0; range is [0,1)
           // coefficent_a = 1 / (width_dike_generation_zone/2)
           double x_dike_raw = 0.5 * width_dike_generation_zone
-                              * std::sqrt((std::rand() % 10000) / 10000.0)
+                              * std::sqrt(dist(random_number_generator))
                               + x_center_dike_generation_zone 
                               - 0.5 * width_dike_generation_zone;
 
           // flip a coin and distribute dikes symmetrically around the center position of
           // dike generation zone (x_center_dike_generation_zone).
-          if ((std::rand() % 10000) / 10000.0 < 0.5)
+          std::uniform_real_distribution<> dist2(0,1.0);
+          if (dist2(random_number_generator) < 0.5)
             x_dike_location = x_dike_raw ;
           else
             x_dike_location = 2 * x_center_dike_generation_zone - x_dike_raw;
@@ -88,13 +94,9 @@ namespace aspect
                                 / (geometry_model.get_repetitions()[0]
                                 * std::pow(2,total_refinement_levels));
 
-          // Here we assume that the dike width equals dx_max.
           x_dike_left_boundary = std::floor(x_dike_location / dx_max) * dx_max;
-          x_dike_right_boundary = x_dike_left_boundary + dx_max;
-          //std::cout << "x_dike_left_boundary: " << x_dike_left_boundary << "\n" << std::endl;
+          x_dike_right_boundary = x_dike_left_boundary + width_random_dike;
         }
-      
-      base_model->update();
     }
 
     template <int dim>
@@ -102,11 +104,53 @@ namespace aspect
     PrescribedDikeInjection<dim>::evaluate(const typename Interface<dim>::MaterialModelInputs &in,
                                       typename Interface<dim>::MaterialModelOutputs &out) const
     {
+      // When calculating other properties such as viscosity, we need to 
+      // correct for the effect of injection on the strain rate and thus
+      // the deviatoric strain rate.
+      MaterialModel::MaterialModelInputs<dim> in_corrected_strainrate (in);
+
+      // Store the value of injection rate for each quadrature points
+      std::vector<double> dike_injection_rate(in.n_evaluation_points());
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+        {
+          // First find the location of the dike which is either randomly
+          // generated or prescribed by the user.
+          // Then give the dike_injection_rate to the dike points.
+          if (enable_random_dike_generation)
+            {
+              // Note: when the dike is generated randomly, the prescribed injection
+              // rate in the 'Dike injection function' should be only time dependent
+              // and independent of the xyz-coordinate.
+              const double point_depth = this->get_geometry_model().depth(in.position[i]);
+
+              // Find the randomly generated dike location
+              if (in.position[i][0] >= x_dike_left_boundary && in.position[i][0] <= x_dike_right_boundary
+                  && in.temperature[i] <= T_bottom_random_dike && point_depth >= min_depth_random_dike
+                  && this->simulator_is_past_initialization())
+                dike_injection_rate[i] = this->convert_output_to_years()
+                                      ? injection_function.value(in.position[i]) / year_in_seconds
+                                      : injection_function.value(in.position[i]);
+              else
+                dike_injection_rate[i] = 0;
+            }
+          else
+            dike_injection_rate[i] = this->convert_output_to_years()
+                                  ? injection_function.value(in.position[i]) / year_in_seconds
+                                  : injection_function.value(in.position[i]);
+          
+          // Dike injection effect removal
+          if (this->simulator_is_past_initialization() && dike_injection_rate[i] > 0.0)
+            in_corrected_strainrate.strain_rate[i][0][0] -= dike_injection_rate[i];
+        }
+      
+      // Fill variable out with the results form the base material model.
+      base_model->evaluate(in_corrected_strainrate, out);
+
       MaterialModel::PrescribedPlasticDilation<dim>
       *prescribed_dilation = (this->get_parameters().enable_prescribed_dilation)
                              ? out.template get_additional_output<MaterialModel::PrescribedPlasticDilation<dim> >()
                              : nullptr;
-      
+
       AssertThrow(this->introspection().compositional_name_exists("injection_phase"),
                   ExcMessage("Material model 'prescribed dike injection' only works if "
                              "there is a compositional field called 'injection_phase'. "));
@@ -121,43 +165,21 @@ namespace aspect
       auto min_chemical_indices = std::min_element(chemical_composition_indices.begin(), chemical_composition_indices.end());
       auto max_chemical_indices = std::max_element(chemical_composition_indices.begin(), chemical_composition_indices.end());
 
-      // The injection material will replace part of the original material based on the injection rate and diking
-      // duration, i.e.,fraction of injected material to original material for the existence duration of a dike.
-      double dike_injection_rate = 0.0;
+      // The injection material will replace part of the original material 
+      // based on the injection rate and diking duration, i.e., fraction 
+      // of injected material to original material for the existence 
+      // duration of a dike.
       double dike_injection_fraction = 0.0;
-
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
-          // First find the location of the dike which is either randomly
-          // generated or prescribed by the user.
-          // Then give the dike_injection_rate to the dike points.
-          if (enable_random_dike_generation)
-            {
-              // Note: when the dike is generated randomly, the prescribed injection
-              // rate in the 'Dike injection function' should be only time dependent
-              // and independent of the xyz-coordinate.
-              const double point_depth = this->get_geometry_model().depth(in.position[i]);
-              // Find the randomly generated dike location
-              if (in.position[i][0] >= x_dike_left_boundary && in.position[i][0] <= x_dike_right_boundary
-                  && in.temperature[i] <= T_bottom_random_dike && point_depth >= min_depth_random_dike
-                  && this->simulator_is_past_initialization())
-                dike_injection_rate = this->convert_output_to_years() 
-                                      ? injection_function.value(in.position[i]) / year_in_seconds
-                                      : injection_function.value(in.position[i]);
-            }
-          else
-            dike_injection_rate = this->convert_output_to_years()
-                                  ? injection_function.value(in.position[i]) / year_in_seconds
-                                  : injection_function.value(in.position[i]);
-          
-          // Start to add the additional RHS terms of dike injection to Stokes equations.
+          // Add the additional RHS terms of injection to Stokes equations.
           if (prescribed_dilation != nullptr)
-            prescribed_dilation->dilation[i] = dike_injection_rate;
+            prescribed_dilation->dilation[i] = dike_injection_rate[i];
                     
           // Below we track the motion of injection material released from the dike.
           // User-defined or timestep-dependent injection fraction
           if (this->simulator_is_past_initialization())
-            dike_injection_fraction = dike_injection_rate * this->get_timestep();
+            dike_injection_fraction = dike_injection_rate[i] * this->get_timestep();
 
           if (dike_material_injection_fraction != 0.0)
             dike_injection_fraction = dike_material_injection_fraction;
@@ -165,7 +187,8 @@ namespace aspect
           const std::vector<double> &composition = in.composition[i];
           // We limit the value of injection phase compostional field is [0,1] 
           double injection_phase_composition = std::max(std::min(composition[injection_phase_index],1.0),0.0); 
-          if (dike_injection_rate != 0.0)
+
+          if (dike_injection_rate[i] != 0.0)
             {
               // Loop only in chemical copositional fields
               for (unsigned int c = *min_chemical_indices; c <= *max_chemical_indices; ++c)
@@ -203,83 +226,39 @@ namespace aspect
                         out.reaction_terms[i][c] = -composition[c] * std::min(dike_injection_fraction / (1.0001 - injection_phase_composition), 1.0);
                     }
                 }
-              
-              // TODO: keep the previous deformation
-              // i.e., out.reaction_terms[i][plastic_strain_index] = 0; 
-              // We assume no elastic and plastic deformation inside the narrow dike.
-              if (this->introspection().compositional_name_exists("plastic_strain"))
-                {
-                  unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");
-                  out.reaction_terms[i][plastic_strain_index] = -composition[plastic_strain_index];
-                }
-              if (this->introspection().compositional_name_exists("viscous_strain"))
-                {
-                  unsigned int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
-                  out.reaction_terms[i][viscous_strain_index] = -composition[viscous_strain_index];
-                }
-              if (this->introspection().compositional_name_exists("total_strain"))
-                {
-                  unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
-                  out.reaction_terms[i][total_strain_index] = -composition[total_strain_index];
-                }
+            }
 
-              if (this->get_parameters().enable_elasticity)
-                {
-                  unsigned int index_ve_stress_xx = this->introspection().compositional_index_for_name("ve_stress_xx");
-                  unsigned int index_ve_stress_yy = this->introspection().compositional_index_for_name("ve_stress_yy");
-                  if (dim == 2)
-                    {
-                      unsigned int index_ve_stress_xy = this->introspection().compositional_index_for_name("ve_stress_xy");
-                      out.reaction_terms[i][index_ve_stress_xx] = -composition[index_ve_stress_xx];
-                      out.reaction_terms[i][index_ve_stress_yy] = -composition[index_ve_stress_yy];
-                      out.reaction_terms[i][index_ve_stress_xy] = -composition[index_ve_stress_xy];
-                    }
-                  else //if (dim == 3)
-                    {
-                      unsigned int index_ve_stress_zz = this->introspection().compositional_index_for_name("ve_stress_zz");
-                      unsigned int index_ve_stress_xy = this->introspection().compositional_index_for_name("ve_stress_xy");
-                      unsigned int index_ve_stress_xz = this->introspection().compositional_index_for_name("ve_stress_xz");
-                      unsigned int index_ve_stress_yz = this->introspection().compositional_index_for_name("ve_stress_yz");
-                      out.reaction_terms[i][index_ve_stress_xx] = -composition[index_ve_stress_xx];
-                      out.reaction_terms[i][index_ve_stress_yy] = -composition[index_ve_stress_yy];
-                      out.reaction_terms[i][index_ve_stress_xy] = -composition[index_ve_stress_xy];
-                      out.reaction_terms[i][index_ve_stress_zz] = -composition[index_ve_stress_zz];
-                      out.reaction_terms[i][index_ve_stress_yz] = -composition[index_ve_stress_yz];
-                      out.reaction_terms[i][index_ve_stress_xz] = -composition[index_ve_stress_xz];
-                    }
-                }
+          // We assume that there is no additional plastic deformation
+          // generated by dike injection within the dike zone. Instead, 
+          // keeping established deformation before dike injection.
+          if (this->introspection().compositional_name_exists("plastic_strain"))
+            {
+              unsigned int plastic_strain_index = this->introspection().compositional_index_for_name("plastic_strain");             
+              if (dike_injection_rate[i] != 0.0)
+                out.reaction_terms[i][plastic_strain_index] = 0.0;
+              
+              if (composition[plastic_strain_index] < 0.0)
+                out.reaction_terms[i][plastic_strain_index] = -composition[plastic_strain_index];
+            }
+          if (this->introspection().compositional_name_exists("viscous_strain"))
+            {
+              unsigned int viscous_strain_index = this->introspection().compositional_index_for_name("viscous_strain");
+              if (dike_injection_rate[i] != 0.0)
+                out.reaction_terms[i][viscous_strain_index] = 0.0;
+
+              if (composition[viscous_strain_index] < 0.0)
+                out.reaction_terms[i][viscous_strain_index] = -composition[viscous_strain_index];
+            }
+          if (this->introspection().compositional_name_exists("total_strain"))
+            {
+              unsigned int total_strain_index = this->introspection().compositional_index_for_name("total_strain");
+              if (dike_injection_rate[i] != 0.0)
+                out.reaction_terms[i][total_strain_index] = 0.0;
+
+              if (composition[total_strain_index] < 0.0)
+                out.reaction_terms[i][total_strain_index] = -composition[total_strain_index];
             }
         }
-
-      // When calculating other properties such as viscosity, we need to 
-      // correct for the effect of injection on the strain rate and thus
-      // the deviatoric strain rate.
-      MaterialModel::MaterialModelInputs<dim> in_corrected_strainrate (in);
-
-      // fill variable out with the results form the base material model
-      // The base model may have additional outputs such as frictional angle
-      // in visco-plastic model, so we need to copy material properties first.
-      typename Interface<dim>::MaterialModelOutputs base_output(out.n_evaluation_points(),
-                                                                this->introspection().n_compositional_fields);
-
-      // Move the additional outputs to base_output so that our models can fill
-      // them if desired:
-      base_output.move_additional_outputs_from(out);
-      base_model->evaluate(in_corrected_strainrate, base_output);
-
-      // Copy required properties
-      out.viscosities = base_output.viscosities;
-      out.densities = base_output.densities;
-      out.thermal_expansion_coefficients = base_output.thermal_expansion_coefficients;
-      out.specific_heat = base_output.specific_heat;
-      out.thermal_conductivities = base_output.thermal_conductivities;
-      out.compressibilities = base_output.compressibilities;
-      out.entropy_derivative_pressure = base_output.entropy_derivative_pressure;
-      out.entropy_derivative_temperature = base_output.entropy_derivative_temperature;
-      out.reaction_terms = base_output.reaction_terms;
-
-      //Finally, we move the additional outputs back into place:
-      out.move_additional_outputs_from(base_output);
     }
 
     template <int dim>
@@ -315,7 +294,9 @@ namespace aspect
                             "zone and the dike. Units: none.");
           prm.declare_entry("Minimum depth of randomly generated dike", "0.0", Patterns::Double(0),
                             "Minimum depth of the generated dike. It sets to the surface by default, "
-                            "but can be set to a given depth below the surface. Units: none.");
+                            "but can be set to a given depth below the surface. Units: m.");
+          prm.declare_entry("Width of randomly generated dike", "0.0", Patterns::Double(0),
+                            "Width of the generated dike. Units: m.");
           prm.declare_entry("Enable random dike generation", "false", Patterns::Bool (),
                             "Whether the dikes are generated randomly. If the dike is generated randomly, "
                             "the prescribed injection rate in the 'Dike injection function' should be "
@@ -358,6 +339,7 @@ namespace aspect
           seed = prm.get_double ("Random number generator seed");          
           T_bottom_random_dike = prm.get_double ("Bottom temperature of randomly generated dike");
           min_depth_random_dike = prm.get_double ("Minimum depth of randomly generated dike");
+          width_random_dike = prm.get_double ("Width of randomly generated dike");
 
           prm.enter_subsection("Dike injection function");
           {
