@@ -138,6 +138,11 @@ namespace aspect
         double min_depth_random_dike;
 
         /**
+         * Width of the generated dike.
+         */
+        double width_random_dike;
+
+        /**
          * Seed for the random number generator
          */
         double seed;
