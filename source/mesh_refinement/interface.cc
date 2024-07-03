@@ -50,87 +50,20 @@ namespace aspect
 // ------------------------------ Manager -----------------------------
 
     template <int dim>
-    Manager<dim>::~Manager()
-      = default;
-
-
-
-    template <int dim>
-    void
-    Manager<dim>::update ()
-    {
-      Assert (mesh_refinement_objects.size() > 0, ExcInternalError());
-
-      // call the update() functions of all refinement plugins.
-      for (const auto &p : mesh_refinement_objects)
-        {
-          try
-            {
-              p->update ();
-            }
-
-          // plugins that throw exceptions usually do not result in
-          // anything good because they result in an unwinding of the stack
-          // and, if only one processor triggers an exception, the
-          // destruction of objects often causes a deadlock. thus, if
-          // an exception is generated, catch it, print an error message,
-          // and abort the program
-          catch (std::exception &exc)
-            {
-              std::cerr << std::endl << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-              std::cerr << "Exception on MPI process <"
-                        << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
-                        << "> while running mesh refinement plugin <"
-                        << typeid(*p).name()
-                        << ">: " << std::endl
-                        << exc.what() << std::endl
-                        << "Aborting!" << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-
-              // terminate the program!
-              MPI_Abort (MPI_COMM_WORLD, 1);
-            }
-          catch (...)
-            {
-              std::cerr << std::endl << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-              std::cerr << "Exception on MPI process <"
-                        << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
-                        << "> while running mesh refinement plugin <"
-                        << typeid(*p).name()
-                        << ">: " << std::endl;
-              std::cerr << "Unknown exception!" << std::endl
-                        << "Aborting!" << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-
-              // terminate the program!
-              MPI_Abort (MPI_COMM_WORLD, 1);
-            }
-        }
-    }
-
-
-
-    template <int dim>
     void
     Manager<dim>::execute (Vector<float> &error_indicators) const
     {
-      Assert (mesh_refinement_objects.size() > 0, ExcInternalError());
+      Assert (this->plugin_objects.size() > 0, ExcInternalError());
 
       // call the execute() functions of all plugins we have
       // here in turns. then normalize the output vector and
       // verify that its values are non-negative numbers
-      std::vector<Vector<float>> all_error_indicators (mesh_refinement_objects.size(),
+      std::vector<Vector<float>> all_error_indicators (this->plugin_objects.size(),
                                                         Vector<float>(error_indicators.size()));
       unsigned int index = 0;
       for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p, ++index)
+           p = this->plugin_objects.begin();
+           p != this->plugin_objects.end(); ++p, ++index)
         {
           try
             {
@@ -201,7 +134,7 @@ namespace aspect
         {
           case plus:
           {
-            for (unsigned int i=0; i<mesh_refinement_objects.size(); ++i)
+            for (unsigned int i=0; i<this->plugin_objects.size(); ++i)
               error_indicators += all_error_indicators[i];
             break;
           }
@@ -209,7 +142,7 @@ namespace aspect
           case max:
           {
             error_indicators = all_error_indicators[0];
-            for (unsigned int i=1; i<mesh_refinement_objects.size(); ++i)
+            for (unsigned int i=1; i<this->plugin_objects.size(); ++i)
               {
                 Assert (error_indicators.size() == all_error_indicators[i].size(),
                         ExcInternalError());
@@ -230,11 +163,11 @@ namespace aspect
     void
     Manager<dim>::tag_additional_cells () const
     {
-      Assert (mesh_refinement_objects.size() > 0, ExcInternalError());
+      Assert (this->plugin_objects.size() > 0, ExcInternalError());
 
       // call the tag_additional_cells() functions of all
       // plugins we have here in turns.
-      for (const auto &p : mesh_refinement_objects)
+      for (const auto &p : this->plugin_objects)
         {
           try
             {
@@ -449,16 +382,16 @@ namespace aspect
                    ExcMessage ("You need to provide at least one mesh refinement criterion in the input file!"));
       for (auto &plugin_name : plugin_names)
         {
-          mesh_refinement_objects.push_back (std::unique_ptr<Interface<dim>>
-                                             (std::get<dim>(registered_plugins)
-                                              .create_plugin (plugin_name,
-                                                              "Mesh refinement::Refinement criteria merge operation")));
+          this->plugin_objects.push_back (std::unique_ptr<Interface<dim>>
+                                          (std::get<dim>(registered_plugins)
+                                           .create_plugin (plugin_name,
+                                                           "Mesh refinement::Refinement criteria merge operation")));
 
-          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*mesh_refinement_objects.back()))
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*this->plugin_objects.back()))
             sim->initialize_simulator (this->get_simulator());
 
-          mesh_refinement_objects.back()->parse_parameters (prm);
-          mesh_refinement_objects.back()->initialize ();
+          this->plugin_objects.back()->parse_parameters (prm);
+          this->plugin_objects.back()->initialize ();
         }
     }
 

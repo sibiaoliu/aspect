@@ -79,6 +79,9 @@ namespace aspect
                                          property_manager->get_n_property_components());
 
       connect_to_signals(this->get_signals());
+
+      AssertThrow(this->introspection().get_composition_base_element_indices().size()<=1,
+                  ExcNotImplemented("Particles are not supported in computations with compositional fields with different finite element types."));
     }
 
 
@@ -1331,6 +1334,7 @@ namespace aspect
         generator = Generator::create_particle_generator<dim> (prm);
         if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(generator.get()))
           sim->initialize_simulator (this->get_simulator());
+        generator->set_particle_world_index(world_index);
         generator->parse_parameters(prm);
         generator->initialize();
 
@@ -1338,6 +1342,7 @@ namespace aspect
         property_manager = std::make_unique<Property::Manager<dim>> ();
         SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(property_manager.get());
         sim->initialize_simulator (this->get_simulator());
+        property_manager->set_particle_world_index(world_index);
         property_manager->parse_parameters(prm);
         property_manager->initialize();
 
@@ -1345,6 +1350,7 @@ namespace aspect
         integrator = Integrator::create_particle_integrator<dim> (prm);
         if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(integrator.get()))
           sim->initialize_simulator (this->get_simulator());
+        integrator->set_particle_world_index(world_index);
         integrator->parse_parameters(prm);
         integrator->initialize();
 
@@ -1352,6 +1358,7 @@ namespace aspect
         interpolator = Interpolator::create_particle_interpolator<dim> (prm);
         if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(interpolator.get()))
           sim->initialize_simulator (this->get_simulator());
+        interpolator->set_particle_world_index(world_index);
         interpolator->parse_parameters(prm);
         interpolator->initialize();
 

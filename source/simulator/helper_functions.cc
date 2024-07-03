@@ -201,7 +201,7 @@ namespace aspect
     if (this->is_temperature())
       return introspection.polynomial_degree.temperature;
     else
-      return introspection.polynomial_degree.compositional_fields;
+      return introspection.polynomial_degree.compositional_fields[compositional_variable];
   }
 
 
@@ -1507,7 +1507,7 @@ namespace aspect
     const Quadrature<dim> &quadrature_formula_0
       = (advection_field.is_temperature() ?
          introspection.quadratures.temperature :
-         introspection.quadratures.compositional_fields);
+         introspection.quadratures.compositional_fields[advection_field.compositional_variable]);
     const unsigned int n_q_points_0 = quadrature_formula_0.size();
 
     // fe values for points evaluation
@@ -2242,7 +2242,7 @@ namespace aspect
                                "Please check the consistency of your input file."));
 
         const bool use_simplified_adiabatic_heating =
-          heating_model_manager.template get_matching_heating_model<HeatingModel::AdiabaticHeating<dim>>()
+          heating_model_manager.template get_matching_active_plugin<HeatingModel::AdiabaticHeating<dim>>()
           .use_simplified_adiabatic_heating();
 
         AssertThrow(use_simplified_adiabatic_heating == true,
