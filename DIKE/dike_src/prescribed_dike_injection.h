@@ -22,6 +22,7 @@
 #include <deal.II/base/function_lib.h>
 #include <deal.II/base/parsed_function.h>
 #include <deal.II/base/signaling_nan.h>
+#include <deal.II/matrix_free/fe_point_evaluation.h>
 
 namespace aspect
 {
@@ -60,11 +61,9 @@ namespace aspect
         /**
          * Function to compute the material properties in @p out given
          * the inputs in @p in.
-         */
-        void
-        evaluate (const typename Interface<dim>::MaterialModelInputs &in,
-                  typename Interface<dim>::MaterialModelOutputs &out) const override;
-
+         */  
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override;
         /**
          * Declare the parameters through input files.
          */
@@ -102,6 +101,14 @@ namespace aspect
          * Amount of new injected material from the dike
          */
         double dike_material_injection_fraction;
+
+        /**
+         * Temperature at the bottom of the generated dike. 
+         * It usually equals to the temperature at the 
+         * intersection of the brittle-ductile transition 
+         * zone and the dike.
+         */
+        double T_bottom_dike;
         
         /**
          * Whether using the random dike generation or not.
@@ -119,26 +126,28 @@ namespace aspect
         double width_dike_generation_zone;
 
         /**
-         * x_coordinates of the generated dike
+         * x_coordinates of the randomly generated dike
          */
         double x_dike_left_boundary;
         double x_dike_right_boundary;
 
         /**
-         * Temperature at the bottom of the generated dike. 
-         * It usually equals to the temperature at the 
-         * intersection of the brittle-ductile transition 
-         * zone and the dike.
+         * Reference top depth of the randomly generated dike.
          */
-        double T_bottom_random_dike;
+        double ref_top_depth_random_dike;
 
         /**
-         * Minimum depth of the generated dike.
+         * full range of dike depth change.
          */
-        double min_depth_random_dike;
+        double range_depth_change_random_dike;
 
         /**
-         * Width of the generated dike.
+         * randomly genetrated dike top depth.
+         */
+        double top_depth_random_dike;
+
+        /**
+         * Width of the randomly generated dike.
          */
         double width_random_dike;
 
@@ -146,11 +155,6 @@ namespace aspect
          * Seed for the random number generator
          */
         double seed;
-
-        /**
-         * Injection rate of the generated dike.
-         */
-        double injection_rate_random_dike;
 
         /**
          * The total refinment levels in the model, which equals to
@@ -163,8 +167,14 @@ namespace aspect
          * Pointer to the material model used as the base model.
          */
         std::unique_ptr<MaterialModel::Interface<dim> > base_model;
-    };
 
+          /**
+           * We cache the evaluators that are necessary to evaluate
+           * compositions. By caching the evaluator, we can avoid
+           * recreating them every time we need it.
+           */
+          mutable std::vector<std::unique_ptr<FEPointEvaluation<1, dim>>> composition_evaluators;
+    };
   }
 }
 
