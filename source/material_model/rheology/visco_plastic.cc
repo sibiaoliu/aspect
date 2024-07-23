@@ -207,7 +207,7 @@ namespace aspect
                   case frank_kamenetskii:
                   {
                     non_yielding_viscosity = frank_kamenetskii_rheology->compute_viscosity(in.temperature[i], j,
-                                                                                           in.pressure[i],
+                                                                                           pressure_for_creep,
                                                                                            this->get_adiabatic_conditions().density(this->get_geometry_model().representative_point(0)),
                                                                                            this->get_gravity_model().gravity_vector(in.position[0]).norm());
                     break;
@@ -335,7 +335,7 @@ namespace aspect
                 {
                   //Step 5b-1: always rescale the viscosity back to the yield surface
                   const double viscosity_limiter = yield_stress / (2.0 * ref_strain_rate)
-                                                   * std::pow((edot_ii/ref_strain_rate),
+                                                   * std::pow((effective_edot_ii/ref_strain_rate),
                                                               1./exponents_stress_limiter[j] - 1.0);
                   effective_viscosity = 1. / ( 1./viscosity_limiter + 1./non_yielding_viscosity);
                   break;
@@ -577,8 +577,8 @@ namespace aspect
         prm.declare_entry ("Use adiabatic pressure in creep viscosity", "false",
                            Patterns::Bool (),
                            "Whether to use the adiabatic pressure instead of the full "
-                           "pressure (default) when calculating creep (diffusion, dislocation, "
-                           "and peierls) viscosity. This may be helpful in models where the "
+                           "pressure (default) when calculating viscous creep. "
+                           "This may be helpful in models where the "
                            "full pressure has an unusually large negative value arising from "
                            "large negative dynamic pressure, resulting in solver convergence "
                            "issue and in some cases a viscosity of zero.");

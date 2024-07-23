@@ -294,11 +294,7 @@ namespace aspect
     template <typename InterfaceType>
     ManagerBase<InterfaceType>::~ManagerBase()
     {
-      // Not all derived manager classes currently set the 'plugin_names'
-      // variable, but for those that do, they better have as many names
-      // as there are plugins.
-      if (plugin_names.size() > 0)
-        Assert (plugin_names.size() == plugin_objects.size(), ExcInternalError());
+      Assert (plugin_names.size() == plugin_objects.size(), ExcInternalError());
     }
 
 
@@ -909,6 +905,14 @@ namespace aspect
         // read when looking over stuff visually
         output_stream << std::endl;
       }
+
+
+      /**
+       * A placeholder class that is used wherever we need a PluginList object
+       * for `dim==0` and `dim==1`, which of course are not dimensions we
+       * support in ASPECT.
+       */
+      class UnusablePluginList {};
     }
   }
 }

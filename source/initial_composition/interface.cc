@@ -40,8 +40,8 @@ namespace aspect
     namespace
     {
       std::tuple
-      <void *,
-      void *,
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
       aspect::internal::Plugins::PluginList<Interface<2>>,
       aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
@@ -96,7 +96,6 @@ namespace aspect
                                                   this->plugin_names.size(),
                                                   "List of model operators");
         model_operators = Utilities::create_model_operator_list(model_operator_names);
-
       }
       prm.leave_subsection ();
 
@@ -111,10 +110,9 @@ namespace aspect
       // their own parameters
       for (const auto &model_name : this->plugin_names)
         {
-          this->plugin_objects.push_back (std::unique_ptr<Interface<dim>>
-                                          (std::get<dim>(registered_plugins)
-                                           .create_plugin (model_name,
-                                                           "Initial composition model::Model names")));
+          this->plugin_objects.emplace_back (std::get<dim>(registered_plugins)
+                                             .create_plugin (model_name,
+                                                             "Initial composition model::Model names"));
 
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*this->plugin_objects.back()))
             sim->initialize_simulator (this->get_simulator());

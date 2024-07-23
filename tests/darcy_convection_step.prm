@@ -27,7 +27,8 @@
 # pemeability is 1e-6, and gravity is set to -10. This results in a fluid
 # velocity of 24.25 m/yr. The mesh is 2.5 km x 2.5 km, and with CFL = 1,
 # this means that the time step should be 2500 m / 24.25 m/yr = 103.11
-
+# This also serves as a test for the 'darcy velocity' postprocessor, by
+# confirming that the darcy velocity is 24.25 m/yr.
 ############### Global parameters
 
 set Dimension                              = 2
@@ -46,6 +47,7 @@ set Use operator splitting                 = true
 # 10 km x 10 km box
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent = 10e3
     set Y extent = 10e3
@@ -55,6 +57,7 @@ end
 # Uniform temperature of 293 K
 subsection Initial temperature model
   set Model name = function
+
   subsection Function
     set Function expression = 293
   end
@@ -63,6 +66,7 @@ end
 subsection Boundary temperature model
   set List of model names = box
   set Fixed temperature boundary indicators   = top, bottom, left, right
+
   subsection Box
     set Bottom temperature = 293
     set Top temperature    = 293
@@ -114,6 +118,7 @@ end
 # the fluid from partitioning into the solid.
 subsection Material model
   set Model name = reactive fluid transport
+
   subsection Reactive Fluid Transport Model
     set Base model                                       = visco plastic
     set Reference fluid density                          = 1000
@@ -124,8 +129,8 @@ subsection Material model
     set Fluid-solid reaction scheme                      = zero solubility
   end
 
-# Set the solid density to 3000 kg/m3, and set the minimum/maximum viscosity
-# to 1e21 Pa s for an isoviscous model.
+  # Set the solid density to 3000 kg/m3, and set the minimum/maximum viscosity
+  # to 1e21 Pa s for an isoviscous model.
   subsection Visco Plastic
     set Reference temperature                   = 1600
     set Prefactors for diffusion creep          = 5e-21
@@ -150,6 +155,11 @@ subsection Melt settings
   set Include melt transport             = false
 end
 
+# Output the darcy velocity
 subsection Postprocess
-  set List of postprocessors =
+  set List of postprocessors = visualization
+  subsection Visualization
+    set List of output variables = darcy velocity
+    set Output format            = gnuplot
+  end
 end

@@ -39,8 +39,8 @@ namespace aspect
     namespace
     {
       std::tuple
-      <void *,
-      void *,
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
       aspect::internal::Plugins::PluginList<Interface<2>>,
       aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
@@ -101,10 +101,9 @@ namespace aspect
       for (auto &model_name : this->plugin_names)
         {
           // create initial temperature objects
-          this->plugin_objects.push_back (std::unique_ptr<Interface<dim>>
-                                          (std::get<dim>(registered_plugins)
-                                           .create_plugin (model_name,
-                                                           "Initial temperature model::Model names")));
+          this->plugin_objects.emplace_back (std::get<dim>(registered_plugins)
+                                             .create_plugin (model_name,
+                                                             "Initial temperature model::Model names"));
 
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*this->plugin_objects.back()))
             sim->initialize_simulator (this->get_simulator());
