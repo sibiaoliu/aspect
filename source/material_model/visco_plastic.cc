@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,46 +30,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-
-    template <int dim>
-    bool
-    ViscoPlastic<dim>::
-    is_yielding (const double pressure,
-                 const double temperature,
-                 const std::vector<double> &composition,
-                 const SymmetricTensor<2,dim> &strain_rate) const
-    {
-      /* The following returns whether or not the material is plastically yielding
-       * as documented in evaluate.
-       */
-      bool plastic_yielding = false;
-
-      MaterialModel::MaterialModelInputs <dim> in (/*n_evaluation_points=*/1,
-                                                                           this->n_compositional_fields());
-      unsigned int i = 0;
-
-      in.pressure[i] = pressure;
-      in.temperature[i] = temperature;
-      in.composition[i] = composition;
-      in.strain_rate[i] = strain_rate;
-
-      const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(composition,
-                                                   this->introspection().chemical_composition_field_indices());
-
-      const IsostrainViscosities isostrain_viscosities
-        = rheology->calculate_isostrain_viscosities(in, i, volume_fractions);
-
-      std::vector<double>::const_iterator max_composition
-        = std::max_element(volume_fractions.begin(),volume_fractions.end());
-
-      plastic_yielding = isostrain_viscosities.composition_yielding[std::distance(volume_fractions.begin(),
-                                                                                  max_composition)];
-
-      return plastic_yielding;
-    }
-
-
-
     template <int dim>
     bool
     ViscoPlastic<dim>::
@@ -460,21 +420,9 @@ namespace aspect
           phase_function.initialize_simulator (this->get_simulator());
           phase_function.parse_parameters (prm);
 
-          std::vector<unsigned int> n_phases_for_each_composition = phase_function.n_phases_for_each_composition();
-
-          // Currently, phase_function.n_phases_for_each_composition() returns a list of length
-          // equal to the total number of compositions, whether or not they are chemical compositions.
-          // The equation_of_state (multicomponent incompressible) requires a list only for
-          // chemical compositions.
-          std::vector<unsigned int> n_phases_for_each_chemical_composition = {n_phases_for_each_composition[0]};
-          n_phase_transitions_for_each_chemical_composition = {n_phases_for_each_composition[0] - 1};
-          n_phases = n_phases_for_each_composition[0];
-          for (auto i : this->introspection().chemical_composition_field_indices())
-            {
-              n_phases_for_each_chemical_composition.push_back(n_phases_for_each_composition[i+1]);
-              n_phase_transitions_for_each_chemical_composition.push_back(n_phases_for_each_composition[i+1] - 1);
-              n_phases += n_phases_for_each_composition[i+1];
-            }
+          const std::vector<unsigned int> n_phases_for_each_chemical_composition = phase_function.n_phases_for_each_chemical_composition();
+          n_phase_transitions_for_each_chemical_composition = phase_function.n_phase_transitions_for_each_chemical_composition();
+          n_phases = phase_function.n_phases_over_all_chemical_compositions();
 
           // Equation of state parameters
           equation_of_state.initialize_simulator (this->get_simulator());

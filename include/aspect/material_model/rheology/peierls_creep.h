@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2020 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2020 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -269,7 +269,7 @@ namespace aspect
           /**
            * A parameter determines whether a strict cutoff
            * on the stress is applied to the Peierls creep
-          */
+           */
           bool apply_strict_cutoff;
 
           /**

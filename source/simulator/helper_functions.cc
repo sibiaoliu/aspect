@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -205,6 +205,19 @@ namespace aspect
   }
 
 
+
+  template <int dim>
+  std::string
+  Simulator<dim>::AdvectionField::name(const Introspection<dim> &introspection) const
+  {
+    if (this->is_temperature())
+      return "temperature";
+    else
+      return "composition " + std::to_string(compositional_variable) + " (" + introspection.name_for_compositional_index(compositional_variable) + ")";
+  }
+
+
+
   template <int dim>
   void Simulator<dim>::write_plugin_graph (std::ostream &out) const
   {
@@ -404,7 +417,7 @@ namespace aspect
     // of the viscosity. The order of magnitude is the logarithm of
     // the viscosity, so
     //
-    //   \eta_{ref} = exp ( 1/N * (log(eta_1) + log(eta_2) + ... + log(eta_N))
+    //   \eta_{ref} = exp( 1/N * (log(eta_1) + log(eta_2) + ... + log(eta_N))
     //
     // where the \eta_i are typical viscosities on the cells of the mesh.
     // For this, we just take the viscosity at the cell center.
@@ -538,7 +551,7 @@ namespace aspect
           {
             computing_timer.print_summary ();
             pcout << "-- Total wallclock time elapsed including restarts: "
-                  << round(wall_timer.wall_time()+total_walltime_until_last_snapshot)
+                  << std::round(wall_timer.wall_time()+total_walltime_until_last_snapshot)
                   << 's' << std::endl;
           }
 
@@ -653,7 +666,7 @@ namespace aspect
       {
         computing_timer.print_summary ();
         pcout << "-- Total wallclock time elapsed including restarts: "
-              << round(wall_timer.wall_time()+total_walltime_until_last_snapshot)
+              << std::round(wall_timer.wall_time()+total_walltime_until_last_snapshot)
               << 's' << std::endl;
       }
   }
@@ -837,7 +850,13 @@ namespace aspect
 
     vec.compress(VectorOperation::insert);
 
+#if DEAL_II_VERSION_GTE(9,7,0)
+    AffineConstraints<double> hanging_node_constraints(introspection.index_sets.system_relevant_set,
+                                                       introspection.index_sets.system_relevant_set);
+#else
     AffineConstraints<double> hanging_node_constraints(introspection.index_sets.system_relevant_set);
+#endif
+
     DoFTools::make_hanging_node_constraints(dof_handler, hanging_node_constraints);
     hanging_node_constraints.close();
 
@@ -1417,7 +1436,7 @@ namespace aspect
 
     const unsigned int n_q_points_1 = quadrature_formula_1.size();
     const unsigned int n_q_points_2 = quadrature_formula_2.size();
-    const unsigned int n_q_points   = dim * n_q_points_2 * static_cast<unsigned int>(std::pow(n_q_points_1, dim-1));
+    const unsigned int n_q_points   = dim * n_q_points_2 * Utilities::fixed_power<dim-1>(n_q_points_1);
 
     std::vector<Point <dim>> quadrature_points;
     quadrature_points.reserve(n_q_points);

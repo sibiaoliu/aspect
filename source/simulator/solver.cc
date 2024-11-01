@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -764,7 +764,19 @@ namespace aspect
   Simulator<dim>::solve_stokes ()
   {
     TimerOutput::Scope timer (computing_timer, "Solve Stokes system");
-    pcout << "   Solving Stokes system... " << std::flush;
+
+    const std::string name = [&]() -> std::string
+    {
+      if (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg)
+        return "GMG";
+      if (parameters.use_direct_stokes_solver)
+        return "direct";
+      if (parameters.use_bfbt)
+        return "AMG-BFBT";
+      return "AMG";
+    }();
+
+    pcout << "   Solving Stokes system (" << name << ")... " << std::flush;
 
     if (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg)
       {

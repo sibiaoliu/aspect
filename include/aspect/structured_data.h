@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -767,11 +767,6 @@ namespace aspect
          */
         std::unique_ptr<aspect::Utilities::StructuredDataLookup<1>> lookup;
     };
-
-
-
-    template <int dim>
-    using AsciiDataLookup DEAL_II_DEPRECATED = StructuredDataLookup<dim>;
   }
 }
 

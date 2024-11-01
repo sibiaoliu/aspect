@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -952,15 +952,6 @@ namespace aspect
 
 
       std::vector<double>
-      compute_volume_fractions(const std::vector<double> &compositional_fields,
-                               const ComponentMask &field_mask)
-      {
-        return compute_composition_fractions(compositional_fields, field_mask);
-      }
-
-
-
-      std::vector<double>
       compute_volumes_from_masses(const std::vector<double> &masses,
                                   const std::vector<double> &densities,
                                   const bool return_as_fraction)
@@ -1126,7 +1117,7 @@ namespace aspect
           {
             // Do averaging when there are multiple phases
             if (operation == PhaseUtilities::logarithmic)
-              averaged_parameter = log(averaged_parameter);
+              averaged_parameter = std::log(averaged_parameter);
 
             for (unsigned int i=0; i<n_phase_transitions_per_composition[composition_index]; ++i)
               {
@@ -1146,7 +1137,7 @@ namespace aspect
                   AssertThrow(false, ExcInternalError());
               }
             if (operation == PhaseUtilities::logarithmic)
-              averaged_parameter = exp(averaged_parameter);
+              averaged_parameter = std::exp(averaged_parameter);
           }
         return averaged_parameter;
       }
@@ -1296,6 +1287,8 @@ namespace aspect
           return transition_pressures.size();
       }
 
+
+
       template <int dim>
       unsigned int
       PhaseFunction<dim>::
@@ -1304,6 +1297,18 @@ namespace aspect
         return n_phases_total;
       }
 
+
+
+      template <int dim>
+      unsigned int
+      PhaseFunction<dim>::
+      n_phases_over_all_chemical_compositions () const
+      {
+        return n_phases_total_chemical_compositions;
+      }
+
+
+
       template <int dim>
       const std::vector<unsigned int> &
       PhaseFunction<dim>::n_phase_transitions_for_each_composition () const
@@ -1311,11 +1316,31 @@ namespace aspect
         return *n_phase_transitions_per_composition;
       }
 
+
+
       template <int dim>
       const std::vector<unsigned int> &
       PhaseFunction<dim>::n_phases_for_each_composition () const
       {
         return n_phases_per_composition;
+      }
+
+
+
+      template <int dim>
+      const std::vector<unsigned int> &
+      PhaseFunction<dim>::n_phase_transitions_for_each_chemical_composition () const
+      {
+        return n_phase_transitions_per_chemical_composition;
+      }
+
+
+
+      template <int dim>
+      const std::vector<unsigned int> &
+      PhaseFunction<dim>::n_phases_for_each_chemical_composition () const
+      {
+        return n_phases_per_chemical_composition;
       }
 
 
@@ -1430,84 +1455,52 @@ namespace aspect
       void
       PhaseFunction<dim>::parse_parameters (ParameterHandler &prm)
       {
+        std::vector<std::string> compositional_field_names = this->introspection().get_composition_names();
         // Establish that a background field is required here
-        const bool has_background_field = true;
+        compositional_field_names.insert(compositional_field_names.begin(),"background");
+        Utilities::MapParsing::Options options(compositional_field_names, "Phase transition temperatures");
+        options.allow_missing_keys = true;
+        options.allow_multiple_values_per_key = true;
+        options.store_values_per_key = true;
+        options.n_values_per_key = std::vector<unsigned int>();
 
-        // Retrieve the list of composition names
-        const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
+        options.property_name = "Phase transition temperatures";
+        transition_temperatures = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
 
-        n_phase_transitions_per_composition = std::make_unique<std::vector<unsigned int>>();
+        // Now we know how many entries we have for each composition
+        // ensure that the number of phase transitions is consistent
+        options.store_values_per_key = false;
+        options.check_values_per_key = true;
 
         use_depth_instead_of_pressure = prm.get_bool ("Define transition by depth instead of pressure");
 
         if (use_depth_instead_of_pressure)
           {
-            transition_depths          = Utilities::parse_map_to_double_array (prm.get("Phase transition depths"),
-                                                                               list_of_composition_names,
-                                                                               has_background_field,
-                                                                               "Phase transition depths",
-                                                                               true,
-                                                                               n_phase_transitions_per_composition,
-                                                                               true);
+            options.property_name = "Phase transition depths";
+            transition_depths          = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
 
-            transition_widths          = Utilities::parse_map_to_double_array (prm.get("Phase transition widths"),
-                                                                               list_of_composition_names,
-                                                                               has_background_field,
-                                                                               "Phase transition widths",
-                                                                               true,
-                                                                               n_phase_transitions_per_composition,
-                                                                               true);
+            options.property_name = "Phase transition widths";
+            transition_widths          = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
           }
         else
           {
-            transition_pressures = Utilities::parse_map_to_double_array (prm.get("Phase transition pressures"),
-                                                                         list_of_composition_names,
-                                                                         has_background_field,
-                                                                         "Phase transition pressures",
-                                                                         true,
-                                                                         n_phase_transitions_per_composition,
-                                                                         true);
+            options.property_name = "Phase transition pressures";
+            transition_pressures = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
 
-            transition_pressure_widths = Utilities::parse_map_to_double_array (prm.get("Phase transition pressure widths"),
-                                                                               list_of_composition_names,
-                                                                               has_background_field,
-                                                                               "Phase transition pressure widths",
-                                                                               true,
-                                                                               n_phase_transitions_per_composition,
-                                                                               true);
+            options.property_name = "Phase transition pressure widths";
+            transition_pressure_widths = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
           }
 
-        transition_temperatures = Utilities::parse_map_to_double_array (prm.get("Phase transition temperatures"),
-                                                                        list_of_composition_names,
-                                                                        has_background_field,
-                                                                        "Phase transition temperatures",
-                                                                        true,
-                                                                        n_phase_transitions_per_composition,
-                                                                        true);
+        options.property_name = "Phase transition temperature upper limits";
+        transition_temperature_upper_limits = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
 
-        transition_temperature_upper_limits = Utilities::parse_map_to_double_array (prm.get("Phase transition temperature upper limits"),
-                                                                                    list_of_composition_names,
-                                                                                    has_background_field,
-                                                                                    "Phase transition temperature upper limits",
-                                                                                    true,
-                                                                                    n_phase_transitions_per_composition,
-                                                                                    true);
+        options.property_name = "Phase transition temperature lower limits";
+        transition_temperature_lower_limits = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
 
-        transition_temperature_lower_limits = Utilities::parse_map_to_double_array (prm.get("Phase transition temperature lower limits"),
-                                                                                    list_of_composition_names,
-                                                                                    has_background_field,
-                                                                                    "Phase transition temperature lower limits",
-                                                                                    true,
-                                                                                    n_phase_transitions_per_composition,
-                                                                                    true);
+        options.property_name = "Phase transition Clapeyron slopes";
+        transition_slopes = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
 
-        transition_slopes = Utilities::parse_map_to_double_array (prm.get("Phase transition Clapeyron slopes"),
-                                                                  list_of_composition_names,
-                                                                  has_background_field,
-                                                                  "Phase transition Clapeyron slopes",
-                                                                  true,
-                                                                  n_phase_transitions_per_composition,
-                                                                  true);
+        n_phase_transitions_per_composition = std::make_unique<std::vector<unsigned int>>(options.n_values_per_key);
 
         n_phases_total = 0;
         n_phases_per_composition.clear();
@@ -1515,6 +1508,17 @@ namespace aspect
           {
             n_phases_per_composition.push_back(n+1);
             n_phases_total += n+1;
+          }
+
+        // The background field is always the first composition
+        n_phases_per_chemical_composition = {n_phases_per_composition[0]};
+        n_phase_transitions_per_chemical_composition = {n_phases_per_composition[0] - 1};
+        n_phases_total_chemical_compositions = n_phases_per_composition[0];
+        for (auto i : this->introspection().chemical_composition_field_indices())
+          {
+            n_phases_per_chemical_composition.push_back(n_phases_per_composition[i+1]);
+            n_phase_transitions_per_chemical_composition.push_back(n_phases_per_composition[i+1] - 1);
+            n_phases_total_chemical_compositions += n_phases_per_composition[i+1];
           }
       }
     }

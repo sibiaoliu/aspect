@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -226,17 +226,17 @@ namespace aspect
   {
     // Advect the particles before they are potentially used to
     // set up the compositional fields.
-    for (auto &particle_world : particle_worlds)
+    for (auto &particle_manager : particle_managers)
       {
         // Do not advect the particles in the initial refinement stage
         const bool in_initial_refinement = (timestep_number == 0)
                                            && (pre_refinement_step < parameters.initial_adaptive_refinement);
         if (!in_initial_refinement)
-          // Advance the particles in the world to the current time
-          particle_world->advance_timestep();
+          // Advance the particles in the manager to the current time
+          particle_manager.advance_timestep();
 
-        if (particle_world->get_property_manager().need_update() == Particle::Property::update_output_step)
-          particle_world->update_particles();
+        if (particle_manager.get_property_manager().need_update() == Particle::Property::update_output_step)
+          particle_manager.update_particles();
       }
 
     std::vector<double> current_residual(introspection.n_compositional_fields,0.0);
@@ -811,6 +811,7 @@ namespace aspect
       }
     while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
 
+    AssertThrow(nonlinear_solver_control.last_check() != SolverControl::failure, ExcNonlinearSolverNoConvergence());
     signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
@@ -873,6 +874,8 @@ namespace aspect
         ++nonlinear_iteration;
       }
     while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
+
+    AssertThrow(nonlinear_solver_control.last_check() != SolverControl::failure, ExcNonlinearSolverNoConvergence());
 
     // Reset the linear tolerance to what it was at the beginning of the time step.
     parameters.linear_stokes_solver_tolerance = begin_linear_tolerance;
@@ -960,8 +963,8 @@ namespace aspect
         // iteration (in the assemble_and_solve_composition call).
 
         if (nonlinear_iteration > 0)
-          for (auto &particle_world : particle_worlds)
-            particle_world->restore_particles();
+          for (auto &particle_manager : particle_managers)
+            particle_manager.restore_particles();
 
         const double relative_temperature_residual =
           assemble_and_solve_temperature(initial_temperature_residual,
@@ -1014,6 +1017,7 @@ namespace aspect
       }
     while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
 
+    AssertThrow(nonlinear_solver_control.last_check() != SolverControl::failure, ExcNonlinearSolverNoConvergence());
     signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
@@ -1061,6 +1065,7 @@ namespace aspect
       }
     while (nonlinear_solver_control.check(nonlinear_iteration, relative_residual) == SolverControl::iterate);
 
+    AssertThrow(nonlinear_solver_control.last_check() != SolverControl::failure, ExcNonlinearSolverNoConvergence());
     signals.post_nonlinear_solver(nonlinear_solver_control);
   }
 
@@ -1119,8 +1124,8 @@ namespace aspect
         // iteration (in the assemble_and_solve_composition call).
 
         if (nonlinear_iteration > 0)
-          for (auto &particle_world : particle_worlds)
-            particle_world->restore_particles();
+          for (auto &particle_manager : particle_managers)
+            particle_manager.restore_particles();
 
         const double relative_temperature_residual =
           assemble_and_solve_temperature(initial_temperature_residual,
@@ -1204,6 +1209,8 @@ namespace aspect
     // When we are finished iterating, we need to set the final solution to the current linearization point,
     // because the solution vector is used in the postprocess.
     solution = current_linearization_point;
+
+    AssertThrow(nonlinear_solver_control.last_check() != SolverControl::failure, ExcNonlinearSolverNoConvergence());
 
     signals.post_nonlinear_solver(nonlinear_solver_control);
   }
@@ -1311,6 +1318,8 @@ namespace aspect
     // When we are finished iterating, we need to set the final solution to the current linearization point,
     // because the solution vector is used in the postprocess.
     solution = current_linearization_point;
+
+    AssertThrow(nonlinear_solver_control.last_check() != SolverControl::failure, ExcNonlinearSolverNoConvergence());
 
     signals.post_nonlinear_solver(nonlinear_solver_control);
   }
