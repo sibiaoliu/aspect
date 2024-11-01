@@ -735,9 +735,8 @@ namespace aspect
                          "MaterialModel output PrescribedPlasticDilation.");
       prm.declare_entry ("Enable dike injection", "false",
                          Patterns::Bool (),
-                         "Whether to allow injection only in the horizontal direction by including "
-                         "add additional terms to the prescrbed dilaton specified in the "
-                         "MaterialModel output PrescribedPlasticDilation.");                         
+                         "Whether to limit material injected through the dike to be released only horizontally. "
+                         "Note that the prerequisite for this is that “Enable prescribed dilation” is set to true.");                         
     }
     prm.leave_subsection();
 

@@ -213,8 +213,8 @@ namespace aspect
                            "\\item ``fracture healing'': Fracture-related healing applied to "
                            "plastic yielding term, reducing the accumulated plastic strain with "
                            "time on deactivated, slowly creeping fractures (e.g., faults). "
-                           "This mechanism is refered to Poliakov & Buck, 1998. "
-                           "Note that this mechanism is only tested with the option -  "
+                           "This mechanism is described in Gerya, 2013. "
+                           "Note that this mechanism is currently only tested with the option -  "
                            "plastic weakening with plastic strain only ");
 
         prm.declare_entry ("Strain healing temperature dependent recovery rate", "1.e-15", Patterns::Double(0),
@@ -589,10 +589,11 @@ namespace aspect
             }
             case fracture_healing:
             {
+              // APS: Accumulated plastic strain
               // Formula: APS_new = APS_current + delta_APS, where
-              // delta_APS = edot_ii*dt - recovery_rate*dt is the strain
-              // increment due to fracture strain healing. The recovery_rate
-              // is 1/fracture healing time. See Eq. 12 in Gerya (2013).
+              // delta_APS = edot_ii*dt - recovery_rate*dt is the plastic strain
+              // increment. The recovery_rate is 1/fracture healing time. See
+              // Eq. 12 in Gerya (2013).
               healed_strain = strain_healing_fracture_recovery_rate * this->get_timestep();
               break;
             }
@@ -676,8 +677,8 @@ namespace aspect
             // Now account for strain healing
             if (healing_mechanism != no_healing)
               {
-                // Temperature-dependent healing occurs independent of deformation state
-                // or fracture healing mechanism
+                // Temperature-dependent healing or fracture healing occurs
+                // independent of deformation state.
                 const double healed_strain = calculate_strain_healing(in,i);
 
                 delta_e_ii_plastic -= healed_strain;

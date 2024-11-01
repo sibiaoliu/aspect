@@ -1,10 +1,9 @@
-# This is a test model of 2D dike-injection box to determine that the
-# dilation term is working prepoerly.
-# Material is injected from the left half of the model domain with a rate
-# that corresponds to a velocity divergence of 1e-14 1/s and can flow
-# out through the right-side boundary. This corresponds to a linear
-# velocity increase from 0 to 500 m * 1e-15 1/yr = 5e-13 m/s in the right
-# half of the domain.
+# This is a 2D test model to determine if the dike injection functionality is
+# working properly. Material is injected throughout the left half of the model
+# domain with a rate that corresponds to a velocity divergence of 1e-15 1/s
+# and can flow out through the right-side boundary. This corresponds to a 
+# linear velocity increase from 0 to 500 m * 1e-15 1/yr = 5e-13 m/s in the
+# right half of the domain.
 
 set Additional shared libraries            = ../dike_src/libprescribed_dike_injection.debug.so
 set Dimension                              = 2
@@ -34,7 +33,8 @@ subsection Material model
   set Model name = prescribed dike injection
   subsection Prescribed dike injection
     set Base model = simple
-    set Dike material injection ratio = 1.0
+    
+    set Dike material injection amount = 1.0
     subsection Dike injection function
       set Function expression  = if(x<500,1e-15,0)
     end
