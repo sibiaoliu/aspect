@@ -366,7 +366,7 @@ namespace aspect
                              "those corresponding to chemical compositions. "
                              "If only one value is given, then all use the same value. "
                              "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
-          prm.declare_entry ("Define hydrothermal circulation","false",
+          prm.declare_entry ("Define hydrothermal cooling","false",
                              Patterns::Bool (),
                              "Whether to include the approximation of hydrothermal cooling in the "
                              "thermal conductivities for each compositional field instead of only directly "
@@ -378,7 +378,7 @@ namespace aspect
                              "If only one value is given, then all use the same value. "
                              "It represents the ratio of the total heat transport within a "
                              "permeable layer to heat transfer by conduction alone. Units: none");
-          prm.declare_entry ("Hydrothermal circulation cutoff temperatures", "873",
+          prm.declare_entry ("Hydrothermal cooling cutoff temperatures", "873",
                              Patterns::List(Patterns::Double(0)),
                              "List of reference cutoff temperatures for hydrothermal cooling, for background "
                              "material and compositional fields, for a total of N+1 values, where N is the "
