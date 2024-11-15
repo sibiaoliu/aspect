@@ -494,13 +494,13 @@ namespace aspect
             prm.enter_subsection("Free surface");
             {
               advection_direction = prm.get("Surface velocity projection");
+              AssertThrow(advection_direction == "vertical",
+                          ExcMessage("The projection is " + advection_direction + 
+                                    ". However, this function currently prefers to use "
+                                    "vertical projection if using free surface."));              
             }
             prm.leave_subsection();
         }
-        AssertThrow(advection_direction == "vertical",
-                    ExcMessage("The projection is " + advection_direction + 
-                              ". However, this function currently prefers to use "
-                              "vertical projection if using free surface."));
       }
       prm.leave_subsection(); 
 
