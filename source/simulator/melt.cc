@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,7 +31,6 @@
 #include <deal.II/lac/sparsity_tools.h>
 
 #include <deal.II/fe/fe_q.h>
-#include <deal.II/fe/fe_dgq.h>
 #include <deal.II/fe/fe_dgp.h>
 #include <deal.II/fe/fe_values.h>
 
@@ -69,6 +68,19 @@ namespace aspect
       const FEValuesExtractors::Scalar ex_p_c = introspection.variable("compaction pressure").extractor_scalar();
       fe_values[ex_p_c].get_function_values (solution, compaction_pressures);
     }
+
+
+
+    template <int dim>
+    MeltOutputs<dim>::MeltOutputs  (const unsigned int n_points,
+                                    const unsigned int /*n_comp*/)
+      :
+      compaction_viscosities(n_points, numbers::signaling_nan<double>()),
+      fluid_viscosities(n_points, numbers::signaling_nan<double>()),
+      permeabilities(n_points, numbers::signaling_nan<double>()),
+      fluid_densities(n_points, numbers::signaling_nan<double>()),
+      fluid_density_gradients(n_points, numbers::signaling_nan<Tensor<1,dim>>())
+    {}
 
 
 
@@ -173,19 +185,17 @@ namespace aspect
     {
       MeltHandler<dim>::create_material_model_outputs(outputs);
 
-      const unsigned int n_points = outputs.viscosities.size();
-
       if (this->get_parameters().enable_additional_stokes_rhs
           && outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>() == nullptr)
         {
           outputs.additional_outputs.push_back(
-            std::make_unique<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>(n_points));
+            std::make_unique<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>(outputs.n_evaluation_points()));
         }
 
       Assert(!this->get_parameters().enable_additional_stokes_rhs
              ||
              outputs.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>()->rhs_u.size()
-             == n_points, ExcInternalError());
+             == outputs.n_evaluation_points(), ExcInternalError());
     }
 
 
@@ -1801,7 +1811,7 @@ namespace aspect
     // The additional terms in the temperature systems have not been ported
     // to the DG formulation:
     AssertThrow(!this->get_parameters().use_discontinuous_temperature_discretization &&
-                !this->get_parameters().use_discontinuous_composition_discretization,
+                !this->get_parameters().have_discontinuous_composition_discretization,
                 ExcMessage("Using discontinuous elements for temperature "
                            "or composition in models with melt transport is currently not implemented.") );
     if (melt_parameters.use_discontinuous_p_c)
@@ -1834,10 +1844,9 @@ namespace aspect
     if (output.template get_additional_output<MaterialModel::MeltOutputs<dim>>() != nullptr)
       return;
 
-    const unsigned int n_points = output.viscosities.size();
     const unsigned int n_comp = output.reaction_terms[0].size();
     output.additional_outputs.push_back(
-      std::make_unique<MaterialModel::MeltOutputs<dim>> (n_points, n_comp));
+      std::make_unique<MaterialModel::MeltOutputs<dim>> (output.n_evaluation_points(), n_comp));
   }
 
 

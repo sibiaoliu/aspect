@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -46,39 +46,9 @@ namespace aspect
      * @ingroup BoundaryTractions
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface() = default;
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after the
-         * SimulatorAccess (if applicable) is initialized.
-         */
-        virtual
-        void
-        initialize ();
-
-        /**
-         * A function that is called at the beginning of each time step.
-         * The default implementation of the function does nothing, but
-         * derived classes that need more elaborate setups for a given time
-         * step may overload the function.
-         *
-         * The point of this function is to allow complex boundary traction
-         * models to do an initialization step once at the beginning of each
-         * time step. An example would be a model that needs to call an
-         * external program to compute stresses for a set of plates.
-         */
-        virtual
-        void
-        update ();
-
         /**
          * Return the traction that is to hold at a particular position on
          * the boundary of the domain.
@@ -98,36 +68,10 @@ namespace aspect
         boundary_traction (const types::boundary_id boundary_indicator,
                            const Point<dim> &position,
                            const Tensor<1,dim> &normal_vector) const = 0;
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
-      protected:
-        /**
-         * Pointer to the geometry object in use.
-         */
-        const GeometryModel::Interface<dim> *geometry_model;
     };
 
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public SimulatorAccess<dim>
     {
       public:
         /**
@@ -160,17 +104,17 @@ namespace aspect
                            const Tensor<1,dim> &normal_vector) const;
 
         /**
-           * Return the names of all prescribed boundary traction models currently
-           * used in the computation as specified in the input file. The function
-           * returns a map between a boundary identifier and a pair. The
-           * first part of the pair is a string that represents the prescribed
-           * traction components on this boundary (e.g. y, xz, or xyz) and the
-           * second part is a vector of strings that represent the names of
-           * boundary traction plugins for this boundary.
-           * If there are no prescribed boundary traction plugins
-           * for a particular boundary, this boundary identifier will not appear
-           * in the map.
-           */
+         * Return the names of all prescribed boundary traction models currently
+         * used in the computation as specified in the input file. The function
+         * returns a map between a boundary identifier and a pair. The
+         * first part of the pair is a string that represents the prescribed
+         * traction components on this boundary (e.g. y, xz, or xyz) and the
+         * second part is a vector of strings that represent the names of
+         * boundary traction plugins for this boundary.
+         * If there are no prescribed boundary traction plugins
+         * for a particular boundary, this boundary identifier will not appear
+         * in the map.
+         */
         const std::map<types::boundary_id, std::pair<std::string,std::vector<std::string>>> &
         get_active_boundary_traction_names () const;
 
@@ -226,21 +170,21 @@ namespace aspect
                         << "> among the names of registered boundary traction objects.");
 
         /**
-        * Register a traction boundary conditions model so that it can be
-        * selected from the parameter file.
-        *
-        * @param name A string that identifies the traction boundary conditions
-        * model
-        * @param description A text description of what this model does and that
-        * will be listed in the documentation of the parameter file.
-        * @param declare_parameters_function A pointer to a function that can be
-        * used to declare the parameters that this traction boundary conditions
-        * model wants to read from input files.
-        * @param factory_function A pointer to a function that can create an
-        * object of this traction boundary conditions model.
-        *
-        * @ingroup BoundaryTractions
-        */
+         * Register a traction boundary conditions model so that it can be
+         * selected from the parameter file.
+         *
+         * @param name A string that identifies the traction boundary conditions
+         * model
+         * @param description A text description of what this model does and that
+         * will be listed in the documentation of the parameter file.
+         * @param declare_parameters_function A pointer to a function that can be
+         * used to declare the parameters that this traction boundary conditions
+         * model wants to read from input files.
+         * @param factory_function A pointer to a function that can create an
+         * object of this traction boundary conditions model.
+         *
+         * @ingroup BoundaryTractions
+         */
         static
         void
         register_boundary_traction (const std::string &name,

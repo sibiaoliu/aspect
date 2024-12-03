@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2022 by the authors of the ASPECT code.
+ Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -88,6 +88,22 @@ namespace aspect
           bool new_integration_step() override;
 
           /**
+           * Return a list of boolean values indicating which solution vectors
+           * are required for the integration. The first entry indicates if
+           * the particle integrator requires the solution vector at the old
+           * old time (k-1), the second entry indicates if the particle integrator
+           * requires the solution vector at the old time (k), and the third entry
+           * indicates if the particle integrator requires the solution vector
+           * at the new time (k+1).
+           *
+           * The RK2 integrator requires the solution vector at the
+           * old time (k) for the first integration step, and the solution
+           * vector at both the old and new time for the second integration step
+           * (if higher_order_in_time is set to true).
+           */
+          std::array<bool, 3> required_solution_vectors() const override;
+
+          /**
            * Declare the parameters this class takes through input files.
            */
           static
@@ -111,7 +127,7 @@ namespace aspect
            *
            * The Runge-Kutta 2 integrator requires a single point with dim components.
            */
-          static const unsigned int n_integrator_properties = dim;
+          static constexpr unsigned int n_integrator_properties = dim;
 
         private:
           /**

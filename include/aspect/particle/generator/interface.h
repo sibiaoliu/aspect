@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2022 by the authors of the ASPECT code.
+ Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -21,7 +21,7 @@
 #ifndef _aspect_particle_generator_interface_h
 #define _aspect_particle_generator_interface_h
 
-#include <aspect/plugins.h>
+#include <aspect/particle/interface.h>
 #include <aspect/simulator_access.h>
 
 #include <deal.II/particles/particle.h>
@@ -65,47 +65,12 @@ namespace aspect
        * @ingroup ParticleGenerators
        */
       template <int dim>
-      class Interface : public SimulatorAccess<dim>
+      class Interface : public SimulatorAccess<dim>, public ParticleInterfaceBase
       {
         public:
-          /**
-           * Constructor. Initializes the random number generator.
-           */
-          Interface ();
-
-          /**
-           * Destructor. Made virtual so that derived classes can be created
-           * and destroyed through pointers to the base class.
-           */
-          ~Interface () override = default;
-
-          /**
-           * Initialization function. This function is called once at the
-           * beginning of the program after parse_parameters is run and after
-           * the SimulatorAccess (if applicable) is initialized.
-           */
           virtual
           void
-          initialize ();
-
-          /**
-           * Generate particles. Every derived class
-           * has to decide on the method and number of particles to generate,
-           * for example using input parameters declared in their
-           * declare_parameters and parse_parameters functions. This function
-           * should generate the particles and associate them to their according
-           * cells by inserting them into a multimap between cell and particle.
-           * This map becomes very large if the particle count per process
-           * is large, so we hand it over by reference instead of returning
-           * the multimap.
-           *
-           * @param [in,out] particles A multimap between cells and their
-           * particles. This map will be filled in this function.
-           */
-          DEAL_II_DEPRECATED
-          virtual
-          void
-          generate_particles(std::multimap<Particles::internal::LevelInd, Particle<dim>> &particles);
+          initialize () override;
 
           /**
            * Generate particles. Every derived class
@@ -120,7 +85,7 @@ namespace aspect
            */
           virtual
           void
-          generate_particles(Particles::ParticleHandler<dim> &particle_handler);
+          generate_particles(Particles::ParticleHandler<dim> &particle_handler) = 0;
 
           /**
            * Generate one particle in the given cell. This function's main purpose
@@ -131,27 +96,6 @@ namespace aspect
           std::pair<Particles::internal::LevelInd,Particle<dim>>
           generate_particle (const typename parallel::distributed::Triangulation<dim>::active_cell_iterator &cell,
                              const types::particle_index id);
-
-
-          /**
-           * Declare the parameters this class takes through input files. The
-           * default implementation of this function does not describe any
-           * parameters. Consequently, derived classes do not have to overload
-           * this function if they do not take any runtime parameters.
-           */
-          static
-          void
-          declare_parameters (ParameterHandler &prm);
-
-          /**
-           * Read the parameters this class declares from the parameter file.
-           * The default implementation of this function does not read any
-           * parameters. Consequently, derived classes do not have to overload
-           * this function if they do not take any runtime parameters.
-           */
-          virtual
-          void
-          parse_parameters (ParameterHandler &prm);
 
         protected:
           /**

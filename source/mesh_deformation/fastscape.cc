@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -142,7 +142,7 @@ namespace aspect
       void fastscape_execute_step_();
 
       /**
-       * Create a .VTK file for the FastScape surface within the fastscape folder of the
+       * Create a .VTK file for the FastScape surface within the FastScape folder of the
        * ASPECT output folder.
        */
       void fastscape_named_vtk_(double *fp,
@@ -218,11 +218,36 @@ namespace aspect
             }
         }
 
+      // Several compositional fields are commonly used in conjunction with the FastScape plugin, i.e.
+      // "sediment_age" to track the age of the sediment deposited and "deposition_depth" to track the depth
+      // with respect to the unperturbed surface of the model domain. Their values are controlled by setting
+      // boundary conditions on the top boundary that is deformed by FastScape. While it is useful to track these
+      // fields, they are not needed for any function in the FastScape plugin. If they exist however, we need
+      // to make sure that these fields do not have the type "chemical composition" and are therefore not taken
+      // into account when computing material properties.
+      const std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
+      if (this->introspection().compositional_name_exists("sediment_age"))
+        {
+          const std::vector<std::string>::const_iterator
+          it = std::find(chemical_field_names.begin(), chemical_field_names.end(), "sediment_age");
+          AssertThrow (it == chemical_field_names.end(),
+                       ExcMessage("There is a field sediment_age that is of type chemical composition. "
+                                  "Please change it to type generic so that it does not affect material properties."));
+        }
+      if (this->introspection().compositional_name_exists("deposition_depth"))
+        {
+          const std::vector<std::string>::const_iterator
+          it = std::find(chemical_field_names.begin(), chemical_field_names.end(), "deposition_depth");
+          AssertThrow (it == chemical_field_names.end(),
+                       ExcMessage("There is a field deposition_depth that is of type chemical composition. "
+                                  "Please change it to type generic so that it does not affect material properties."));
+        }
+
       // Initialize parameters for restarting FastScape
       restart = this->get_parameters().resume_computation;
 
       // Since we don't open these until we're on one process, we need to check if the
-      // restart files exist before hand.
+      // restart files exist beforehand.
       if (restart)
         {
           if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
@@ -230,9 +255,9 @@ namespace aspect
               AssertThrow(Utilities::fexists(this->get_output_directory() + "fastscape_elevation_restart.txt"),
                           ExcMessage("Cannot open topography file to restart FastScape."));
               AssertThrow(Utilities::fexists(this->get_output_directory() + "fastscape_basement_restart.txt"),
-                          ExcMessage("Cannot open topography file to restart FastScape."));
+                          ExcMessage("Cannot open basement file to restart FastScape."));
               AssertThrow(Utilities::fexists(this->get_output_directory() + "fastscape_silt_fraction_restart.txt"),
-                          ExcMessage("Cannot open topography file to restart FastScape."));
+                          ExcMessage("Cannot open silt fraction file to restart FastScape."));
             }
         }
 
@@ -255,7 +280,7 @@ namespace aspect
       // Finally, if ghost nodes are used we add two additional points on each side.
       const unsigned int ghost_nodes = 2*use_ghost_nodes;
       const unsigned int fastscape_refinement_level = maximum_surface_refinement_level + additional_refinement_levels;
-      const unsigned int fastscape_nodes = std::pow(2,fastscape_refinement_level);
+      const unsigned int fastscape_nodes = Utilities::pow(2,fastscape_refinement_level);
       fastscape_nx = fastscape_nodes * repetitions[0] + ghost_nodes + 1;
 
       // Size of FastScape cell.
@@ -272,7 +297,7 @@ namespace aspect
       if (dim == 2)
         {
           fastscape_dy = fastscape_dx;
-          fastscape_y_extent = round(fastscape_y_extent_2d/fastscape_dy)*fastscape_dy + fastscape_dy * ghost_nodes;
+          fastscape_y_extent = std::round(fastscape_y_extent_2d/fastscape_dy)*fastscape_dy + fastscape_dy * ghost_nodes;
           fastscape_ny = 1+fastscape_y_extent/fastscape_dy;
         }
       else
@@ -300,7 +325,7 @@ namespace aspect
     {
 
       // Because there is no increase in time during timestep 0, we return and only
-      // initialize and run fastscape from timestep 1 and on.
+      // initialize and run FastScape from timestep 1 and on.
       if (this->get_timestep_number() == 0)
         return;
 
@@ -332,7 +357,7 @@ namespace aspect
       if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
         {
           // Initialize the variables that will be sent to FastScape.
-          // Elevation is initialzied at a very high number so that we can later check that all points
+          // Elevation is initialized at a very high number so that we can later check that all points
           // received data from ASPECT, and if not throw an assert.
           std::vector<double> elevation(fastscape_array_size, std::numeric_limits<double>::max());
           std::vector<double> velocity_x(fastscape_array_size);
@@ -406,8 +431,8 @@ namespace aspect
             {
               elevation_old[i] = elevation[i];
 
-              // Initialize random noise after elevation_old is set, so aspect sees this initial topography change.
-              // Changing boundary height directly  on a fixed fastscape boundary causes reproducibility issues,
+              // Initialize random noise after elevation_old is set, so ASPECT sees this initial topography change.
+              // Changing boundary height directly on a fixed FastScape boundary causes reproducibility issues,
               // as such we do not add noise to the boundaries regardless of whether they are ghost nodes
               // or not. However, the boundaries can be changed using the uplift velocity and not cause
               // these issues.
@@ -477,7 +502,7 @@ namespace aspect
                                               &sediment_deposition_g,
                                               &slope_exponent_p);
 
-          // Find  timestep size, run fastscape, and make visualizations.
+          // Find timestep size, run FastScape, and make visualizations.
           execute_fastscape(elevation,
                             bedrock_transport_coefficient_array,
                             velocity_x,
@@ -579,7 +604,7 @@ namespace aspect
 
       // Get a quadrature rule that exists only on the corners, and increase the refinement if specified.
       const QIterated<dim-1> face_corners (QTrapezoid<1>(),
-                                           std::pow(2,additional_refinement_levels+surface_refinement_difference));
+                                           Utilities::pow(2,additional_refinement_levels+surface_refinement_difference));
 
       FEFaceValues<dim> fe_face_values (this->get_mapping(),
                                         this->get_fe(),
@@ -610,9 +635,9 @@ namespace aspect
                     // The quadrature rule is created so that there are enough interpolation points in the
                     // lowest resolved ASPECT surface cell to fill out the FastScape mesh. However, as the
                     // same rule is used for all cell sizes, higher resolution areas will have interpolation
-                    // points that do not correspond to a fastscape node. In which case, indx will not be a
+                    // points that do not correspond to a FastScape node. In which case, indx will not be a
                     // whole number and we can ignore the point.
-                    if (std::abs(indx - round(indx)) >= node_tolerance)
+                    if (std::abs(indx - std::round(indx)) >= node_tolerance)
                       continue;
 
 
@@ -627,7 +652,7 @@ namespace aspect
                             // this to correctly place the variables later on.
                             // Nx*ys effectively tells us what row we are in
                             // and then indx tells us what position in that row.
-                            const double index = round(indx)+fastscape_nx*ys;
+                            const double index = std::round(indx)+fastscape_nx*ys;
 
                             local_aspect_values[0].push_back(vertex(dim-1) - grid_extent[dim-1].second);
                             local_aspect_values[1].push_back(index-1);
@@ -645,10 +670,10 @@ namespace aspect
                         // Because indy only gives us the row we're in, we don't need to add 2 for the ghost node.
                         const double indy = 1+use_ghost_nodes+(vertex(1) - grid_extent[1].first)/fastscape_dy;
 
-                        if (std::abs(indy - round(indy)) >= node_tolerance)
+                        if (std::abs(indy - std::round(indy)) >= node_tolerance)
                           continue;
 
-                        const double index = round((indy-1))*fastscape_nx+round(indx);
+                        const double index = std::round((indy-1))*fastscape_nx+std::round(indx);
 
                         local_aspect_values[0].push_back(vertex(dim-1) - grid_extent[dim-1].second);   //z component
                         local_aspect_values[1].push_back(index-1);
@@ -832,7 +857,7 @@ namespace aspect
         if (current_timestep == 1)
           {
             this->get_pcout() << "      Writing initial VTK..." << std::endl;
-            // The fastscape by default visualizes a field called HHHHH,
+            // FastScape by default visualizes a field called HHHHH,
             // and the parameter this shows will be whatever is given as the first
             // position. At the moment it visualizes the bedrock diffusivity.
             fastscape_named_vtk_(extra_vtk_field.data(),
@@ -846,7 +871,7 @@ namespace aspect
           {
             fastscape_execute_step_();
 
-            // If we are using the ghost nodes we want to reset them every fastscape timestep.
+            // If we are using the ghost nodes we want to reset them every FastScape timestep.
             if (use_ghost_nodes)
               {
                 fastscape_copy_h_(elevation.data());
@@ -1193,7 +1218,7 @@ namespace aspect
               // Of these 9 nodes, 0 and 8 are ghost nodes and 1 and 7 are the periodic ASPECT boundaries.
               // If we assume that the horizontal ASPECT direction of travel is towards node 7, then we would
               // set the ghost node 8 velocities and heights to that of node 2, ghost node 0 to node 6, and
-              // ASPECT boundary node 1 to ASPECT boundary node 7. E.g., based on the fastscape values for
+              // ASPECT boundary node 1 to ASPECT boundary node 7. E.g., based on the FastScape values for
               // vx, vy, vz, and elevation, the nodes could be rewritten as:
               //
               // 6 - 7 - 2 - 3 - 4 - 5 - 6 - 7 - 2
@@ -1375,7 +1400,7 @@ namespace aspect
               // If we do not average the values, then use a slice near the center.
               if (!average_out_of_plane_surface_topography)
                 {
-                  const unsigned int index = x+fastscape_nx*(round((fastscape_ny-use_ghost_nodes)/2));
+                  const unsigned int index = x+fastscape_nx*(std::round((fastscape_ny-use_ghost_nodes)/2));
 
                   // If we are using the ghost nodes, then the x value locations need to be shifted back 1
                   // e.g., given a 4x4 mesh an index of 5 would correspond to an x of 1 and y of 1 in the loop,
@@ -1495,10 +1520,10 @@ namespace aspect
       // Now load the last output at time of restart.
       // this allows us to correctly track when to call
       // FastScape to make new VTK files.
-      std::ifstream in_last_ouput_time(restart_filename_time);
-      AssertThrow (in_last_ouput_time, ExcIO());
+      std::ifstream in_last_output_time(restart_filename_time);
+      AssertThrow (in_last_output_time, ExcIO());
       {
-        in_last_ouput_time >> last_output_time;
+        in_last_output_time >> last_output_time;
       }
     }
 
@@ -1677,7 +1702,7 @@ namespace aspect
                               "Deposition coefficient for bedrock.");
             prm.declare_entry("Sediment deposition coefficient", "-1",
                               Patterns::Double(),
-                              "Deposition coefficient for sediment, -1 sets this to teh same as the bedrock deposition coefficient.");
+                              "Deposition coefficient for sediment, -1 sets this to the same as the bedrock deposition coefficient.");
             prm.declare_entry("Bedrock river incision rate", "1e-5",
                               Patterns::Double(),
                               "River incision rate for bedrock in the Stream Power Law. Units: $\\{m^(1-2*drainage_area_exponent)/yr}$");

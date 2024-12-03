@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -44,7 +44,6 @@
 #include <cerrno>
 #include <dirent.h>
 #include <fstream>
-#include <locale>
 #include <string>
 #include <sys/stat.h>
 #include <iostream>
@@ -81,11 +80,7 @@ namespace aspect
         inline MPI_Datatype
         mpi_type_id(const bool *)
         {
-#  if DEAL_II_MPI_VERSION_GTE(2, 2)
           return MPI_CXX_BOOL;
-#  else
-          return MPI_C_BOOL;
-#  endif
         }
 
 
@@ -488,7 +483,7 @@ namespace aspect
                   AssertThrow((n_expected_values == n_values || n_values == 1),
                               ExcMessage("The key <" + field_name + "> in <"+ options.property_name + "> does not have "
                                          + "the expected number of values. It expects " + std::to_string(n_expected_values)
-                                         + "or 1 values, but we found " + std::to_string(n_values) + " values."));
+                                         + " or 1 values, but we found " + std::to_string(n_values) + " values."));
 
                   // If we expect multiple values for a key, but found exactly one: assume
                   // the one value stands for every expected value. This allows
@@ -766,6 +761,8 @@ namespace aspect
       std::array<double,dim>
       WGS84_coordinates(const Point<dim> &position)
       {
+        Assert (dim==3, ExcNotImplemented());
+
         std::array<double,dim> ecoord;
 
         // Define WGS84 ellipsoid constants.
@@ -782,19 +779,14 @@ namespace aspect
                                                                            * std::cos(th) * std::cos(th)))))
                     * constants::radians_to_degree;
 
-        if (dim == 3)
-          {
-            ecoord[1] = std::atan2(position(1), position(0))
-                        * constants::radians_to_degree;
+        ecoord[1] = std::atan2(position(1), position(0))
+                    * constants::radians_to_degree;
 
-            /* Set all longitudes between [0,360]. */
-            if (ecoord[1] < 0.)
-              ecoord[1] += 360.;
-            else if (ecoord[1] > 360.)
-              ecoord[1] -= 360.;
-          }
-        else
-          ecoord[1] = 0.0;
+        // Set all longitudes between [0,360]:
+        if (ecoord[1] < 0.)
+          ecoord[1] += 360.;
+        else if (ecoord[1] > 360.)
+          ecoord[1] -= 360.;
 
 
         ecoord[0] = radius/std::sqrt(1- ellipticity * ellipticity
@@ -812,12 +804,19 @@ namespace aspect
         std::array<double,dim> scoord;
 
         scoord[0] = position.norm(); // R
-        scoord[1] = std::atan2(position(1),position(0)); // Phi
+
+        // Compute the longitude phi. Note that atan2 is documented to return
+        // its result as a value between -pi and +pi, whereas we use the
+        // convention that we consider eastern longitude between 0 and 2pi.
+        // As a consequence, we correct where necessary.
+        scoord[1] = std::atan2(position(1),position(0));
         if (scoord[1] < 0.0)
           scoord[1] += 2.0*numbers::PI; // correct phi to [0,2*pi]
+
+        // In 3d also compute the polar angle (=colatitude)
         if (dim==3)
           {
-            if (scoord[0] > std::numeric_limits<double>::min())
+            if (/* R= */scoord[0] > std::numeric_limits<double>::min())
               scoord[2] = std::acos(position(2)/scoord[0]);
             else
               scoord[2] = 0.0;
@@ -870,8 +869,8 @@ namespace aspect
         const double p      = std::sqrt(x(0) * x(0) + x(1) * x(1));
         const double th     = std::atan2(R * x(2), b * p);
         const double phi    = std::atan2(x(1), x(0));
-        const double theta  = std::atan2(x(2) + ep * ep * b * std::pow(std::sin(th),3),
-                                         (p - (eccentricity * eccentricity * R  * std::pow(std::cos(th),3))));
+        const double theta  = std::atan2(x(2) + ep * ep * b * Utilities::fixed_power<3>(std::sin(th)),
+                                         (p - (eccentricity * eccentricity * R  * Utilities::fixed_power<3>(std::cos(th)))));
         const double R_bar = R / (std::sqrt(1 - eccentricity * eccentricity * std::sin(theta) * std::sin(theta)));
         const double R_plus_d = p / std::cos(theta);
 
@@ -1659,7 +1658,6 @@ namespace aspect
           int mkdir_return_value;
           if ((mkdir_return_value = mkdir(subdir.c_str(),mode)) && (errno != EEXIST))
             return mkdir_return_value;
-
         }
 
       return 0;
@@ -1669,7 +1667,7 @@ namespace aspect
 
     void create_directory(const std::string &pathname,
                           const MPI_Comm comm,
-                          bool silent)
+                          const bool silent)
     {
       // verify that the output directory actually exists. if it doesn't, create
       // it on processor zero
@@ -1690,7 +1688,6 @@ namespace aspect
                           << std::endl;
 
               error = Utilities::mkdirp(pathname, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-
             }
           else
             {
@@ -2155,7 +2152,7 @@ namespace aspect
         // find the closest point m_x[idx] < x, idx=0 even if x<m_x[0]
         std::vector<double>::const_iterator it;
         it = std::lower_bound(m_x.begin(),m_x.end(),x);
-        int idx = std::max( int(it-m_x.begin())-1, 0);
+        const int idx = std::max( static_cast<int>(it-m_x.begin())-1, 0);
 
         double h = x-m_x[idx];
         double interpol;
@@ -2185,7 +2182,7 @@ namespace aspect
     {
       // Check for environment variable override to ASPECT_SOURCE_DIR
       char const *ASPECT_SOURCE_DIR_env = getenv("ASPECT_SOURCE_DIR");
-      if (ASPECT_SOURCE_DIR_env != NULL)
+      if (ASPECT_SOURCE_DIR_env != nullptr)
         {
           return Utilities::replace_in_string(location,
                                               "$ASPECT_SOURCE_DIR",
@@ -2206,6 +2203,52 @@ namespace aspect
         return " (\"" + s + "\")";
       else
         return "";
+    }
+
+
+
+    bool
+    string_to_bool(const std::string &s)
+    {
+      return (s == "true" || s == "yes");
+    }
+
+
+
+    std::vector<bool>
+    string_to_bool(const std::vector<std::string> &s)
+    {
+      std::vector<bool> result;
+      result.reserve(s.size());
+
+      for (auto &i : s)
+        result.push_back(string_to_bool(i));
+
+      return result;
+    }
+
+
+
+    unsigned int
+    string_to_unsigned_int(const std::string &s)
+    {
+      const int value = dealii::Utilities::string_to_int(s);
+      AssertThrow (value >= 0, ExcMessage("Negative number in string_to_unsigned_int() detected."));
+      return static_cast<unsigned int>(value);
+    }
+
+
+
+    std::vector<unsigned int>
+    string_to_unsigned_int(const std::vector<std::string> &s)
+    {
+      std::vector<unsigned int> result;
+      result.reserve(s.size());
+
+      for (auto &str : s)
+        result.emplace_back(string_to_unsigned_int(str));
+
+      return result;
     }
 
 
@@ -2426,7 +2469,7 @@ namespace aspect
             }
           const double sum_of_weights = std::accumulate(weights.begin(), weights.end(), 0.0);
           Assert (sum_of_weights > 0, ExcMessage ("The sum of the weights may not be smaller or equal to zero."));
-          return std::pow(averaged_parameter_derivative_part_1/sum_of_weights,-2) * averaged_parameter_derivative_part_2/sum_of_weights;
+          return Utilities::fixed_power<-2>(averaged_parameter_derivative_part_1/sum_of_weights) * averaged_parameter_derivative_part_2/sum_of_weights;
         }
       else if (p == 0)
         {
@@ -2522,17 +2565,32 @@ namespace aspect
       if ((strain_rate.norm() == 0) || (dviscosities_dstrain_rate.norm() == 0))
         return 1;
 
-      const double norm_a_b = std::sqrt((strain_rate*strain_rate)*(dviscosities_dstrain_rate*dviscosities_dstrain_rate));//std::sqrt((deviator(strain_rate)*deviator(strain_rate))*(dviscosities_dstrain_rate*dviscosities_dstrain_rate));
-      const double contract_b_a = (dviscosities_dstrain_rate*strain_rate);
-      const double one_minus_part = 1 - (contract_b_a / norm_a_b);
-      const double denom = one_minus_part * one_minus_part * norm_a_b;
 
-      // the case denom == 0 (smallest eigenvalue is zero), should return one,
-      // and it does here, because C_safety * 2.0 * eta is always larger then zero.
-      if (denom <= SPD_safety_factor * 2.0 * eta)
+      // The factor in the Newton matrix is going to be of the form
+      //   2*eta I + (a \otimes b + b \otimes a)
+      // where a=strain_rate and b=dviscosities_dstrain_rate.
+      //
+      // If a,b are parallel, this simplifies to
+      //   [2*eta + 2 a:b] I =  2 [eta + a:b] I
+      // and we need to make sure that
+      //   [eta + alpha a:b] > (1-safety_factor)*eta
+      // by choosing alpha appropriately.
+
+      // So, first check: If
+      //   [eta + a:b] > (1-safety_factor)*eta
+      // is already satisfied, then we can choose alpha=1
+      const double a_colon_b = strain_rate * dviscosities_dstrain_rate;
+      if (eta + a_colon_b > eta * (1. - SPD_safety_factor))
         return 1.0;
       else
-        return std::max(0.0, SPD_safety_factor * ((2.0 * eta) / denom));
+        {
+          // Otherwise solve the equation above for alpha, which yields
+          //   a:b = -safety_factor*eta / a:b
+          // This can only ever happen if a:b < 0, so we get
+          //   a:b = safety_factor * abs(eta / a:b)
+          Assert (a_colon_b < 0, ExcInternalError());
+          return SPD_safety_factor * std::abs(eta / a_colon_b);
+        }
     }
 
 
@@ -2982,8 +3040,8 @@ namespace aspect
 
 
     std::vector<Tensor<2,3>>
-    rotation_matrices_random_draw_volume_weighting(const std::vector<double> volume_fraction,
-                                                   const std::vector<Tensor<2,3>> rotation_matrices,
+    rotation_matrices_random_draw_volume_weighting(const std::vector<double> &volume_fraction,
+                                                   const std::vector<Tensor<2,3>> &rotation_matrices,
                                                    const unsigned int n_output_matrices,
                                                    std::mt19937 &random_number_generator)
     {
@@ -3045,7 +3103,7 @@ namespace aspect
       std::array<double,3> euler_angles;
       for (size_t i = 0; i < 3; ++i)
         for (size_t j = 0; j < 3; ++j)
-          Assert(abs(rotation_matrix[i][j]) <= 1.0,
+          Assert(std::abs(rotation_matrix[i][j]) <= 1.0,
                  ExcMessage("rotation_matrix[" + std::to_string(i) + "][" + std::to_string(j) +
                             "] is larger than one: " + std::to_string(rotation_matrix[i][j]) + " (" + std::to_string(rotation_matrix[i][j]-1.0) + "). rotation_matrix = \n"
                             + std::to_string(rotation_matrix[0][0]) + " " + std::to_string(rotation_matrix[0][1]) + " " + std::to_string(rotation_matrix[0][2]) + "\n"
@@ -3451,9 +3509,6 @@ namespace aspect
                                                                 const Point<dim> &position); \
   \
   template \
-  std::array<double,dim> Coordinates::WGS84_coordinates<dim>(const Point<dim> &position); \
-  \
-  template \
   bool polygon_contains_point<dim>(const std::vector<Point<2>> &pointList, \
                                    const dealii::Point<2> &point); \
   \
@@ -3523,6 +3578,11 @@ namespace aspect
     ASPECT_INSTANTIATE(INSTANTIATE)
 
 #undef INSTANTIATE
+
+    // only instantiate for dim=3:
+    template                \
+    std::array<double,3> Coordinates::WGS84_coordinates<3>(const Point<3> &position);
+
 
     template double
     derivative_of_weighted_p_norm_average (const double averaged_parameter,

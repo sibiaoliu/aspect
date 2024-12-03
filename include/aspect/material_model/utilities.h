@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -43,7 +43,7 @@ namespace aspect
   {
     using namespace dealii;
 
-    template <int dim> struct MaterialModelOutputs;
+    template <int dim> class MaterialModelOutputs;
     template <int dim> struct EquationOfStateOutputs;
 
     /**
@@ -268,9 +268,9 @@ namespace aspect
         };
 
         /**
-        * This class reads in an entropy-pressure material table and looks up material
-        * properties for the given entropy and pressure.
-        */
+         * This class reads in an entropy-pressure material table and looks up material
+         * properties for the given entropy and pressure.
+         */
         class EntropyReader
         {
           public:
@@ -280,8 +280,8 @@ namespace aspect
              */
             void
             initialize(const MPI_Comm comm,
-                       const std::string data_directory,
-                       const std::string material_file_name);
+                       const std::string &data_directory,
+                       const std::string &material_file_name);
 
             /**
              * Returns the specific heat for a given entropy and pressure.
@@ -334,7 +334,7 @@ namespace aspect
 
           private:
             /**
-             * The StucturedDataLookup object that stores the material data.
+             * The StructuredDataLookup object that stores the material data.
              */
             std::unique_ptr<Utilities::StructuredDataLookup<2>> material_lookup;
         };
@@ -380,15 +380,6 @@ namespace aspect
       std::vector<double>
       compute_composition_fractions(const std::vector<double> &compositional_fields,
                                     const ComponentMask &field_mask = ComponentMask());
-
-      /**
-       * See compute_composition_fractions() for the documentation of this function.
-       * @deprecated: This function is deprecated. Please use compute_composition_fractions() instead.
-       */
-      DEAL_II_DEPRECATED
-      std::vector<double>
-      compute_volume_fractions(const std::vector<double> &compositional_fields,
-                               const ComponentMask &field_mask = ComponentMask());
 
       /**
        * Given a vector of component masses,
@@ -593,19 +584,47 @@ namespace aspect
           unsigned int n_phases () const;
 
           /**
+           * Return the total number of phases over all chemical compositions.
+           */
+          unsigned int n_phases_over_all_chemical_compositions () const;
+
+          /**
            * Return the Clapeyron slope (dp/dT of the transition) for
            * phase transition number @p phase_index.
            */
           double get_transition_slope (const unsigned int phase_index) const;
 
           /**
+           * Return the depth for phase transition number @p phase_index.
+           */
+          double get_transition_depth (const unsigned int phase_index) const;
+
+          /**
+           * Return how many phase transitions there are for each chemical composition.
+           */
+          const std::vector<unsigned int> &
+          n_phase_transitions_for_each_chemical_composition () const;
+
+          /**
+           * Return how many phases there are for each chemical composition.
+           */
+          const std::vector<unsigned int> &
+          n_phases_for_each_chemical_composition () const;
+
+          /**
            * Return how many phase transitions there are for each composition.
+           * Note, that most likely you only need the number of phase transitions
+           * for each chemical composition, so use the function above instead.
+           * This function is only kept for backward compatibility.
            */
           const std::vector<unsigned int> &
           n_phase_transitions_for_each_composition () const;
 
           /**
            * Return how many phases there are for each composition.
+           * Note, that most likely you only need the number of phase transitions
+           * for each chemical composition, so use the function above instead.
+           * This function is only kept for backward compatibility.
            */
           const std::vector<unsigned int> &
           n_phases_for_each_composition () const;
@@ -663,9 +682,24 @@ namespace aspect
           std::vector<unsigned int> n_phases_per_composition;
 
           /**
+           * A vector that stores how many phase transitions there are for each chemical compositional field.
+           */
+          std::vector<unsigned int> n_phase_transitions_per_chemical_composition;
+
+          /**
+           * A vector that stores how many phases there are for each chemical compositional field.
+           */
+          std::vector<unsigned int> n_phases_per_chemical_composition;
+
+          /**
            * Total number of phases over all compositional fields
            */
           unsigned int n_phases_total;
+
+          /**
+           * Total number of phases over all compositional fields
+           */
+          unsigned int n_phases_total_chemical_compositions;
       };
     }
   }

@@ -1,4 +1,4 @@
-# Copyright (C) 2019 - 2023 by the authors of the ASPECT code.
+# Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 #
 # This file is part of ASPECT.
 #
@@ -16,7 +16,7 @@
 # along with ASPECT; see the file LICENSE.  If not see
 # <http://www.gnu.org/licenses/>.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.13.4)
 
 FIND_PACKAGE(Aspect 2.4.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
 

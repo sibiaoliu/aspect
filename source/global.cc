@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,6 +25,10 @@
 #include <deal.II/base/multithread_info.h>
 #include <deal.II/base/revision.h>
 #include <deal.II/base/vectorization.h>
+
+#ifdef ASPECT_WITH_WORLD_BUILDER
+#include <world_builder/config.h>
+#endif
 
 #include <cstring>
 
@@ -55,12 +59,17 @@ void print_aspect_header(Stream &stream)
 #else
          << "32"
 #endif
-         << " bit indices and vectorization level ";
-  const unsigned int n_vect_bits =
-    dealii::VectorizedArray<double>::size() * 8 * sizeof(double);
+         << " bit indices\n";
 
+  const unsigned int n_vectorization_doubles = dealii::VectorizedArray<double>::size();
+  const unsigned int n_vectorization_bits = 8 * sizeof(double) * n_vectorization_doubles;
+  const std::string vectorization_level = dealii::Utilities::System::get_current_vectorization_level();
+
+  stream << "--     .       with vectorization level ";
   stream << DEAL_II_COMPILER_VECTORIZATION_LEVEL
-         << " (" << n_vect_bits << " bits)\n";
+         << " (" << vectorization_level << ", "
+         << n_vectorization_doubles << " doubles, "
+         << n_vectorization_bits << " bits)\n";
 
   stream << "--     . using Trilinos "
          << DEAL_II_TRILINOS_VERSION_MAJOR    << '.'
@@ -70,6 +79,18 @@ void print_aspect_header(Stream &stream)
          << DEAL_II_P4EST_VERSION_MAJOR << '.'
          << DEAL_II_P4EST_VERSION_MINOR << '.'
          << DEAL_II_P4EST_VERSION_SUBMINOR << '\n';
+
+#ifdef ASPECT_WITH_WORLD_BUILDER
+  stream << "--     . using Geodynamic World Builder "
+         << WORLD_BUILDER_VERSION_MAJOR << '.'
+         << WORLD_BUILDER_VERSION_MINOR << '.'
+         << WORLD_BUILDER_VERSION_PATCH;
+
+  if (WorldBuilder::Version::GIT_SHA1 != "")
+    stream << " (" << WorldBuilder::Version::GIT_BRANCH << ", " << WorldBuilder::Version::GIT_SHA1.substr(0,9) << ')';
+
+  stream << '\n';
+#endif
 
 #ifdef DEBUG
   stream << "--     . running in DEBUG mode\n"

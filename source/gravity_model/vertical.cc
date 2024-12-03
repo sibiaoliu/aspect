@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -77,7 +77,7 @@ namespace aspect
 
       AssertThrow (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::cartesian,
                    ExcMessage ("Gravity model 'vertical' should not be used with geometry models that "
-                               "do not have a cartesian natural coordinate system."));
+                               "do not have a Cartesian natural coordinate system."));
     }
   }
 }

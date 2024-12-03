@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2022 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2022 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,7 +30,7 @@
 
 #include "../benchmarks/newton_solver_benchmark_set/nonlinear_channel_flow/simple_nonlinear.cc"
 
-template<int dim>
+template <int dim>
 int f(double parameter)
 {
 

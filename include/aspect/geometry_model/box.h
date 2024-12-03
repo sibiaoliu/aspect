@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -224,6 +224,11 @@ namespace aspect
 
       private:
         /**
+         * A pointer to the initial topography model.
+         */
+        InitialTopographyModel::Interface<dim> *topo_model;
+
+        /**
          * Extent of the box in x-, y-, and z-direction (in 3d).
          */
         Point<dim> extents;
@@ -242,11 +247,6 @@ namespace aspect
          * The number of cells in each coordinate direction.
          */
         std::array<unsigned int, dim> repetitions;
-
-        /**
-         * A pointer to the initial topography model.
-         */
-        InitialTopographyModel::Interface<dim> *topo_model;
     };
   }
 }

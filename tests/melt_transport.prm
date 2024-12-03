@@ -32,11 +32,6 @@ subsection Compositional fields
 end
 
 subsection Solver parameters
-  subsection Operator splitting parameters
-    set Reaction time step                     = 1.5e7
-    set Reaction time steps per advection step = 1
-  end
-
   subsection Stokes solver parameters
     set Use direct solver for Stokes system = true
   end
@@ -135,7 +130,7 @@ subsection Postprocess
 
   subsection Visualization
     set Interpolate output = false
-    set List of output variables      = density, viscosity, thermal expansivity
+    set List of output variables      = material properties
 
     # VTU file output supports grouping files from several CPUs into one file
     # using MPI I/O when writing on a parallel filesystem. Select 0 for no
@@ -152,5 +147,9 @@ subsection Postprocess
     # step. Units: years if the 'Use years in output instead of seconds'
     # parameter is set; seconds otherwise.
     set Time between graphical output = 0
+
+    subsection Material properties
+      set List of material properties = density, viscosity, thermal expansivity
+    end
   end
 end

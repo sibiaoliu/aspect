@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -114,7 +114,7 @@ namespace aspect
 
 
 
-      template<int dim>
+      template <int dim>
       Tensor<1,dim>
       Annulus_velocity (const Point<dim> &pos,
                         const double k,
@@ -139,7 +139,7 @@ namespace aspect
 
 
 
-      template<int dim>
+      template <int dim>
       double
       Annulus_pressure (const Point<dim> &pos,
                         const double k,
@@ -156,7 +156,7 @@ namespace aspect
 
 
 
-      template<int dim>
+      template <int dim>
       double
       Annulus_normal_traction (const Point<dim> &pos,
                                const double k,
@@ -172,7 +172,7 @@ namespace aspect
 
 
 
-      template<int dim>
+      template <int dim>
       double
       Annulus_density (const Point<dim> &pos,
                        const double k,
@@ -200,7 +200,7 @@ namespace aspect
 
 
 
-      template<int dim>
+      template <int dim>
       Tensor<1,dim>
       Annulus_gravity (const Point<dim> &pos,
                        const double k,
@@ -219,7 +219,7 @@ namespace aspect
             const double r = spherical_position[0];
             const double theta = spherical_position[1];
 
-            const double forcing_term = m(r,k)*k*sin(k*(theta-phase(t))) + rho_0;
+            const double forcing_term = m(r,k)*k*std::sin(k*(theta-phase(t))) + rho_0;
             gravity_magnitude = forcing_term / Annulus_density(pos,k,t, transient);
           }
 
@@ -615,7 +615,7 @@ namespace aspect
         compute_dynamic_topography_error() const
         {
           const Postprocess::DynamicTopography<dim> &dynamic_topography =
-            this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::DynamicTopography<dim>>();
+            this->get_postprocess_manager().template get_matching_active_plugin<Postprocess::DynamicTopography<dim>>();
 
           const AnnulusMaterial<dim> &material_model
             = Plugins::get_plugin_as_type<const AnnulusMaterial<dim>>(this->get_material_model());

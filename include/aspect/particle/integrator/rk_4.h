@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2022 by the authors of the ASPECT code.
+ Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -87,6 +87,23 @@ namespace aspect
           bool new_integration_step() override;
 
           /**
+           * Return a list of boolean values indicating which solution vectors
+           * are required for the integration. The first entry indicates if
+           * the particle integrator requires the solution vector at the old
+           * old time (k-1), the second entry indicates if the particle integrator
+           * requires the solution vector at the old time (k), and the third entry
+           * indicates if the particle integrator requires the solution vector
+           * at the new time (k+1).
+           *
+           * The RK4 integrator requires the solution vector at the
+           * old time (k) for the first integration step, the solution
+           * vector at both the old and new time for the second
+           * and third integration steps and the solution vector at the
+           * new time (k+1) for the fourth integration step.
+           */
+          std::array<bool, 3> required_solution_vectors() const override;
+
+          /**
            * We need to tell the property manager how many intermediate properties this integrator requires,
            * so that it can allocate sufficient space for each particle. However, the integrator is not
            * created at the time the property manager is set up and we can not reverse the order of creation,
@@ -97,7 +114,7 @@ namespace aspect
            *
            * The Runge-Kutta 4 integrator requires 4 tensors with dim components each.
            */
-          static const unsigned int n_integrator_properties = 4*dim;
+          static constexpr unsigned int n_integrator_properties = 4*dim;
 
         private:
           /**

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -45,6 +45,11 @@ namespace aspect
         double activation_energy;
         double activation_volume;
         double stress_exponent;
+
+        /**
+         * Constructor. Initializes all values to NaN.
+         */
+        DislocationCreepParameters();
       };
 
       template <int dim>

@@ -118,13 +118,18 @@ subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, basic statistics
 
   subsection Visualization
-    set List of output variables = density, viscosity, strain rate, error indicator, heating, partition
+    set List of output variables = material properties, strain rate, error indicator, heating, partition
     set Time between graphical output = 0
+
+    subsection Material properties
+      set List of material properties = density, viscosity
+    end
   end
 end
 
 subsection Solver parameters
   subsection Stokes solver parameters
+    set Stokes solver type = block AMG
     set Linear solver tolerance = 1e-9
     set Number of cheap Stokes solver steps = 0
     set Maximum number of expensive Stokes solver steps = 5000

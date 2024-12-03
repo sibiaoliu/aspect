@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -76,6 +76,9 @@ namespace aspect
          * if and only if base model is compressible.
          */
         bool is_compressible () const override;
+
+        void
+        create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
       private:
 

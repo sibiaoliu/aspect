@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -83,6 +83,12 @@ namespace aspect
          * A function object representing the components of the velocity.
          */
         Functions::ParsedFunction<dim> heating_model_function;
+
+        /**
+         * The coordinate representation to evaluate the function. Possible
+         * choices are depth, cartesian and spherical.
+         */
+        Utilities::Coordinates::CoordinateSystem coordinate_system;
     };
   }
 }

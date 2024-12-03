@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2022 by the authors of the ASPECT code.
+ Copyright (C) 2017 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -32,11 +32,6 @@ namespace aspect
   {
     namespace Interpolator
     {
-      namespace internal
-      {
-        bool string_to_bool(const std::string &s);
-      }
-
       /**
        * Evaluate the properties of all particles of the given cell
        * using a least squares projection onto the set of bilinear

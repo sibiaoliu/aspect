@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,11 +34,10 @@ namespace aspect
     template <int dim>
     MaterialModelDerivatives<dim>::
     MaterialModelDerivatives (const unsigned int n_points)
-    {
-      viscosity_derivative_wrt_pressure.resize(n_points, numbers::signaling_nan<double>());
-      viscosity_derivative_wrt_strain_rate.resize(n_points, numbers::signaling_nan<SymmetricTensor<2,dim>>());
-    }
-
+      : viscosity_derivative_wrt_pressure(n_points, numbers::signaling_nan<double>())
+      , viscosity_derivative_wrt_strain_rate(n_points, numbers::signaling_nan<SymmetricTensor<2,dim>>())
+      , viscosity_derivative_averaging_weights(n_points, numbers::signaling_nan<double>())
+    {}
   }
 
 
@@ -120,9 +119,8 @@ namespace aspect
     if (output.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>() != nullptr)
       return;
 
-    const unsigned int n_points = output.viscosities.size();
     output.additional_outputs.push_back(
-      std::make_unique<MaterialModel::MaterialModelDerivatives<dim>>(n_points));
+      std::make_unique<MaterialModel::MaterialModelDerivatives<dim>>(output.n_evaluation_points()));
   }
 
 
@@ -222,11 +220,13 @@ namespace aspect
                              "When stabilizing the Newton matrix, we can encounter situations where the coefficient inside the elliptic (top-left) "
                              "block becomes negative or zero. This coefficient has the form $1+x$ where $x$ can sometimes be smaller than $-1$. In "
                              "this case, the top-left block of the matrix is no longer positive definite, and both preconditioners and iterative "
-                             "solvers may fail. To prevent this, the stabilization computes an $\\alpha$ so that $1+\\alpha x$ is never negative. "
-                             "This $\\alpha$ is chosen as $1$ if $x\\ge -1$, and $\\alpha=-\\frac 1x$ otherwise. (Note that this always leads to "
-                             "$0\\le \\alpha \\le 1$.)  On the other hand, we also want to stay away from $1+\\alpha x=0$, and so modify the choice of "
-                             "$\\alpha$ to be $1$ if $x\\ge -c$, and $\\alpha=-\\frac cx$ with a $c$ between zero and one. This way, if $c<1$, we are "
-                             "assured that $1-\\alpha x>c$, i.e., bounded away from zero.");
+                             "solvers may fail. To prevent this, the stabilization computes an $\\alpha$ so that $1+\\alpha x$ is never negative "
+                             "and so that always "
+                             "$0\\le \\alpha \\le 1$.  On the other hand, we also want to stay away from $1+\\alpha x=0$, and so modify the choice of "
+                             "$\\alpha$ by a factor $c$ between zero and one so that if $c<1$, we are "
+                             "assured that $1+\\alpha x>0$, i.e., bounded away from zero. If $c=1$, we allow $1+\\alpha x=0$, i.e., an "
+                             "unsafe situation. If $c=0$, then $\\alpha$ is always set to zero which guarantees the desired property that "
+                             "$1+\\alpha x=1>0$, but at the cost of a diminished convergence rate of the Newton method.");
 
           prm.declare_entry ("Use Eisenstat Walker method for Picard iterations", "false",
                              Patterns::Bool(),

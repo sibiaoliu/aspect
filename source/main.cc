@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,7 +29,6 @@
 #include <csignal>
 #include <string>
 #include <thread>
-#include <chrono>
 #include <regex>
 
 #ifdef DEBUG
@@ -203,7 +202,7 @@ void validate_shared_lib_list (const bool before_loading_shared_libs)
         error << "Since this is happening already before opening additional\n"
               << "shared libraries, this means that something must have gone\n"
               << "wrong when you configured deal.II and/or ASPECT. Please\n"
-              << "contact the mailing lists for help.\n";
+              << "contact the forum for help.\n";
       else
         error << "Since this is happening after opening additional shared\n"
               << "library plugins, this likely means that you have compiled\n"
@@ -289,7 +288,13 @@ void possibly_load_shared_libs (const std::string &parameters)
                        ExcMessage (std::string("Could not successfully load shared library <")
                                    + filename + ">. The operating system reports "
                                    + "that the error is this: <"
-                                   + dlerror() + ">."));
+                                   + dlerror() +
+                                   ">. Did you call 'cmake' and then compile "
+                                   "the plugin library you are trying to load, and did "
+                                   "you check the spelling of the library's name? "
+                                   "Are you running ASPECT in a directory so that the path "
+                                   "to the library in question is as specified in the "
+                                   ".prm file?"));
 
           // check again whether the list of shared libraries is
           // internally consistent or whether we link with both the
@@ -504,7 +509,8 @@ void print_help()
             << "       -h, --help             (for this usage help)\n"
             << "       -v, --version          (for information about library versions)\n"
             << "       -j, --threads          (to use multi-threading)\n"
-            << "       --output-xml           (print parameters in xml format to standard output and exit)\n"
+            << "       --output-json          (print parameters in JSON format to standard output and exit)\n"
+            << "       --output-xml           (print parameters in XML format to standard output and exit)\n"
             << "       --output-plugin-graph  (write a representation of all plugins to standard output and exit)\n"
             << "       --validate             (parse parameter file and exit or report errors)\n"
             << "       --test                 (run the unit tests from unit_tests/, run --test -h for more info)\n"
@@ -536,10 +542,11 @@ void signal_handler(int signal)
 
 
 
-template<int dim>
+template <int dim>
 void
 run_simulator(const std::string &raw_input_as_string,
               const std::string &input_as_string,
+              const bool output_json,
               const bool output_xml,
               const bool output_plugin_graph,
               const bool validate_only)
@@ -578,7 +585,12 @@ run_simulator(const std::string &raw_input_as_string,
 
   parse_parameters (input_as_string, prm);
 
-  if (output_xml)
+  if (output_json)
+    {
+      if (i_am_proc_0)
+        prm.print_parameters(std::cout, ParameterHandler::JSON);
+    }
+  else if (output_xml)
     {
       if (i_am_proc_0)
         prm.print_parameters(std::cout, ParameterHandler::XML);
@@ -628,6 +640,7 @@ int main (int argc, char *argv[])
 #endif
 
   std::string prm_name = "";
+  bool output_json         = false;
   bool output_xml          = false;
   bool output_plugin_graph = false;
   bool output_version      = false;
@@ -645,7 +658,11 @@ int main (int argc, char *argv[])
     {
       const std::string arg = argv[current_argument];
       ++current_argument;
-      if (arg == "--output-xml")
+      if (arg == "--output-json")
+        {
+          output_json = true;
+        }
+      else if (arg == "--output-xml")
         {
           output_xml = true;
         }
@@ -726,7 +743,7 @@ int main (int argc, char *argv[])
       if (i_am_proc_0)
         {
           // Output header, except for a clean output for xml or plugin graph
-          if (!output_xml && !output_plugin_graph && !validate_only)
+          if (!output_xml && !output_json && !output_plugin_graph && !validate_only)
             print_aspect_header(std::cout);
 
           if (output_help)
@@ -793,12 +810,12 @@ int main (int argc, char *argv[])
         {
           case 2:
           {
-            run_simulator<2>(raw_input_as_string,input_as_string,output_xml,output_plugin_graph,validate_only);
+            run_simulator<2>(raw_input_as_string,input_as_string,output_json,output_xml,output_plugin_graph,validate_only);
             break;
           }
           case 3:
           {
-            run_simulator<3>(raw_input_as_string,input_as_string,output_xml,output_plugin_graph,validate_only);
+            run_simulator<3>(raw_input_as_string,input_as_string,output_json,output_xml,output_plugin_graph,validate_only);
             break;
           }
           default:

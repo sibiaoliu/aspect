@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2022 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2022 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,7 +33,7 @@
 
 #include <iostream>
 
-template<int dim>
+template <int dim>
 void f(const aspect::SimulatorAccess<dim> &simulator_access,
        aspect::Assemblers::Manager<dim> &)
 {
@@ -75,7 +75,7 @@ void f(const aspect::SimulatorAccess<dim> &simulator_access,
   /**
    * We can't take to small strain-rates, because then the difference in the
    * visocisty will be too small for the double accuracy which stores
-   * the visocity solutions and the finite diference solution.
+   * the visocity solutions and the finite difference solution.
    */
   in_base.strain_rate[0] = SymmetricTensor<2,dim>();
   in_base.strain_rate[0][0][0] = 1e-12;

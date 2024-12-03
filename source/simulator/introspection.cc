@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -21,12 +21,11 @@
 
 #include <aspect/introspection.h>
 #include <aspect/global.h>
-
+#include <aspect/utilities.h>
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_dgq.h>
 #include <deal.II/fe/fe_dgp.h>
-#include <tuple>
 
 namespace aspect
 {
@@ -45,9 +44,17 @@ namespace aspect
 
       ci.pressure = fevs.variable("pressure").first_component_index;
       ci.temperature = fevs.variable("temperature").first_component_index;
-      unsigned int n_compositional_fields = fevs.variable("compositions").n_components();
-      for (unsigned int i=0; i<n_compositional_fields; ++i)
-        ci.compositional_fields.push_back(fevs.variable("compositions").first_component_index+i);
+
+      {
+        const auto composition_variables = fevs.variables_with_name("compositions");
+        for (const auto &fe : composition_variables)
+          {
+            for (unsigned int i=0; i<fe->multiplicity; ++i)
+              {
+                ci.compositional_fields.push_back(fe->first_component_index+i);
+              }
+          }
+      }
 
       return ci;
     }
@@ -64,10 +71,17 @@ namespace aspect
       b.pressure = fevs.variable("pressure").block_index;
       b.temperature = fevs.variable("temperature").block_index;
 
-      unsigned int n_compositional_fields = fevs.variable("compositions").n_components();
-      for (unsigned int i=0; i<n_compositional_fields; ++i)
-        b.compositional_fields.push_back(fevs.variable("compositions").block_index+i);
-
+      {
+        const auto variables = fevs.variables_with_name("compositions");
+        for (const auto &fe : variables)
+          {
+            for (unsigned int i=0; i<fe->multiplicity; ++i)
+              {
+                b.compositional_fields.push_back(fe->block_index + i);
+                b.compositional_field_sparsity_pattern.push_back(fe->block_index);
+              }
+          }
+      }
       return b;
     }
 
@@ -82,7 +96,20 @@ namespace aspect
       base_elements.velocities = fevs.variable("velocity").base_index;
       base_elements.pressure = fevs.variable("pressure").base_index;
       base_elements.temperature = fevs.variable("temperature").base_index;
-      base_elements.compositional_fields = fevs.variable("compositions").base_index;
+
+      {
+        // TODO: We would ideally reuse base elements also when they are
+        // not consecutively encountered. For now, just ignore that fact.
+        const auto variables = fevs.variables_with_name("compositions");
+        for (const auto &fe : variables)
+          {
+            for (unsigned int i=0; i<fe->multiplicity; ++i)
+              base_elements.compositional_fields.push_back(fe->base_index);
+          }
+      }
+
+
+
 
       return base_elements;
     }
@@ -97,7 +124,13 @@ namespace aspect
 
       polynomial_degree.velocities = parameters.stokes_velocity_degree;
       polynomial_degree.temperature = parameters.temperature_degree;
-      polynomial_degree.compositional_fields = parameters.composition_degree;
+      polynomial_degree.compositional_fields = parameters.composition_degrees;
+      polynomial_degree.max_compositional_field = parameters.max_composition_degree;
+      polynomial_degree.max_degree = std::max({parameters.stokes_velocity_degree,
+                                               parameters.temperature_degree,
+                                               (parameters.n_compositional_fields>0 ? parameters.max_composition_degree : 0u)
+                                              }
+                                             );
 
       return polynomial_degree;
     }
@@ -118,10 +151,12 @@ namespace aspect
                                                                            :
                                                                            parameters.stokes_velocity_degree);
       quadratures.temperature = reference_cell.get_gauss_type_quadrature<dim>(parameters.temperature_degree+1);
-      quadratures.compositional_fields = reference_cell.get_gauss_type_quadrature<dim>(parameters.composition_degree+1);
+      quadratures.compositional_field_max = reference_cell.get_gauss_type_quadrature<dim>(parameters.max_composition_degree+1);
+      for (const auto &degree: parameters.composition_degrees)
+        quadratures.compositional_fields.emplace_back(reference_cell.get_gauss_type_quadrature<dim>(degree+1));
       quadratures.system = reference_cell.get_gauss_type_quadrature<dim>(std::max({parameters.stokes_velocity_degree,
                                                                                    parameters.temperature_degree,
-                                                                                   parameters.composition_degree
+                                                                                   parameters.max_composition_degree
                                                                                   }) + 1);
 
       return quadratures;
@@ -143,11 +178,9 @@ namespace aspect
                              :
                              parameters.stokes_velocity_degree);
       quadratures.temperature = reference_cell.face_reference_cell(0).get_gauss_type_quadrature<dim-1>(parameters.temperature_degree+1);
-      quadratures.compositional_fields = reference_cell.face_reference_cell(0).get_gauss_type_quadrature<dim-1>(parameters.composition_degree+1);
-      quadratures.system = reference_cell.face_reference_cell(0).get_gauss_type_quadrature<dim-1>(std::max({parameters.stokes_velocity_degree,
-                           parameters.temperature_degree,
-                           parameters.composition_degree
-                                                                                                           }) + 1);
+      quadratures.compositional_fields = reference_cell.face_reference_cell(0).get_gauss_type_quadrature<dim-1>(parameters.max_composition_degree+1);
+      quadratures.system = reference_cell.face_reference_cell(0).get_gauss_type_quadrature<dim-1>(
+                             std::max({parameters.stokes_velocity_degree, parameters.temperature_degree, parameters.max_composition_degree}) + 1);
 
       return quadratures;
     }
@@ -220,13 +253,27 @@ namespace aspect
         1,
         1));
 
-    variables.push_back(
-      VariableDeclaration<dim>(
-        "compositions",
-        internal::new_FE_Q_or_DGQ<dim>(parameters.use_discontinuous_composition_discretization,
-                                       parameters.composition_degree),
-        parameters.n_compositional_fields,
-        parameters.n_compositional_fields));
+    // We can not create a single composition with multiplicity n (this assumes all have the same FiniteElement) and
+    // we also don't want to create n different compositional fields for performance reasons. Instead, we combine
+    // consecutive compositions of the same type into the same base element. For example, if the user requests
+    // "Q2,Q2,DGQ1,Q2", we actually create "Q2^2, DGQ1, Q2":
+    for (unsigned int c=0; c<parameters.n_compositional_fields; ++c)
+      {
+        if (c>0
+            && parameters.use_discontinuous_composition_discretization[c] == parameters.use_discontinuous_composition_discretization[c-1]
+            && parameters.composition_degrees[c] == parameters.composition_degrees[c-1])
+          {
+            // reuse last one because it is the same
+            variables.back().multiplicity += 1;
+            variables.back().n_blocks += 1;
+          }
+        else
+          {
+            std::shared_ptr<FiniteElement<dim>> fe = internal::new_FE_Q_or_DGQ<dim>(parameters.use_discontinuous_composition_discretization[c],
+                                                                                     parameters.composition_degrees[c]);
+            variables.push_back(VariableDeclaration<dim>("compositions", fe, 1, 1));
+          }
+      }
 
     return variables;
   }
@@ -243,23 +290,65 @@ namespace aspect
     use_discontinuous_temperature_discretization (parameters.use_discontinuous_temperature_discretization),
     use_discontinuous_composition_discretization (parameters.use_discontinuous_composition_discretization),
     component_indices (internal::setup_component_indices<dim>(*this)),
-    n_blocks(FEVariableCollection<dim>::n_blocks()),
+    n_blocks (FEVariableCollection<dim>::n_blocks()),
     block_indices (internal::setup_blocks<dim>(*this)),
     extractors (component_indices),
     base_elements (internal::setup_base_elements<dim>(*this)),
     polynomial_degree (internal::setup_polynomial_degree<dim>(parameters)),
     quadratures (internal::setup_quadratures<dim>(parameters, ReferenceCells::get_hypercube<dim>())),
     face_quadratures (internal::setup_face_quadratures<dim>(parameters, ReferenceCells::get_hypercube<dim>())),
-    component_masks (*this),
+    component_masks (*this, component_indices),
     system_dofs_per_block (n_blocks),
     temperature_method(parameters.temperature_method),
     compositional_field_methods(parameters.compositional_field_methods),
     composition_names(parameters.names_of_compositional_fields),
     composition_descriptions(parameters.composition_descriptions),
-    chemical_composition_names (get_names_for_fields_of_type(CompositionalFieldDescription::chemical_composition)),
-    chemical_composition_indices (get_indices_for_fields_of_type(CompositionalFieldDescription::chemical_composition)),
-    n_chemical_compositions (get_number_of_fields_of_type(CompositionalFieldDescription::chemical_composition))
-  {}
+    composition_names_for_type(CompositionalFieldDescription::n_types),
+    composition_indices_for_type(CompositionalFieldDescription::n_types)
+  {
+    // Set up the indices for the different types of compositional fields
+    for (unsigned int c=0; c<composition_descriptions.size(); ++c)
+      {
+        composition_indices_for_type[composition_descriptions[c].type].push_back(c);
+        composition_names_for_type[composition_descriptions[c].type].push_back(composition_names[c]);
+      }
+
+    // Fill composition_base_element_indices
+    {
+      if (this->n_compositional_fields > 0)
+        {
+          // We are assigning base elements in order, so the first compositional field
+          // gives us the first base element index. Then we find the largest index
+          // in the vector. This is necessary, because the fields could have type A,B,A.
+          const unsigned int first = this->base_elements.compositional_fields[0];
+          const unsigned int last = *std::max_element(this->base_elements.compositional_fields.begin(),
+                                                      this->base_elements.compositional_fields.end());
+
+          composition_base_element_indices.resize(last-first+1);
+          std::iota(composition_base_element_indices.begin(), composition_base_element_indices.end(), first);
+        }
+    }
+
+// Fill compositional_field_indices_with_base_element
+    {
+      for (const auto base_element_index : composition_base_element_indices)
+        {
+          std::vector<unsigned int> result;
+
+          unsigned int idx = 0;
+          for (const auto base_idx : this->base_elements.compositional_fields)
+            {
+              if (base_idx == base_element_index)
+                result.emplace_back(idx);
+              ++idx;
+            }
+
+          Assert(result.size() > 0, ExcInternalError("There should be at least one compositional field for a valid base element."));
+          compositional_field_indices_with_base_element[base_element_index] = result;
+        }
+    }
+
+  }
 
 
 
@@ -275,6 +364,7 @@ namespace aspect
     make_extractor_sequence (const std::vector<unsigned int> &compositional_fields)
     {
       std::vector<FEValuesExtractors::Scalar> x;
+      x.reserve(compositional_fields.size());
       for (const unsigned int compositional_field : compositional_fields)
         x.emplace_back(compositional_field);
       return x;
@@ -298,14 +388,24 @@ namespace aspect
   {
     template <int dim>
     std::vector<ComponentMask>
-    make_component_mask_sequence(const FEVariable<dim> &variable)
+    make_composition_component_mask_sequence (const FEVariableCollection<dim> &fevs, const typename Introspection<dim>::ComponentIndices &indices)
     {
       std::vector<ComponentMask> result;
-      for (unsigned int i=0; i<variable.multiplicity; ++i)
+      for (const unsigned int idx : indices.compositional_fields)
         {
-          result.push_back(ComponentMask(variable.component_mask.size(), false));
-          result.back().set(variable.first_component_index+i, true);
+          result.push_back(ComponentMask(fevs.n_components(), false));
+          result.back().set(idx, true);
         }
+      return result;
+    }
+
+    template <int dim>
+    ComponentMask
+    make_composition_component_mask (const FEVariableCollection<dim> &fevs, const std::vector<ComponentMask> &compositional_fields)
+    {
+      ComponentMask result(fevs.n_components(), false);
+      for (const auto &mask : compositional_fields)
+        result = result | mask;
       return result;
     }
   }
@@ -313,13 +413,35 @@ namespace aspect
 
 
   template <int dim>
-  Introspection<dim>::ComponentMasks::ComponentMasks (FEVariableCollection<dim> &fevs)
+  Introspection<dim>::ComponentMasks::ComponentMasks (const FEVariableCollection<dim> &fevs, const Introspection<dim>::ComponentIndices &indices)
     :
     velocities (fevs.variable("velocity").component_mask),
     pressure (fevs.variable("pressure").component_mask),
     temperature (fevs.variable("temperature").component_mask),
-    compositional_fields (make_component_mask_sequence (fevs.variable("compositions")))
+    compositional_fields (make_composition_component_mask_sequence (fevs, indices)),
+    compositions(make_composition_component_mask(fevs, compositional_fields))
   {}
+
+
+
+  template <int dim>
+  const std::vector<unsigned int> &
+  Introspection<dim>::get_composition_base_element_indices() const
+  {
+    return composition_base_element_indices;
+  }
+
+
+
+  template <int dim>
+  const std::vector<unsigned int> &
+  Introspection<dim>::get_compositional_field_indices_with_base_element(const unsigned int base_element_index) const
+  {
+    Assert(compositional_field_indices_with_base_element.find(base_element_index)
+           != compositional_field_indices_with_base_element.end(),
+           ExcMessage("Invalid base_element_index specified."));
+    return compositional_field_indices_with_base_element.find(base_element_index)->second;
+  }
 
 
 
@@ -372,7 +494,7 @@ namespace aspect
   const std::vector<std::string> &
   Introspection<dim>::chemical_composition_field_names () const
   {
-    return chemical_composition_names;
+    return get_names_for_fields_of_type(CompositionalFieldDescription::chemical_composition);
   }
 
 
@@ -381,7 +503,7 @@ namespace aspect
   const std::vector<unsigned int> &
   Introspection<dim>::chemical_composition_field_indices () const
   {
-    return chemical_composition_indices;
+    return get_indices_for_fields_of_type(CompositionalFieldDescription::chemical_composition);
   }
 
 
@@ -390,7 +512,7 @@ namespace aspect
   unsigned int
   Introspection<dim>::n_chemical_composition_fields () const
   {
-    return n_chemical_compositions;
+    return get_number_of_fields_of_type(CompositionalFieldDescription::Type::chemical_composition);
   }
 
 
@@ -399,10 +521,9 @@ namespace aspect
   bool
   Introspection<dim>::composition_type_exists (const CompositionalFieldDescription::Type &type) const
   {
-    for (unsigned int c=0; c<composition_descriptions.size(); ++c)
-      if (composition_descriptions[c].type == type)
-        return true;
-    return false;
+    Assert(type < composition_indices_for_type.size(), ExcInternalError());
+
+    return composition_indices_for_type[type].size() > 0;
   }
 
 
@@ -411,9 +532,11 @@ namespace aspect
   unsigned int
   Introspection<dim>::find_composition_type (const typename CompositionalFieldDescription::Type &type) const
   {
-    for (unsigned int c=0; c<composition_descriptions.size(); ++c)
-      if (composition_descriptions[c].type == type)
-        return c;
+    Assert(type < composition_indices_for_type.size(), ExcInternalError());
+
+    if (composition_indices_for_type[type].size() > 0)
+      return composition_indices_for_type[type][0];
+
     return composition_descriptions.size();
   }
 
@@ -433,31 +556,21 @@ namespace aspect
 
 
   template <int dim>
-  const std::vector<unsigned int>
+  const std::vector<unsigned int> &
   Introspection<dim>::get_indices_for_fields_of_type (const CompositionalFieldDescription::Type &type) const
   {
-    std::vector<unsigned int> indices;
-
-    for (unsigned int i=0; i<n_compositional_fields; ++i)
-      if (composition_descriptions[i].type == type)
-        indices.push_back(i);
-
-    return indices;
+    Assert(type < composition_indices_for_type.size(), ExcInternalError());
+    return composition_indices_for_type[type];
   }
 
 
 
   template <int dim>
-  const std::vector<std::string>
+  const std::vector<std::string> &
   Introspection<dim>::get_names_for_fields_of_type (const CompositionalFieldDescription::Type &type) const
   {
-    std::vector<std::string> names;
-
-    for (unsigned int i=0; i<n_compositional_fields; ++i)
-      if (composition_descriptions[i].type == type)
-        names.push_back(composition_names[i]);
-
-    return names;
+    Assert(type < composition_names_for_type.size(), ExcInternalError());
+    return composition_names_for_type[type];
   }
 
 
@@ -466,13 +579,8 @@ namespace aspect
   unsigned int
   Introspection<dim>::get_number_of_fields_of_type (const CompositionalFieldDescription::Type &type) const
   {
-    unsigned int n = 0;
-
-    for (unsigned int i=0; i<n_compositional_fields; ++i)
-      if (composition_descriptions[i].type == type)
-        n += 1;
-
-    return n;
+    Assert(type < composition_indices_for_type.size(), ExcInternalError());
+    return composition_indices_for_type[type].size();
   }
 
 
@@ -491,6 +599,22 @@ namespace aspect
     return false;
   }
 
+
+
+  template <int dim>
+  bool
+  Introspection<dim>::is_composition_component (const unsigned int component_index) const
+  {
+    // All compositions live at the end. Just to be sure, there are no other components
+    // in our system after compositional fields, right?
+    Assert(component_indices.compositional_fields[0] > component_indices.temperature
+           && component_indices.compositional_fields.back() == n_components-1, ExcInternalError());
+
+    if (component_index >= component_indices.compositional_fields[0])
+      return true;
+    else
+      return false;
+  }
 
 }
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -96,6 +96,38 @@ namespace aspect
              :
              false;
     }
+
+    /**
+     * A struct that contains the enums to decide what to do when a nonlinear solver fails.
+     */
+    struct NonlinearSolverFailureStrategy
+    {
+      enum Kind
+      {
+        continue_with_next_timestep,
+        cut_timestep_size,
+        abort_program
+      };
+
+      /**
+       * Parse the enum value from a string.
+       */
+      static
+      Kind
+      parse(const std::string &input)
+      {
+        if (input == "continue with next timestep")
+          return continue_with_next_timestep;
+        else if (input == "cut timestep size")
+          return cut_timestep_size;
+        else if (input == "abort program")
+          return abort_program;
+        else
+          AssertThrow(false, ExcNotImplemented());
+
+        return Kind();
+      }
+    };
 
     /**
      * @brief The NullspaceRemoval struct
@@ -323,12 +355,13 @@ namespace aspect
       {
         block_amg,
         direct_solver,
-        block_gmg
+        block_gmg,
+        default_solver
       };
 
       static const std::string pattern()
       {
-        return "block AMG|direct solver|block GMG";
+        return "default solver|block AMG|direct solver|block GMG";
       }
 
       static Kind
@@ -340,6 +373,8 @@ namespace aspect
           return direct_solver;
         else if (input == "block GMG")
           return block_gmg;
+        else if (input == "default solver")
+          return default_solver;
         else
           AssertThrow(false, ExcNotImplemented());
 
@@ -371,6 +406,37 @@ namespace aspect
           return gmres;
         else if (input == "IDR(s)")
           return idr_s;
+        else
+          AssertThrow(false, ExcNotImplemented());
+
+        return Kind();
+      }
+    };
+
+    /**
+     * This enum represents the different choices for the reaction solver.
+     * See @p reaction_solver_type.
+     */
+    struct ReactionSolverType
+    {
+      enum Kind
+      {
+        ARKode,
+        fixed_step
+      };
+
+      static const std::string pattern()
+      {
+        return "ARKode|fixed step";
+      }
+
+      static Kind
+      parse(const std::string &input)
+      {
+        if (input == "ARKode")
+          return ARKode;
+        else if (input == "fixed step")
+          return fixed_step;
         else
           AssertThrow(false, ExcNotImplemented());
 
@@ -450,6 +516,7 @@ namespace aspect
      * @{
      */
     typename NonlinearSolver::Kind nonlinear_solver;
+    typename NonlinearSolverFailureStrategy::Kind nonlinear_solver_failure_strategy;
 
     typename AdvectionStabilizationMethod::Kind advection_stabilization_method;
     double                         nonlinear_tolerance;
@@ -471,6 +538,7 @@ namespace aspect
     unsigned int                   max_nonlinear_iterations_in_prerefinement;
     bool                           use_operator_splitting;
     std::string                    world_builder_file;
+    unsigned int                   n_particle_managers;
 
     /**
      * @}
@@ -488,6 +556,7 @@ namespace aspect
 
     // subsection: Stokes solver parameters
     bool                           use_direct_stokes_solver;
+    bool                           use_bfbt;
     typename StokesSolverType::Kind stokes_solver_type;
     typename StokesKrylovType::Kind stokes_krylov_type;
     unsigned int                    idr_s_parameter;
@@ -497,6 +566,7 @@ namespace aspect
     unsigned int                   n_expensive_stokes_solver_steps;
     double                         linear_solver_A_block_tolerance;
     bool                           use_full_A_block_preconditioner;
+    bool                           force_nonsymmetric_A_block_solver;
     double                         linear_solver_S_block_tolerance;
     unsigned int                   stokes_gmres_restart_length;
 
@@ -507,6 +577,8 @@ namespace aspect
     bool                           AMG_output_details;
 
     // subsection: Operator splitting parameters
+    typename ReactionSolverType::Kind reaction_solver_type;
+    double                         ARKode_relative_tolerance;
     double                         reaction_time_step;
     unsigned int                   reaction_steps_per_advection_step;
 
@@ -620,7 +692,7 @@ namespace aspect
     double                         stabilization_gamma;
     double                         discontinuous_penalty;
     bool                           use_limiter_for_discontinuous_temperature_solution;
-    bool                           use_limiter_for_discontinuous_composition_solution;
+    std::vector<bool>              use_limiter_for_discontinuous_composition_solution;
     double                         global_temperature_max_preset;
     double                         global_temperature_min_preset;
     std::vector<double>            global_composition_max_preset;
@@ -649,9 +721,11 @@ namespace aspect
     bool                           use_locally_conservative_discretization;
     bool                           use_equal_order_interpolation_for_stokes;
     bool                           use_discontinuous_temperature_discretization;
-    bool                           use_discontinuous_composition_discretization;
+    std::vector<bool>              use_discontinuous_composition_discretization;
+    bool                           have_discontinuous_composition_discretization;
     unsigned int                   temperature_degree;
-    unsigned int                   composition_degree;
+    std::vector<unsigned int>      composition_degrees;
+    unsigned int                   max_composition_degree;
     std::string                    pressure_normalization;
     MaterialModel::MaterialAveraging::AveragingOperation material_averaging;
 

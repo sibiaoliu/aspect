@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -41,6 +41,7 @@ namespace aspect
     {
       // Get pointer to initial topography model
       topo_model = const_cast<InitialTopographyModel::Interface<dim>*>(&this->get_initial_topography_model());
+
       // Check that initial topography is required.
       // If so, connect the initial topography function
       // to the right signals: It should be applied after

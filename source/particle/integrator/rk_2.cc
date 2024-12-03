@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -20,7 +20,7 @@
 
 #include <aspect/particle/integrator/rk_2.h>
 #include <aspect/particle/property/interface.h>
-#include <aspect/particle/world.h>
+#include <aspect/particle/manager.h>
 #include <aspect/geometry_model/interface.h>
 
 namespace aspect
@@ -41,7 +41,7 @@ namespace aspect
       void
       RK2<dim>::initialize ()
       {
-        const auto &property_information = this->get_particle_world().get_property_manager().get_data_info();
+        const auto &property_information = this->get_particle_manager(this->get_particle_manager_index()).get_property_manager().get_data_info();
         property_index_old_location = property_information.get_position_by_field_name("internal: integrator properties");
       }
 
@@ -60,12 +60,22 @@ namespace aspect
                           "to the number of particles to advect. For some unknown reason they are different, "
                           "most likely something went wrong in the calling function."));
 
-        Assert(old_velocities.size() == velocities.size(),
-               ExcMessage("The particle integrator expects the velocity vector to be of equal size "
-                          "to the number of particles to advect. For some unknown reason they are different, "
-                          "most likely something went wrong in the calling function."));
+        if (higher_order_in_time == true && integrator_substep == 1)
+          Assert(old_velocities.size() == velocities.size(),
+                 ExcMessage("The particle integrator expects the velocity vector to be of equal size "
+                            "to the number of particles to advect. For some unknown reason they are different, "
+                            "most likely something went wrong in the calling function."));
 
-        const bool geometry_has_periodic_boundary = (this->get_geometry_model().get_periodic_boundary_pairs().size() != 0);
+        const auto cell = begin_particle->get_surrounding_cell();
+        bool at_periodic_boundary = false;
+        if (this->get_triangulation().get_periodic_face_map().empty() == false)
+          for (const auto &face_index: cell->face_indices())
+            if (cell->at_boundary(face_index))
+              if (cell->has_periodic_neighbor(face_index))
+                {
+                  at_periodic_boundary = true;
+                  break;
+                }
 
         typename std::vector<Tensor<1,dim>>::const_iterator old_velocity = old_velocities.begin();
         typename std::vector<Tensor<1,dim>>::const_iterator velocity = velocities.begin();
@@ -78,39 +88,54 @@ namespace aspect
             if (integrator_substep == 0)
               {
                 const Tensor<1,dim> k1 = dt * (*old_velocity);
-                Point<dim> loc0 = it->get_location();
-                Point<dim> new_location = loc0 + 0.5 * k1;
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+                // Get a reference to the particle location, so that we can update it in-place
+                Point<dim> &location = it->get_location();
+#else
+                Point<dim> location = it->get_location();
+#endif
+                Point<dim> new_location = location + 0.5 * k1;
 
                 // Check if we crossed a periodic boundary and if necessary adjust positions
-                if (geometry_has_periodic_boundary)
+                if (at_periodic_boundary)
                   this->get_geometry_model().adjust_positions_for_periodicity(new_location,
-                                                                              ArrayView<Point<dim>>(loc0));
+                                                                              ArrayView<Point<dim>>(location));
 
                 for (unsigned int i=0; i<dim; ++i)
-                  properties[property_index_old_location + i] = loc0[i];
-
+                  {
+                    properties[property_index_old_location + i] = location[i];
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+                    location[i] = new_location[i];
+#endif
+                  }
+#if !DEAL_II_VERSION_GTE(9, 6, 0)
                 it->set_location(new_location);
+#endif
               }
             else if (integrator_substep == 1)
               {
                 const Tensor<1,dim> k2 = (higher_order_in_time == true)
                                          ?
-                                         dt * (*old_velocity + *velocity) / 2.0
+                                         dt * (*old_velocity + *velocity) * 0.5
                                          :
                                          dt * (*old_velocity);
 
-                Point<dim> loc0;
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+                Point<dim> &location = it->get_location();
+#else
+                Point<dim> location = it->get_location();
+#endif
 
                 for (unsigned int i=0; i<dim; ++i)
-                  loc0[i] = properties[property_index_old_location + i];
+                  location[i] = properties[property_index_old_location + i] + k2[i];
 
-                Point<dim> new_location = loc0 + k2;
+                // no need to adjust old location, because this is the last integrator step
+                if (at_periodic_boundary)
+                  this->get_geometry_model().adjust_positions_for_periodicity(location);
 
-                // no need to adjust loc0, because this is the last integrator step
-                if (geometry_has_periodic_boundary)
-                  this->get_geometry_model().adjust_positions_for_periodicity(new_location);
-
-                it->set_location(new_location);
+#if !DEAL_II_VERSION_GTE(9, 6, 0)
+                it->set_location(location);
+#endif
               }
             else
               {
@@ -135,28 +160,45 @@ namespace aspect
 
 
       template <int dim>
+      std::array<bool, 3>
+      RK2<dim>::required_solution_vectors() const
+      {
+        switch (integrator_substep)
+          {
+            case 0:
+              return {{false, true, false}};
+            case 1:
+            {
+              if (higher_order_in_time)
+                return {{false, true, true}};
+              else
+                return {{false, true, false}};
+            }
+            default:
+              Assert(false,
+                     ExcMessage("The RK4 integrator should never continue after four integration steps."));
+
+              return {{false, false, false}};
+          }
+      }
+
+
+
+      template <int dim>
       void
       RK2<dim>::declare_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
+        prm.enter_subsection("Integrator");
         {
-          prm.enter_subsection("Particles");
+          prm.enter_subsection("RK2");
           {
-            prm.enter_subsection("Integrator");
-            {
-              prm.enter_subsection("RK2");
-              {
-                prm.declare_entry ("Higher order accurate in time", "true",
-                                   Patterns::Bool(),
-                                   "Whether to correctly evaluate old and current velocity "
-                                   "solution to reach higher-order accuracy in time. If set to "
-                                   "'false' only the old velocity solution is evaluated to "
-                                   "simulate a first order method in time. This is only "
-                                   "recommended for benchmark purposes.");
-              }
-              prm.leave_subsection();
-            }
-            prm.leave_subsection();
+            prm.declare_entry ("Higher order accurate in time", "true",
+                               Patterns::Bool(),
+                               "Whether to correctly evaluate old and current velocity "
+                               "solution to reach higher-order accuracy in time. If set to "
+                               "'false' only the old velocity solution is evaluated to "
+                               "simulate a first order method in time. This is only "
+                               "recommended for benchmark purposes.");
           }
           prm.leave_subsection();
         }
@@ -168,19 +210,11 @@ namespace aspect
       void
       RK2<dim>::parse_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
+        prm.enter_subsection("Integrator");
         {
-          prm.enter_subsection("Particles");
+          prm.enter_subsection("RK2");
           {
-            prm.enter_subsection("Integrator");
-            {
-              prm.enter_subsection("RK2");
-              {
-                higher_order_in_time = prm.get_bool("Higher order accurate in time");
-              }
-              prm.leave_subsection();
-            }
-            prm.leave_subsection();
+            higher_order_in_time = prm.get_bool("Higher order accurate in time");
           }
           prm.leave_subsection();
         }

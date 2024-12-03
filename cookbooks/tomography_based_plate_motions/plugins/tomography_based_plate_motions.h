@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2023 by the authors of the ASPECT code.
+  Copyright (C) 2023 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -49,7 +49,7 @@ namespace aspect
      * fault boundaries and in continental regions at locations defined
      * by the the compositional field 'faults' or 'cratons', respectively.
      * The material model also allows the option to compute and use
-     * equilibirum grain size following paleowattmeter approximation
+     * equilibrium grain size following paleowattmeter approximation
      * by Austin and Evans, (2007), Paleowattmeters: "A scaling relation for
      * dynamically recrystallized grain size", Geology, 35, 343.
      * Other material parameters are either based on (1) an input tomography
@@ -69,7 +69,7 @@ namespace aspect
      * "High-resolution mantle flow models reveal importance of plate boundary geometry and slab pull
      * forces on generating tectonic plate motions", J. Geophys. Research.:Solid Earth,
      * 128, e2022JB025877.
-
+     *
      * @ingroup MaterialModels
      */
     template <int dim>
@@ -246,9 +246,9 @@ namespace aspect
         std::vector<double> average_viscosity_profile;
 
         /**
-         * Variable returned  to determine if the evaluate () funciton is called and
+         * Variable returned  to determine if the evaluate () function is called and
          * viscosities are computed. Initially, it is set to false and then updated
-         * to true in the update () funciton.
+         * to true in the update () function.
          */
         bool initialized;
 
@@ -400,25 +400,25 @@ namespace aspect
         /**
          * Parameter value that determines whether to read the viscosity with depth
          * from an ascii data file.
-        */
+         */
         bool use_depth_dependent_viscosity;
 
         /**
          * Parameter value that determines whether to read the density scaling with depth
          * from an ascii data file.
-        */
+         */
         bool use_depth_dependent_rho_vs;
 
         /**
          * Parameter value that determines whether to read the thermal expansivity
          * from an ascii data file.
-        */
+         */
         bool use_depth_dependent_thermal_expansivity;
 
         /**
          * Parameter value that determines whether to read the temperature scaling with depth
          * from an ascii data file.
-        */
+         */
         bool use_depth_dependent_dT_vs;
 
         /**
@@ -473,11 +473,11 @@ namespace aspect
          * Approximate lithosphere thickness used to separate the regions of
          * temperature derived from seismic tomography and linear temperature
          * gradient.
-        */
+         */
         double lithosphere_thickness;
 
         /**
-         * Parameter used to decribe the uppermost mantle based on Tutu (2018).
+         * Parameter used to describe the uppermost mantle based on Tutu (2018).
          */
         double depth_to_base_of_uppermost_mantle;
 
@@ -499,11 +499,11 @@ namespace aspect
         std::vector<std::shared_ptr<MaterialModel::MaterialUtilities::Lookup::MaterialLookup>> material_lookup;
 
         /**
-        * A shared pointer to the initial temperature object
-        * that ensures that the current object can continue
-        * to access the initial composition object beyond the
-        * first time step.
-        */
+         * A shared pointer to the initial temperature object
+         * that ensures that the current object can continue
+         * to access the initial composition object beyond the
+         * first time step.
+         */
         std::shared_ptr<const aspect::InitialTemperature::Manager<dim>> initial_temperature_manager;
     };
 

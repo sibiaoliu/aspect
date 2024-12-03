@@ -37,7 +37,7 @@ subsection Material model
   # velocity and normal stress. The relation between the two scales
   # with the phase change number P, which is given in the 'Function
   # expression'.
-  # For P-->inifinity, the boundary is a free slip boundary, and for
+  # For P-->infinity, the boundary is a free slip boundary, and for
   # P-->0, the boundary is an open boundary (with zero normal stress).
 
   # For time dependence, the variable names have to have dim+1 entries,
@@ -125,6 +125,16 @@ subsection Postprocess
     set Output format                 = vtu
     set Time between graphical output = 0
     set Number of grouped files       = 0
-    set List of output variables      = strain rate, gravity, density, specific heat, heating
+    set List of output variables      = strain rate, gravity, material properties, heating
+
+    subsection Material properties
+      set List of material properties = density, specific heat
+    end
+  end
+end
+
+subsection Solver parameters
+  subsection Stokes solver parameters
+    set Stokes solver type = block AMG
   end
 end

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -32,54 +32,11 @@ namespace aspect
     namespace Generator
     {
       template <int dim>
-      Interface<dim>::Interface()
-        = default;
-
-
-
-      template <int dim>
       void
       Interface<dim>::initialize ()
       {
         const unsigned int my_rank = Utilities::MPI::this_mpi_process(this->get_mpi_communicator());
         random_number_generator.seed(5432+my_rank);
-      }
-
-
-
-      template <int dim>
-      void
-      Interface<dim>::generate_particles(std::multimap<Particles::internal::LevelInd, Particle<dim>> &/*particles*/)
-      {
-        AssertThrow(false,ExcInternalError());
-      }
-
-
-
-      template <int dim>
-      void
-      Interface<dim>::generate_particles(Particles::ParticleHandler<dim> &particle_handler)
-      {
-        // This function is implemented to ensure backwards compatibility to an old interface.
-        // Once the old interface function has been removed this implementation can be removed
-        // as well and the function can be made pure.
-
-        std::multimap<Particles::internal::LevelInd, Particles::Particle<dim>> particles;
-
-        // avoid deprecation warnings about calling the old interface
-        DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
-        generate_particles(particles);
-        DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
-
-        std::multimap<typename Triangulation<dim>::active_cell_iterator, Particles::Particle<dim>> new_particles;
-
-        for (const auto &particle : particles)
-          new_particles.insert(new_particles.end(),
-                               std::make_pair(typename Triangulation<dim>::active_cell_iterator(&this->get_triangulation(),
-                                              particle.first.first, particle.first.second),
-                                              particle.second));
-
-        particle_handler.insert_particles(new_particles);
       }
 
 
@@ -190,28 +147,14 @@ namespace aspect
       }
 
 
-
-      template <int dim>
-      void
-      Interface<dim>::declare_parameters (ParameterHandler &)
-      {}
-
-
-
-      template <int dim>
-      void
-      Interface<dim>::parse_parameters (ParameterHandler &)
-      {}
-
-
 // -------------------------------- Deal with registering models and automating
 // -------------------------------- their setup and selection at run time
 
       namespace
       {
         std::tuple
-        <void *,
-        void *,
+        <aspect::internal::Plugins::UnusablePluginList,
+        aspect::internal::Plugins::UnusablePluginList,
         aspect::internal::Plugins::PluginList<Interface<2>>,
         aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
       }
@@ -238,15 +181,7 @@ namespace aspect
       create_particle_generator (ParameterHandler &prm)
       {
         std::string name;
-        prm.enter_subsection ("Postprocess");
-        {
-          prm.enter_subsection ("Particles");
-          {
-            name = prm.get ("Particle generator name");
-          }
-          prm.leave_subsection ();
-        }
-        prm.leave_subsection ();
+        name = prm.get ("Particle generator name");
 
         return std::get<dim>(registered_plugins).create_plugin (name,
                                                                 "Particle::Generator name");
@@ -259,22 +194,14 @@ namespace aspect
       declare_parameters (ParameterHandler &prm)
       {
         // declare the entry in the parameter file
-        prm.enter_subsection ("Postprocess");
-        {
-          prm.enter_subsection ("Particles");
-          {
-            const std::string pattern_of_names
-              = std::get<dim>(registered_plugins).get_pattern_of_names ();
+        const std::string pattern_of_names
+          = std::get<dim>(registered_plugins).get_pattern_of_names ();
 
-            prm.declare_entry ("Particle generator name", "random uniform",
-                               Patterns::Selection (pattern_of_names),
-                               "Select one of the following models:\n\n"
-                               +
-                               std::get<dim>(registered_plugins).get_description_string());
-          }
-          prm.leave_subsection ();
-        }
-        prm.leave_subsection ();
+        prm.declare_entry ("Particle generator name", "random uniform",
+                           Patterns::Selection (pattern_of_names),
+                           "Select one of the following models:\n\n"
+                           +
+                           std::get<dim>(registered_plugins).get_description_string());
 
         std::get<dim>(registered_plugins).declare_parameters (prm);
       }

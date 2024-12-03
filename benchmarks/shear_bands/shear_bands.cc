@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -86,7 +86,7 @@ namespace aspect
 
         double reference_darcy_coefficient () const override
         {
-          return reference_permeability * pow(0.01, permeability_exponent) / eta_f;
+          return reference_permeability * std::pow(0.01, permeability_exponent) / eta_f;
         }
 
 
@@ -145,12 +145,12 @@ namespace aspect
           // fill melt outputs if they exist
           aspect::MaterialModel::MeltOutputs<dim> *melt_out = out.template get_additional_output<aspect::MaterialModel::MeltOutputs<dim>>();
 
-          if (melt_out != NULL)
+          if (melt_out != nullptr)
             for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
               {
                 double porosity = std::max(in.composition[i][porosity_idx],1e-4);
 
-                melt_out->compaction_viscosities[i] = xi_0 * pow(porosity/background_porosity,-compaction_viscosity_exponent);
+                melt_out->compaction_viscosities[i] = xi_0 * std::pow(porosity/background_porosity,-compaction_viscosity_exponent);
                 melt_out->fluid_viscosities[i]= eta_f;
                 melt_out->permeabilities[i]= reference_permeability * std::pow(porosity,permeability_exponent);
                 melt_out->fluid_densities[i]= reference_rho_f;
@@ -534,8 +534,8 @@ namespace aspect
     PlaneWaveMeltBandsInitialCondition<dim>::
     initial_composition (const Point<dim> &position, const unsigned int /*n_comp*/) const
     {
-      return background_porosity * (1.0 + amplitude * cos(wave_number*position[0]*sin(initial_band_angle)
-                                                          + wave_number*position[1]*cos(initial_band_angle)));
+      return background_porosity * (1.0 + amplitude * std::cos(wave_number*position[0]*std::sin(initial_band_angle)
+                                                               + wave_number*position[1]*std::cos(initial_band_angle)));
     }
 
 
@@ -631,24 +631,20 @@ namespace aspect
       std::vector<double>         porosity_values (quadrature_formula.size());
       const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
 
-      typename DoFHandler<dim>::active_cell_iterator
-      cell = this->get_dof_handler().begin_active(),
-      endc = this->get_dof_handler().end();
-      for (; cell != endc; ++cell)
-        {
-          if (!cell->is_locally_owned())
-            continue;
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
+        if (cell->is_locally_owned())
+          {
 
-          fe_values.reinit (cell);
-          fe_values[this->introspection().extractors.compositional_fields[porosity_idx]].get_function_values (this->get_solution(), porosity_values);
+            fe_values.reinit (cell);
+            fe_values[this->introspection().extractors.compositional_fields[porosity_idx]].get_function_values (this->get_solution(), porosity_values);
 
-          for (unsigned int q = 0; q < n_q_points; ++q)
-            {
-              output << fe_values.quadrature_point (q) (0) << " "
-                     << fe_values.quadrature_point (q) (1) << " "
-                     << porosity_values[q] << std::endl;
-            }
-        }
+            for (unsigned int q = 0; q < n_q_points; ++q)
+              {
+                output << fe_values.quadrature_point (q) (0) << " "
+                       << fe_values.quadrature_point (q) (1) << " "
+                       << porosity_values[q] << std::endl;
+              }
+          }
 
       std::string filename = this->get_output_directory() + "shear_bands_" +
                              Utilities::int_to_string(max_lvl) +
@@ -716,7 +712,7 @@ namespace aspect
 
       const PlaneWaveMeltBandsInitialCondition<dim> &initial_composition
         = this->get_initial_composition_manager().template
-          get_matching_initial_composition_model<PlaneWaveMeltBandsInitialCondition<dim>> ();
+          get_matching_active_plugin<PlaneWaveMeltBandsInitialCondition<dim>> ();
 
       amplitude           = initial_composition.get_wave_amplitude();
       initial_band_angle  = initial_composition.get_initial_band_angle();
@@ -740,7 +736,7 @@ namespace aspect
       const double min_velocity = bm.boundary_velocity(lower_boundary, lower_boundary_point).norm();
 
       const double strain_rate = 0.5 * (max_velocity + min_velocity) / this->get_geometry_model().maximal_depth();
-      const double theta = std::atan(std::sin(initial_band_angle) / (std::cos(initial_band_angle) - time * strain_rate/sqrt(2.0) * std::sin(initial_band_angle)));
+      const double theta = std::atan(std::sin(initial_band_angle) / (std::cos(initial_band_angle) - time * strain_rate/numbers::SQRT2 * std::sin(initial_band_angle)));
       const double analytical_growth_rate = - eta_0 / (xi_0 + 4.0/3.0 * eta_0) * alpha * (1.0 - background_porosity)
                                             * 2.0 * strain_rate * std::sin(2.0 * theta);
 
@@ -761,10 +757,7 @@ namespace aspect
       double local_velocity_divergence_max = 0.0;
       double local_velocity_divergence_min = 0.0;
 
-      typename DoFHandler<dim>::active_cell_iterator
-      cell = this->get_dof_handler().begin_active(),
-      endc = this->get_dof_handler().end();
-      for (; cell!=endc; ++cell)
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned())
           {
             fe_values.reinit (cell);

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,6 +34,7 @@
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/multigrid/mg_constrained_dofs.h>
 #include <deal.II/multigrid/mg_transfer_matrix_free.h>
+#include <deal.II/multigrid/mg_transfer_global_coarsening.templates.h>
 #include <aspect/simulator/assemblers/interface.h>
 
 
@@ -84,37 +85,13 @@ namespace aspect
      * mesh vertices and store them in a AffineConstraints<double> object. The velocities
      * for all non-constrained vertices will be computed by solving a Laplace
      * problem with the given constraints.
+     *
+     * @ingroup MeshDeformation
      */
-    template<int dim>
-    class Interface
+    template <int dim>
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface() = default;
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         *
-         * The default implementation of this function does nothing.
-         */
-        virtual void initialize ();
-
-        /**
-         * A function that is called at the beginning of each time step and
-         * that allows the implementation to update internal data structures.
-         * This is useful, for example, if you have mesh deformation that
-         * depends on time, or on the solution of the previous step.
-         *
-         * The default implementation of this function does nothing.
-         */
-        virtual void update();
-
-
         /**
          * A function that will be called to check whether stabilization is needed.
          */
@@ -145,26 +122,6 @@ namespace aspect
         compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
                                                  AffineConstraints<double> &mesh_velocity_constraints,
                                                  const std::set<types::boundary_id> &boundary_id) const;
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
     };
 
 
@@ -174,7 +131,7 @@ namespace aspect
      * of the surface, the internal nodes and computes the
      * Arbitrary-Lagrangian-Eulerian correction terms.
      */
-    template<int dim>
+    template <int dim>
     class MeshDeformationHandler: public SimulatorAccess<dim>
     {
       public:
@@ -351,7 +308,7 @@ namespace aspect
          * Go through the list of all mesh deformation objects that have been selected
          * in the input file (and are consequently currently active) and see
          * if one of them has the type specified by the template
-         * argument or can be casted to that type. If so, return a reference
+         * argument or can be cast to that type. If so, return a reference
          * to it. If no mesh deformation object is active that matches the given type,
          * throw an exception.
          *
@@ -604,8 +561,7 @@ namespace aspect
         /**
          * Multigrid transfer operator for the displacements
          */
-        MGTransferMatrixFree<dim, double> mg_transfer;
-
+        MGTransferMF<dim, double> mg_transfer;
 
         /**
          * Multigrid level constraints for the displacements
@@ -651,8 +607,8 @@ namespace aspect
           if (Plugins::plugin_type_matches<MeshDeformationType>(*p))
             return Plugins::get_plugin_as_type<MeshDeformationType>(*p);
 
-      typename std::vector<std::unique_ptr<Interface<dim>>>::const_iterator mesh_def;
       // We will never get here, because we had the Assert above. Just to avoid warnings.
+      typename std::vector<std::unique_ptr<Interface<dim>>>::const_iterator mesh_def;
       return Plugins::get_plugin_as_type<MeshDeformationType>(*(*mesh_def));
 
     }

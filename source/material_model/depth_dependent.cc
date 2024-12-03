@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -181,6 +181,8 @@ namespace aspect
       prm.leave_subsection();
     }
 
+
+
     template <int dim>
     void
     DepthDependent<dim>::parse_parameters (ParameterHandler &prm)
@@ -270,6 +272,15 @@ namespace aspect
       parameters related to the base model. */
       base_model->parse_parameters(prm);
       this->model_dependence = base_model->get_model_dependence();
+    }
+
+
+
+    template <int dim>
+    void
+    DepthDependent<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+    {
+      base_model->create_additional_named_outputs(out);
     }
   }
 }

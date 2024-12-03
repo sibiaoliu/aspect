@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -39,8 +39,9 @@ namespace aspect
      * hillslope diffusion, sediment deposition, marine diffusion,
      * and the stream power law, which describes river incision.
      *
+     * @ingroup MeshDeformation
      */
-    template<int dim>
+    template <int dim>
     class FastScape : public Interface<dim>, public SimulatorAccess<dim>
     {
       public:
@@ -55,11 +56,11 @@ namespace aspect
         ~FastScape() override;
 
         /**
-          * A function that creates constraints for the velocity of certain mesh
-          * vertices (e.g. the surface vertices) for a specific boundary.
-          * The calling class will respect
-          * these constraints when computing the new vertex positions.
-          */
+         * A function that creates constraints for the velocity of certain mesh
+         * vertices (e.g. the surface vertices) for a specific boundary.
+         * The calling class will respect
+         * these constraints when computing the new vertex positions.
+         */
         virtual
         void
         compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
@@ -123,7 +124,7 @@ namespace aspect
         std::vector<std::vector<double>> get_aspect_values() const;
 
         /**
-         * Function to intialize or restart FastScape
+         * Function to initialize or restart FastScape
          */
         void initialize_fastscape(std::vector<double> &elevation,
                                   std::vector<double> &basement,
@@ -249,7 +250,7 @@ namespace aspect
 
         /**
          * Difference in refinement levels expected at the ASPECT surface,
-         * where this would be set to 2 if 3 refinement leves are set at the surface.
+         * where this would be set to 2 if 3 refinement levels are set at the surface.
          * This and surface_resolution are required to properly transfer node data from
          * ASPECT to FastScape.
          *
@@ -296,7 +297,7 @@ namespace aspect
 
         /**
          * Sediment rain in m/yr, added as a flat increase to the FastScape surface
-         * every ASPECT timestep before running FastScape.
+         * in the marine domain every ASPECT timestep before running FastScape.
          */
         std::vector<double> sediment_rain_rates;
 
@@ -308,10 +309,10 @@ namespace aspect
         std::vector<double> sediment_rain_times;
 
         /**
-        * Flag for having FastScape advect/uplift the surface. If the free surface is used
-        * in conjuction with FastScape, this can be set to false, then FastScape will only
-        * apply erosion/deposition to the surface and not advect or uplift it.
-        */
+         * Flag for having FastScape advect/uplift the surface. If the free surface is used
+         * in conjunction with FastScape, this can be set to false, then FastScape will only
+         * apply erosion/deposition to the surface and not advect or uplift it.
+         */
         bool fastscape_advection_uplift;
 
         /**
@@ -324,16 +325,16 @@ namespace aspect
         double node_tolerance;
 
         /**
-          * Interval between the generation of graphical output. This parameter
-          * is read from the input file and consequently is not part of the
-          * state that needs to be saved and restored.
-          */
+         * Interval between the generation of graphical output. This parameter
+         * is read from the input file and consequently is not part of the
+         * state that needs to be saved and restored.
+         */
         double output_interval;
 
         /**
-          * A time (in seconds) at which the last graphical output was supposed
-          * to be produced. Used to check for the next necessary output time.
-          */
+         * A time (in seconds) at which the last graphical output was supposed
+         * to be produced. Used to check for the next necessary output time.
+         */
         mutable double last_output_time;
 
         /**
@@ -374,7 +375,7 @@ namespace aspect
         unsigned int left;
 
         /**
-         * Paramters that set the fastscape boundaries periodic even though the ghost nodes are set 'fixed'
+         * Parameters that set the FastScape boundaries periodic even though the ghost nodes are set 'fixed'
          */
         bool topbottom_ghost_nodes_periodic;
         bool leftright_ghost_nodes_periodic;
@@ -404,11 +405,11 @@ namespace aspect
          */
         double left_flux;
         /**
-           * @}
+         * @}
          */
 
         /**
-         * @name Fastscape subaerial erosional parameters
+         * @name FastScape subaerial erosional parameters
          * @{
          */
 
@@ -418,7 +419,7 @@ namespace aspect
         double drainage_area_exponent_m;
 
         /**
-         * Slope exponent for the steam power law. ($n$ variable in FastScape surface equation.)
+         * Slope exponent for the stream power law. ($n$ variable in FastScape surface equation.)
          */
         double slope_exponent_n;
 
@@ -460,7 +461,7 @@ namespace aspect
         double bedrock_transport_coefficient;
 
         /**
-         * Bedrock transport coefficient for hillslope diffusion (m^2/yr). When set to -1 this is
+         * Sediment transport coefficient for hillslope diffusion (m^2/yr). When set to -1 this is
          * identical to the bedrock value.
          * (kd in FastScape surface equation applied to sediment).
          */
@@ -476,8 +477,10 @@ namespace aspect
 
         /**
          * Fastscape sea level (m), set relative to the ASPECT surface where
-         * a sea level of zero will represent the maximum Y (2D) or Z (3D) extent
-         * inside ASPECT.
+         * a sea level of zero will represent the initial maximum unperturbed
+         * Y (2D) or Z (3D) extent of the ASPECT domain. A negative value of
+         * the sea level means the sea level lies below the initial unperturbed
+         * top boundary of the domain.
          */
         double sea_level;
 

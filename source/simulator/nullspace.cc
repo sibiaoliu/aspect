@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -21,10 +21,6 @@
 
 #include <aspect/simulator.h>
 #include <aspect/global.h>
-
-#include <deal.II/lac/solver_gmres.h>
-
-#include <deal.II/lac/trilinos_solver.h>
 
 #include <deal.II/base/tensor_function.h>
 

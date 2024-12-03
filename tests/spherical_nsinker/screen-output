@@ -1,12 +1,11 @@
 
 Loading shared library <./libspherical_nsinker.debug.so>
 
-Vectorization over 2 doubles = 128 bits (SSE2), VECTORIZATION_LEVEL=1
 Number of active cells: 768 (on 2 levels)
 Number of degrees of freedom: 28,690 (20,790+970+6,930)
 
 *** Timestep 0:  t=0 seconds, dt=0 seconds
-   Solving Stokes system... 
+   Solving Stokes system (GMG)... 
     GMG coarse size A: 2910, coarse size S: 150
     GMG n_levels: 2
     Viscosity range: 0.1 - 433.496

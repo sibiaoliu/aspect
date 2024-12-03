@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,11 +36,8 @@ namespace aspect
               const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
               HeatingModel::HeatingModelOutputs &heating_model_outputs) const
     {
-      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.position.size(),
+      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.n_evaluation_points(),
              ExcMessage ("Heating outputs need to have the same number of entries as the material model inputs."));
-
-      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.strain_rate.size(),
-             ExcMessage ("The shear heating plugin needs the strain rate!"));
 
       Assert(this->introspection().compositional_name_exists("porosity"),
              ExcMessage("Heating model shear heating with melt only works if there "
@@ -64,7 +61,7 @@ namespace aspect
 
           if (is_melt_cell)
             heating_model_outputs.heating_source_terms[q] = melt_outputs->compaction_viscosities[q]
-                                                            * pow(trace(material_model_inputs.strain_rate[q]),2)
+                                                            * std::pow(trace(material_model_inputs.strain_rate[q]),2)
                                                             +
                                                             (melt_outputs->permeabilities[q] > 0
                                                              ?
@@ -98,11 +95,9 @@ namespace aspect
     create_additional_material_model_inputs(MaterialModel::MaterialModelInputs<dim> &inputs) const
     {
       // we need the melt inputs for this shear heating of melt
-      if (inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>() != nullptr)
-        return;
-
-      inputs.additional_inputs.push_back(
-        std::make_unique<MaterialModel::MeltInputs<dim>> (inputs.position.size()));
+      if (inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>() == nullptr)
+        inputs.additional_inputs.emplace_back(
+          std::make_unique<MaterialModel::MeltInputs<dim>> (inputs.n_evaluation_points()));
     }
   }
 }

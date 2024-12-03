@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,6 +23,7 @@
 #include <aspect/global.h>
 #include <aspect/utilities.h>
 #include <aspect/simulator_access.h>
+#include <aspect/simulator.h>
 #include <aspect/geometry_model/interface.h>
 #include <aspect/mesh_deformation/interface.h>
 #include <deal.II/fe/mapping_q1_eulerian.h>
@@ -47,7 +48,7 @@ namespace aspect
 {
   namespace Postprocess
   {
-    namespace internal
+    namespace
     {
       /**
        * This Postprocessor will generate the output variables of velocity,
@@ -162,6 +163,28 @@ namespace aspect
       };
 
       /**
+       * Adapt the previous class BaseVariablePostprocessor for the case of surface output,
+       * so output on the surface of the model domain. The only difference with the previous
+       * class is that each output variable name is prepended with the string 'surface_'.
+       */
+      template <int dim>
+      class SurfaceBaseVariablePostprocessor: public VisualizationPostprocessors::SurfaceOnlyVisualization<dim>, public BaseVariablePostprocessor<dim>
+      {
+        public:
+
+          std::vector<std::string> get_names () const override
+          {
+            std::vector<std::string> solution_names = BaseVariablePostprocessor<dim>::get_names();
+
+            for (std::string &name : solution_names)
+              name = "surface_" + name;
+
+            return solution_names;
+          }
+
+      };
+
+      /**
        * This Postprocessor will generate the output variables of mesh velocity and
        * mesh displacement for when a deforming mesh is used.
        */
@@ -222,39 +245,11 @@ namespace aspect
 
 
       template <int dim>
-      void
-      Interface<dim>::initialize ()
-      {}
-
-
-
-      template <int dim>
-      void
-      Interface<dim>::update ()
-      {}
-
-
-
-      template <int dim>
       std::string
       Interface<dim>::get_physical_units () const
       {
         return physical_units;
       }
-
-
-
-      template <int dim>
-      void
-      Interface<dim>::declare_parameters (ParameterHandler &)
-      {}
-
-
-
-      template <int dim>
-      void
-      Interface<dim>::parse_parameters (ParameterHandler &)
-      {}
 
 
 
@@ -361,10 +356,10 @@ namespace aspect
     template <int dim>
     template <typename DataOutType>
     void
-    Visualization<dim>::write_master_files (const DataOutType &data_out,
-                                            const std::string &solution_file_prefix,
-                                            const std::vector<std::string> &filenames,
-                                            OutputHistory                  &output_history) const
+    Visualization<dim>::write_description_files (const DataOutType &data_out,
+                                                 const std::string &solution_file_prefix,
+                                                 const std::vector<std::string> &filenames,
+                                                 OutputHistory                  &output_history) const
     {
       static_assert (std::is_same<DataOutType,DataOut<dim>>::value ||
                      std::is_same<DataOutType,DataOutFaces<dim>>::value,
@@ -375,11 +370,11 @@ namespace aspect
       const double time_in_years_or_seconds = (this->convert_output_to_years() ?
                                                this->get_time() / year_in_seconds :
                                                this->get_time());
-      const std::string pvtu_master_filename = (solution_file_prefix +
-                                                ".pvtu");
-      std::ofstream pvtu_master (this->get_output_directory() + "solution/" +
-                                 pvtu_master_filename);
-      data_out.write_pvtu_record (pvtu_master, filenames);
+      const std::string pvtu_filename = (solution_file_prefix +
+                                         ".pvtu");
+      std::ofstream pvtu_file (this->get_output_directory() + "solution/" +
+                               pvtu_filename);
+      data_out.write_pvtu_record (pvtu_file, filenames);
 
       // now also generate a .pvd file that matches simulation
       // time and corresponding .pvtu record
@@ -388,29 +383,29 @@ namespace aspect
           // in case we output all nonlinear iterations, we only want one
           // entry per time step, so replace the last line with the current iteration
           if (this->get_nonlinear_iteration() == 0)
-            output_history.times_and_pvtu_names.emplace_back(time_in_years_or_seconds, "solution/"+pvtu_master_filename);
+            output_history.times_and_pvtu_names.emplace_back(time_in_years_or_seconds, "solution/"+pvtu_filename);
           else
             output_history.times_and_pvtu_names.back() = (std::make_pair
-                                                          (time_in_years_or_seconds, "solution/"+pvtu_master_filename));
+                                                          (time_in_years_or_seconds, "solution/"+pvtu_filename));
         }
       else
-        output_history.times_and_pvtu_names.emplace_back(time_in_years_or_seconds, "solution/"+pvtu_master_filename);
+        output_history.times_and_pvtu_names.emplace_back(time_in_years_or_seconds, "solution/"+pvtu_filename);
 
-      const std::string pvd_master_filename = (this->get_output_directory() +
-                                               (is_cell_data_output ? "solution.pvd" : "solution_surface.pvd"));
-      std::ofstream pvd_master (pvd_master_filename);
+      const std::string pvd_filename = (this->get_output_directory() +
+                                        (is_cell_data_output ? "solution.pvd" : "solution_surface.pvd"));
+      std::ofstream pvd_file (pvd_filename);
 
-      DataOutBase::write_pvd_record (pvd_master, output_history.times_and_pvtu_names);
+      DataOutBase::write_pvd_record (pvd_file, output_history.times_and_pvtu_names);
 
       // finally, do the same for VisIt via the .visit file for this
       // time step, as well as for all time steps together
-      const std::string visit_master_filename = (this->get_output_directory()
-                                                 + "solution/"
-                                                 + solution_file_prefix
-                                                 + ".visit");
-      std::ofstream visit_master (visit_master_filename);
+      const std::string visit_filename = (this->get_output_directory()
+                                          + "solution/"
+                                          + solution_file_prefix
+                                          + ".visit");
+      std::ofstream visit_file (visit_filename);
 
-      DataOutBase::write_visit_record (visit_master, filenames);
+      DataOutBase::write_visit_record (visit_file, filenames);
 
       {
         // the global .visit file needs the relative path because it sits a
@@ -435,14 +430,14 @@ namespace aspect
           output_history.output_file_names_by_timestep.push_back (filenames_with_path);
       }
 
-      std::ofstream global_visit_master (this->get_output_directory() +
-                                         (is_cell_data_output ? "solution.visit" : "solution_surface.visit"));
+      std::ofstream global_visit_file (this->get_output_directory() +
+                                       (is_cell_data_output ? "solution.visit" : "solution_surface.visit"));
 
       std::vector<std::pair<double, std::vector<std::string>>> times_and_output_file_names;
       for (unsigned int timestep=0; timestep<output_history.times_and_pvtu_names.size(); ++timestep)
         times_and_output_file_names.push_back(std::make_pair(output_history.times_and_pvtu_names[timestep].first,
                                                              output_history.output_file_names_by_timestep[timestep]));
-      DataOutBase::write_visit_record (global_visit_master, times_and_output_file_names);
+      DataOutBase::write_visit_record (global_visit_file, times_and_output_file_names);
     }
 
 
@@ -515,7 +510,35 @@ namespace aspect
         }
       else if (output_format == "vtu")
         {
-          // Write master files (.pvtu,.pvd,.visit) on the master process
+          // Pass time step number and time as metadata into the output file
+          DataOutBase::VtkFlags vtk_flags;
+          vtk_flags.cycle = this->get_timestep_number();
+          vtk_flags.time = time_in_years_or_seconds;
+
+          // Also describe the physical units if we have them. Postprocessors do
+          // describe them, but it's a slight hassle to get at the information:
+          vtk_flags.physical_units = visualization_field_names_and_units;
+
+          // Finally, set or do not set whether we want to describe cells
+          // with curved edges and faces:
+#if DEAL_II_VERSION_GTE(9,6,0)
+          vtk_flags.write_higher_order_cells = write_higher_order_output;
+#else
+          // In versions of deal.II up to 9.5 (and perhaps later, see
+          // https://github.com/dealii/dealii/issues/17091), higher
+          // order output on lines fails with an
+          // ExcNotImplemented(). So just back down to regular linear
+          // interpolation if that is the case. This is only the case
+          // if we are in 2d and using surface output (DataOutFaces).
+          if (std::is_same<DataOutType,DataOutFaces<dim>>::value && (dim==2))
+            vtk_flags.write_higher_order_cells = false;
+          else
+            vtk_flags.write_higher_order_cells = write_higher_order_output;
+#endif
+
+          data_out.set_flags(vtk_flags);
+
+          // Write the description files (.pvtu,.pvd,.visit) on the root process
           const int my_id = Utilities::MPI::this_mpi_process(
                               this->get_mpi_communicator());
           if (my_id == 0)
@@ -530,31 +553,14 @@ namespace aspect
                 filenames.push_back(
                   solution_file_prefix + "."
                   + Utilities::int_to_string(i, 4) + ".vtu");
-              write_master_files(data_out, solution_file_prefix, filenames, output_history);
+              write_description_files(data_out, solution_file_prefix, filenames, output_history);
             }
           const unsigned int n_processes = Utilities::MPI::n_mpi_processes(
                                              this->get_mpi_communicator());
-          const unsigned int my_file_id = (
-                                            group_files == 0 ? my_id : my_id % group_files);
+          const unsigned int my_file_id = (group_files == 0 ? my_id : my_id % group_files);
           const std::string filename = this->get_output_directory() + "solution/"
                                        + solution_file_prefix + "."
                                        + Utilities::int_to_string(my_file_id, 4) + ".vtu";
-
-          // Pass time step number and time as metadata into the output file
-          DataOutBase::VtkFlags vtk_flags;
-          vtk_flags.cycle = this->get_timestep_number();
-          vtk_flags.time = time_in_years_or_seconds;
-
-          // Also describe the physical units if we have them. Postprocessors do
-          // describe them, but it's a slight hassle to get at the information:
-          vtk_flags.physical_units = visualization_field_names_and_units;
-
-          // Finally, set or do not set whether we want to describe cells
-          // with curved edges and faces:
-          vtk_flags.write_higher_order_cells = write_higher_order_output;
-
-          data_out.set_flags(vtk_flags);
-
 
           // Write as many files as processes. For this case we support writing in a
           // background thread and to a temporary location, so we first write everything
@@ -579,7 +585,7 @@ namespace aspect
                     output_history.background_thread.join();
                   // ...then continue with writing our own data.
                   output_history.background_thread
-                    = std::thread([ my_filename = std::move(filename),
+                    = std::thread([ my_filename = filename, // filename is const, so we can not move from it
                                     my_temporary_output_location = temporary_output_location,
                                     my_file_contents = std::move(file_contents)]()
                   {
@@ -609,16 +615,12 @@ namespace aspect
         }
       else if (output_format == "parallel deal.II intermediate")
         {
-#if DEAL_II_VERSION_GTE(9,5,0)
           const std::string filename = this->get_output_directory() + "solution/"
                                        + solution_file_prefix + ".pd2";
 
           data_out.write_deal_II_intermediate_in_parallel(filename,
                                                           this->get_mpi_communicator(),
                                                           DataOutBase::CompressionLevel::default_compression);
-#else
-          AssertThrow(false, ExcMessage("Parallel deal.II intermediate output requires deal.II 9.5 or newer!"));
-#endif
         }
       else   // Write in a different format than hdf5 or vtu. This case is supported, but is not
         // optimized for parallel output in that every process will write one file directly
@@ -765,7 +767,7 @@ namespace aspect
       else if (increase_file_number)
         ++output_file_number;
 
-      internal::BaseVariablePostprocessor<dim> base_variables;
+      BaseVariablePostprocessor<dim> base_variables;
       base_variables.initialize_simulator (this->get_simulator());
 
       // Keep a list of the names of all output variables
@@ -778,8 +780,19 @@ namespace aspect
                                          base_variables.get_physical_units(),
                                          visualization_field_names_and_units);
 
-      std::unique_ptr<internal::MeshDeformationPostprocessor<dim>> mesh_deformation_velocity;
-      std::unique_ptr<internal::MeshDeformationPostprocessor<dim>> mesh_deformation_displacement;
+      SurfaceBaseVariablePostprocessor<dim> surface_base_variables;
+      if (output_base_variables_on_mesh_surface)
+        {
+          surface_base_variables.initialize_simulator (this->get_simulator());
+
+          // Insert surface base variable names into set of all output field names
+          track_output_field_names_and_units(surface_base_variables.get_names(),
+                                             surface_base_variables.get_physical_units(),
+                                             visualization_field_names_and_units);
+        }
+
+      std::unique_ptr<MeshDeformationPostprocessor<dim>> mesh_deformation_velocity;
+      std::unique_ptr<MeshDeformationPostprocessor<dim>> mesh_deformation_displacement;
 
       DataOut<dim> data_out;
       data_out.attach_dof_handler (this->get_dof_handler());
@@ -787,25 +800,18 @@ namespace aspect
                                 base_variables);
 
       // Also create an object for outputting information that lives on
-      // the faces of the mesh. If there are postprocessors derived from
-      // the VisualizationPostprocessors::SurfaceOnlyVisualization class, then
-      // we will use this object for viz purposes.
+      // the faces of the mesh.
       DataOutFaces<dim> data_out_faces;
       data_out_faces.attach_dof_handler (this->get_dof_handler());
-      const bool have_face_viz_postprocessors
-        = (std::find_if (postprocessors.begin(),
-                         postprocessors.end(),
-                         [](const std::unique_ptr<VisualizationPostprocessors::Interface<dim>> &p)
-      {
-        return (dynamic_cast<const VisualizationPostprocessors::SurfaceOnlyVisualization<dim>*>
-                (p.get()) != nullptr);
-      })
-      != postprocessors.end());
+
+      if (output_base_variables_on_mesh_surface)
+        data_out_faces.add_data_vector (this->get_solution(),
+                                        surface_base_variables);
 
       // If there is a deforming mesh, also attach the mesh velocity object
       if ( this->get_parameters().mesh_deformation_enabled && output_mesh_velocity)
         {
-          mesh_deformation_velocity = std::make_unique<internal::MeshDeformationPostprocessor<dim>>("mesh_velocity", true);
+          mesh_deformation_velocity = std::make_unique<MeshDeformationPostprocessor<dim>>("mesh_velocity", true);
           mesh_deformation_velocity->initialize_simulator(this->get_simulator());
 
           // Insert mesh deformation variable names into set of all output field names
@@ -819,7 +825,7 @@ namespace aspect
 
       if ( this->get_parameters().mesh_deformation_enabled && output_mesh_displacement)
         {
-          mesh_deformation_displacement = std::make_unique<internal::MeshDeformationPostprocessor<dim>>("mesh_displacement", false);
+          mesh_deformation_displacement = std::make_unique<MeshDeformationPostprocessor<dim>>("mesh_displacement", false);
           mesh_deformation_displacement->initialize_simulator(this->get_simulator());
 
           // Insert mesh deformation variable names into set of all output field names
@@ -831,6 +837,8 @@ namespace aspect
                                     this->get_mesh_deformation_handler().get_mesh_displacements(),
                                     *mesh_deformation_displacement);
         }
+
+      bool have_face_viz_postprocessors = false;
 
       // then for each additional selected output variable
       // add the computed quantity as well. keep a list of
@@ -862,8 +870,13 @@ namespace aspect
                     data_out.add_data_vector (this->get_solution(),
                                               *viz_postprocessor);
                   else
-                    data_out_faces.add_data_vector (this->get_solution(),
-                                                    *viz_postprocessor);
+                    {
+                      data_out_faces.add_data_vector (this->get_solution(),
+                                                      *viz_postprocessor);
+                      // Apart from the base variables, other postprocessors
+                      // output on the mesh surface.
+                      have_face_viz_postprocessors = true;
+                    }
                 }
               else if (const VisualizationPostprocessors::CellDataVectorCreator<dim> *
                        cell_data_creator
@@ -892,9 +905,14 @@ namespace aspect
                                               cell_data.first,
                                               DataOut<dim>::type_cell_data);
                   else
-                    data_out_faces.add_data_vector (*cell_data_vectors.back(),
-                                                    cell_data.first,
-                                                    DataOutFaces<dim>::type_cell_data);
+                    {
+                      data_out_faces.add_data_vector(*cell_data_vectors.back(),
+                                                     cell_data.first,
+                                                     DataOutFaces<dim>::type_cell_data);
+                      // Apart from the base variables, other postprocessors
+                      // output on the mesh surface.
+                      have_face_viz_postprocessors = true;
+                    }
                 }
               else
                 // A viz postprocessor not derived from either DataPostprocessor
@@ -968,6 +986,8 @@ namespace aspect
         (output_undeformed_mesh && dynamic_cast<const MappingQ1Eulerian<dim, LinearAlgebra::Vector>*>(&this->get_mapping())) ?
         (linear_mapping) : (this->get_mapping());
 
+      this->get_signals().pre_data_out_build_patches (data_out);
+
       // Now get everything written for the DataOut case, and record this
       // in the statistics file
       std::string solution_file_prefix;
@@ -992,7 +1012,7 @@ namespace aspect
       // Then do the same again for the face data case. We won't print the
       // output file name to screen (too much clutter on the screen already)
       // but still put it into the statistics file
-      if (have_face_viz_postprocessors)
+      if (output_base_variables_on_mesh_surface || have_face_viz_postprocessors)
         {
           data_out_faces.build_patches (mapping,
                                         subdivisions);
@@ -1090,8 +1110,8 @@ namespace aspect
     namespace
     {
       std::tuple
-      <void *,
-      void *,
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
       aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<2>>,
       aspect::internal::Plugins::PluginList<VisualizationPostprocessors::Interface<3>>> registered_visualization_plugins;
     }
@@ -1264,6 +1284,14 @@ namespace aspect
                              "displacement, you can obtain the deformed mesh by using the 'warp by vector' "
                              "ParaView filter.");
 
+          prm.declare_entry("Output base variables on mesh surface", "false",
+                            Patterns::Bool(),
+                            "Whether or not to also output the base variables velocity, fluid pressure "
+                            "(when present), fluid velocity (when present), pressure, "
+                            "temperature and compositional fields (when present) on the surface "
+                            "of the mesh. The mesh surface includes not only the top boundary, "
+                            "but all boundaries of the domain. ");
+
           // Finally also construct a string for Patterns::MultipleSelection that
           // contains the names of all registered visualization postprocessors.
           // Also add a number of removed plugins that are now combined in 'material properties'
@@ -1307,7 +1335,7 @@ namespace aspect
               ExcMessage ("No postprocessors registered!?"));
       std::vector<std::string> viz_names;
 
-      std::string visualization_subdirectory = this->get_output_directory() + "solution/";
+      const std::string visualization_subdirectory = this->get_output_directory() + "solution/";
       Utilities::create_directory (visualization_subdirectory,
                                    this->get_mpi_communicator(),
                                    true);
@@ -1370,6 +1398,8 @@ namespace aspect
           output_mesh_displacement = prm.get_bool("Output mesh displacement");
           output_undeformed_mesh = prm.get_bool("Output undeformed mesh");
 
+          output_base_variables_on_mesh_surface = prm.get_bool("Output base variables on mesh surface");
+
           // now also see which derived quantities we are to compute
           viz_names = Utilities::split_string_list(prm.get("List of output variables"));
           AssertThrow(Utilities::has_unique_entries(viz_names),
@@ -1390,53 +1420,22 @@ namespace aspect
                 viz_names.push_back (std::get<0>(*p));
             }
 
-          // Unify material property visualization plugins into the 'material properties'
-          // plugin to avoid duplicated code and multiple calls to the material model
-          prm.enter_subsection("Material properties");
-          {
-            bool material_properties_enabled = std::find(viz_names.begin(),
-                                                         viz_names.end(),
-                                                         "material properties") != viz_names.end() ;
+          // TODO: Remove deprecated options
+          const std::set<std::string> deprecated_postprocessors = {"density",
+                                                                   "specific heat",
+                                                                   "thermal conductivity",
+                                                                   "thermal diffusivity",
+                                                                   "thermal expansivity",
+                                                                   "viscosity"
+                                                                  };
 
-            std::set<std::string> deprecated_postprocessors = {"density",
-                                                               "specific heat",
-                                                               "thermal conductivity",
-                                                               "thermal diffusivity",
-                                                               "thermal expansivity",
-                                                               "viscosity"
-                                                              };
-
-            // For all selected visualization plugins
-            auto plugin_name = viz_names.begin();
-            while (plugin_name != viz_names.end())
-              {
-                // Check if the current name is in the set of the deprecated names
-                if (deprecated_postprocessors.count(*plugin_name) != 0)
-                  {
-                    // If there is no 'material properties' yet
-                    if (material_properties_enabled == false)
-                      {
-                        // Set the current property name as the parameter for 'material properties'
-                        prm.set("List of material properties",*plugin_name);
-                        // Then replace the currently selected plugin with 'material properties'
-                        *plugin_name = "material properties";
-                        material_properties_enabled = true;
-                        ++plugin_name;
-                      }
-                    else
-                      {
-                        // Add the current property name to the parameter of 'material properties'
-                        std::string new_property_names = prm.get("List of material properties") + ", " + *plugin_name;
-                        prm.set("List of material properties",new_property_names);
-                        // Then delete the current plugin
-                        plugin_name = viz_names.erase(plugin_name);
-                      }
-                  }
-                else
-                  ++plugin_name;
-              }
-          }
-          prm.leave_subsection();
+          for (const auto &viz_name: viz_names)
+            {
+              // Check if the current name is in the set of the deprecated names
+              AssertThrow(deprecated_postprocessors.count(viz_name) == 0,
+                          ExcMessage("The visualization postprocessor '" + viz_name + "' has been removed. "
+                                     "Please use the 'material properties' postprocessor instead."));
+            }
         }
         prm.leave_subsection();
       }
@@ -1502,9 +1501,15 @@ namespace aspect
     void
     Visualization<dim>::save (std::map<std::string, std::string> &status_strings) const
     {
+      // Serialize into a stringstream. Put the following into a code
+      // block of its own to ensure the destruction of the 'oa'
+      // archive triggers a flush() on the stringstream so we can
+      // query the completed string below.
       std::ostringstream os;
-      aspect::oarchive oa (os);
-      oa << (*this);
+      {
+        aspect::oarchive oa (os);
+        oa << (*this);
+      }
 
       status_strings["Visualization"] = os.str();
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -133,6 +133,13 @@ namespace aspect
     is_compressible () const
     {
       return base_model->is_compressible();
+    }
+
+    template <int dim>
+    void
+    ReplaceLithosphereViscosity<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+    {
+      base_model->create_additional_named_outputs(out);
     }
   }
 }

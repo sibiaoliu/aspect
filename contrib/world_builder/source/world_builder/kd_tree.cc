@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2022 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -36,7 +36,7 @@ namespace WorldBuilder
                         const bool y_axis)
     {
       const size_t mid=(left+right)>>1;
-      std::nth_element(nodes.begin()+left,nodes.begin()+mid,nodes.begin()+right+1,
+      std::nth_element(nodes.begin()+static_cast<long int>(left),nodes.begin()+static_cast<long int>(mid),nodes.begin()+static_cast<long int>(right)+1,
                        [y_axis](Node& i, Node& j) -> bool
       {
         return i[y_axis] < j[y_axis];
@@ -89,8 +89,8 @@ namespace WorldBuilder
             }
 
           // Compare node's point to current closest point
-          const double distance = sqrt((node[0]-check_point[0])*(node[0]-check_point[0])
-                                       +(node[1]-check_point[1])*(node[1]-check_point[1]));
+          const double distance = sqrt((node[false]-check_point[0])*(node[false]-check_point[0])
+                                       +(node[true]-check_point[1])*(node[true]-check_point[1]));
           if (index_distance.distance > distance)
             {
               index_distance.index = mid;
@@ -113,8 +113,8 @@ namespace WorldBuilder
             find_closest_point_recursive(check_point,mid+1,right,!y_axis,index_distance);
 
           // Compare node's point to current closest point
-          const double distance = sqrt((node[0]-check_point[0])*(node[0]-check_point[0])
-                                       +(node[1]-check_point[1])*(node[1]-check_point[1]));
+          const double distance = sqrt((node[false]-check_point[0])*(node[false]-check_point[0])
+                                       +(node[true]-check_point[1])*(node[true]-check_point[1]));
           if (index_distance.distance > distance)
             {
               index_distance.index = mid;
@@ -165,8 +165,8 @@ namespace WorldBuilder
             }
 
           // Compare node's point to current closest point
-          const double distance = sqrt((node[0]-check_point[0])*(node[0]-check_point[0])
-                                       +(node[1]-check_point[1])*(node[1]-check_point[1]));
+          const double distance = sqrt((node[false]-check_point[0])*(node[false]-check_point[0])
+                                       +(node[true]-check_point[1])*(node[true]-check_point[1]));
           if (index_distances.min_distance > distance)
             {
               index_distances.min_index = mid;
@@ -191,8 +191,8 @@ namespace WorldBuilder
             find_closest_points_recursive(check_point,mid+1,right,!y_axis,index_distances);
 
           // Compare node's point to current closest point
-          const double distance = sqrt((node[0]-check_point[0])*(node[0]-check_point[0])
-                                       +(node[1]-check_point[1])*(node[1]-check_point[1]));
+          const double distance = sqrt((node[false]-check_point[0])*(node[false]-check_point[0])
+                                       +(node[true]-check_point[1])*(node[true]-check_point[1]));
           if (index_distances.min_distance > distance)
             {
               index_distances.min_index = mid;

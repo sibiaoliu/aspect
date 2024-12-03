@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2021 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,7 +35,7 @@ namespace aspect
               const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
               HeatingModel::HeatingModelOutputs &heating_model_outputs) const
     {
-      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.position.size(),
+      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.n_evaluation_points(),
              ExcMessage ("Heating outputs need to have the same number of entries as the material model inputs."));
 
       AssertThrow(this->include_melt_transport(),
@@ -131,11 +131,9 @@ namespace aspect
     create_additional_material_model_inputs(MaterialModel::MaterialModelInputs<dim> &inputs) const
     {
       // we need the melt inputs for this adiabatic heating of melt
-      if (inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>() != nullptr)
-        return;
-
-      inputs.additional_inputs.push_back(
-        std::make_unique<MaterialModel::MeltInputs<dim>> (inputs.position.size()));
+      if (inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>() == nullptr)
+        inputs.additional_inputs.emplace_back(
+          std::make_unique<MaterialModel::MeltInputs<dim>> (inputs.n_evaluation_points()));
     }
   }
 }

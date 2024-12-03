@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -47,7 +47,11 @@ namespace aspect
       if (use_surface_condition_function)
         {
           initialized = false;
-          surface_condition_function.set_time(this->get_time());
+          if (this->convert_output_to_years())
+            surface_condition_function.set_time(this->get_time() / year_in_seconds);
+
+          else
+            surface_condition_function.set_time(this->get_time());
           initialize();
         }
     }
@@ -135,7 +139,7 @@ namespace aspect
                                 temperatures[0];
             }
 
-          const double z = double(i)/double(n_points-1)*this->get_geometry_model().maximal_depth();
+          const double z = static_cast<double>(i)/static_cast<double>(n_points-1)*this->get_geometry_model().maximal_depth();
           const Point<dim> representative_point = this->get_geometry_model().representative_point (z);
           const Tensor <1,dim> g = this->get_gravity_model().gravity_vector(representative_point);
 

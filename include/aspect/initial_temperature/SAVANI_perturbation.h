@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -143,16 +143,16 @@ namespace aspect
         bool zero_out_degree_0;
 
         /**
-         * This parameter allows to use a lower maximum order when reading
+         * This parameter allows to use a lower maximum degree when reading
          * the spherical harmonic data file.
          */
-        bool lower_max_order;
+        bool lower_max_degree;
 
         /**
-         * The maximum order the users specify, which is only valid when
-         * "lower_max_order" is set to true.
+         * The maximum degree the users specify, which is only valid when
+         * "lower_max_degree" is set to true.
          */
-        unsigned int max_order;
+        unsigned int specified_max_degree;
 
         /**
          * This parameter gives the reference temperature, which will be

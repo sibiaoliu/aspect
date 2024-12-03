@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -98,7 +98,7 @@ namespace aspect
      * an unscaled (constant) viscosity profile, which is then scaled by the quotient between reference
      * profile and unscaled viscosity.
      */
-    template<int dim>
+    template <int dim>
     class ScaledViscosityProfileMaterial : public MaterialModel::Interface<dim>, public aspect::SimulatorAccess<dim>
     {
       public:

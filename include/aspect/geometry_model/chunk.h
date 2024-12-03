@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -132,6 +132,11 @@ namespace aspect
 
         private:
           /**
+           * A pointer to the topography model.
+           */
+          const InitialTopographyModel::Interface<dim> *topo;
+
+          /**
            * The minimum longitude of the domain.
            */
           double point1_lon;
@@ -164,11 +169,6 @@ namespace aspect
           virtual
           Point<dim>
           push_forward_topo(const Point<dim> &chart_point) const;
-
-          /**
-           * A pointer to the topography model.
-           */
-          const InitialTopographyModel::Interface<dim> *topo;
       };
     }
 
@@ -419,7 +419,7 @@ namespace aspect
         /**
          * Give a symbolic name to the manifold id to be used by this class.
          */
-        static const types::manifold_id my_manifold_id = 15;
+        static constexpr types::manifold_id my_manifold_id = 15;
     };
   }
 }

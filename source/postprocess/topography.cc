@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -234,6 +234,17 @@ namespace aspect
                                   "where NNNNN is the number of the time step.\n"
                                   "The file format then consists of lines with Euclidean coordinates "
                                   "followed by the corresponding topography value."
-                                  "Topography is printed/written in meters.")
+                                  "Topography is printed/written in meters."
+                                  "\n\n"
+                                  "It is worth comparing this postprocessor with the "
+                                  "visualization postprocessor called ``surface elevation''. The latter is "
+                                  "used to *visualize* the surface elevation in graphical form, by "
+                                  "outputting it into the same files that the solution and other "
+                                  "postprocessed variables are written, to then be used for "
+                                  "visualization using programs such as VisIt or Paraview. In "
+                                  "contrast, the current postprocessor generates the same *kind* "
+                                  "of information, but instead writes it as a point cloud that "
+                                  "can then more easily be processed using tools other "
+                                  "than visualization programs.")
   }
 }

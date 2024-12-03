@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -155,20 +155,6 @@ namespace aspect
   namespace MeshDeformation
   {
     template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::update ()
-    {}
-
-
-
-    template <int dim>
     bool
     Interface<dim>::needs_surface_stabilization () const
     {
@@ -194,21 +180,6 @@ namespace aspect
     compute_velocity_constraints_on_boundary(const DoFHandler<dim> &/*mesh_deformation_dof_handler*/,
                                              AffineConstraints<double> &/*mesh_velocity_constraints*/,
                                              const std::set<types::boundary_id> &/*boundary_id*/) const
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::
-    declare_parameters (ParameterHandler &)
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (ParameterHandler &)
     {}
 
 
@@ -242,8 +213,8 @@ namespace aspect
     namespace
     {
       std::tuple
-      <void *,
-      void *,
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
       aspect::internal::Plugins::PluginList<Interface<2>>,
       aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
@@ -629,7 +600,12 @@ namespace aspect
       // For the moment add constraints from all plugins into one matrix, then
       // merge that matrix with the existing constraints (respecting the existing
       // constraints as more important)
+#if DEAL_II_VERSION_GTE(9,7,0)
+      AffineConstraints<double> plugin_constraints(mesh_vertex_constraints.get_local_lines(),
+                                                   mesh_vertex_constraints.get_local_lines());
+#else
       AffineConstraints<double> plugin_constraints(mesh_vertex_constraints.get_local_lines());
+#endif
 
       for (const auto &boundary_id : mesh_deformation_objects)
         {
@@ -638,7 +614,12 @@ namespace aspect
 
           for (const auto &model : boundary_id.second)
             {
+#if DEAL_II_VERSION_GTE(9,7,0)
+              AffineConstraints<double> current_plugin_constraints(mesh_vertex_constraints.get_local_lines(),
+                                                                   mesh_vertex_constraints.get_local_lines());
+#else
               AffineConstraints<double> current_plugin_constraints(mesh_vertex_constraints.get_local_lines());
+#endif
 
               model->compute_velocity_constraints_on_boundary(mesh_deformation_dof_handler,
                                                               current_plugin_constraints,
@@ -743,7 +724,12 @@ namespace aspect
       // For the moment add constraints from all plugins into one matrix, then
       // merge that matrix with the existing constraints (respecting the existing
       // constraints as more important)
+#if DEAL_II_VERSION_GTE(9,7,0)
+      AffineConstraints<double> plugin_constraints(mesh_vertex_constraints.get_local_lines(),
+                                                   mesh_vertex_constraints.get_local_lines());
+#else
       AffineConstraints<double> plugin_constraints(mesh_vertex_constraints.get_local_lines());
+#endif
 
       std::set<types::boundary_id> boundary_id_set;
 
@@ -751,7 +737,12 @@ namespace aspect
         {
           for (const auto &deformation_object : boundary_id_and_deformation_objects.second)
             {
+#if DEAL_II_VERSION_GTE(9,7,0)
+              AffineConstraints<double> current_plugin_constraints(mesh_vertex_constraints.get_local_lines(),
+                                                                   mesh_vertex_constraints.get_local_lines());
+#else
               AffineConstraints<double> current_plugin_constraints(mesh_vertex_constraints.get_local_lines());
+#endif
 
               Utilities::VectorFunctionFromVelocityFunctionObject<dim> vel
               (dim,
@@ -868,9 +859,7 @@ namespace aspect
       rhs.reinit(mesh_locally_owned, sim.mpi_communicator);
       solution.reinit(mesh_locally_owned, sim.mpi_communicator);
 
-      typename DoFHandler<dim>::active_cell_iterator cell = mesh_deformation_dof_handler.begin_active(),
-                                                     endc= mesh_deformation_dof_handler.end();
-      for (; cell!=endc; ++cell)
+      for (const auto &cell : mesh_deformation_dof_handler.active_cell_iterators())
         if (cell->is_locally_owned())
           {
             cell->get_dof_indices (cell_dof_indices);
@@ -1029,6 +1018,9 @@ namespace aspect
         }
       rhs.compress(VectorOperation::add);
 
+      // clear the level constraints of the previous time step
+      mg_constrained_dofs.clear_user_constraints();
+
       // setup GMG, following deal.II step-37:
       const unsigned int n_levels = sim.triangulation.n_global_levels();
 
@@ -1048,10 +1040,17 @@ namespace aspect
 
       for (unsigned int level = 0; level < n_levels; ++level)
         {
+#if DEAL_II_VERSION_GTE(9,7,0)
+          const IndexSet relevant_dofs = DoFTools::extract_locally_relevant_level_dofs(mesh_deformation_dof_handler,
+                                                                                       level);
+#else
           IndexSet relevant_dofs;
           DoFTools::extract_locally_relevant_level_dofs(mesh_deformation_dof_handler,
                                                         level,
                                                         relevant_dofs);
+#endif
+
+
           AffineConstraints<double> level_constraints;
 #if DEAL_II_VERSION_GTE(9,6,0)
           level_constraints.reinit(mesh_deformation_dof_handler.locally_owned_mg_dofs(level),
@@ -1115,7 +1114,7 @@ namespace aspect
                                         level);
         }
 
-      MGTransferMatrixFree<dim, double> mg_transfer(mg_constrained_dofs);
+      MGTransferMF<dim, double> mg_transfer(mg_constrained_dofs);
       mg_transfer.build(mesh_deformation_dof_handler);
 
       using SmootherType =
@@ -1171,8 +1170,9 @@ namespace aspect
       mg.set_edge_matrices(mg_interface, mg_interface);
       PreconditionMG<dim,
                      dealii::LinearAlgebra::distributed::Vector<double>,
-                     MGTransferMatrixFree<dim, double>>
+                     MGTransferMF<dim, double>>
                      preconditioner(mesh_deformation_dof_handler, mg, mg_transfer);
+
 
       // solve
       const double tolerance
@@ -1299,27 +1299,28 @@ namespace aspect
       std::vector<Tensor<1,dim>> velocity_values(n_q_points);
 
       typename DoFHandler<dim>::active_cell_iterator
-      cell = sim.dof_handler.begin_active(), endc= sim.dof_handler.end();
-      typename DoFHandler<dim>::active_cell_iterator
       fscell = mesh_deformation_dof_handler.begin_active();
 
-      for (; cell!=endc; ++cell, ++fscell)
-        if (cell->is_locally_owned())
-          {
-            cell->get_dof_indices (cell_dof_indices);
+      for (const auto &cell : sim.dof_handler.active_cell_iterators())
+        {
+          if (cell->is_locally_owned())
+            {
+              cell->get_dof_indices (cell_dof_indices);
 
-            fe_values.reinit (cell);
-            fs_fe_values.reinit (fscell);
-            fs_fe_values[extract_vel].get_function_values(fs_mesh_velocity, velocity_values);
-            for (unsigned int j=0; j<n_q_points; ++j)
-              for (unsigned int dir=0; dir<dim; ++dir)
-                {
-                  const unsigned int support_point_index
-                    = sim.finite_element.component_to_system_index(/*velocity component=*/ sim.introspection.component_indices.velocities[dir],
-                                                                                           /*dof index within component=*/ j);
-                  distributed_mesh_velocity[cell_dof_indices[support_point_index]] = velocity_values[j][dir];
-                }
-          }
+              fe_values.reinit (cell);
+              fs_fe_values.reinit (fscell);
+              fs_fe_values[extract_vel].get_function_values(fs_mesh_velocity, velocity_values);
+              for (unsigned int j=0; j<n_q_points; ++j)
+                for (unsigned int dir=0; dir<dim; ++dir)
+                  {
+                    const unsigned int support_point_index
+                      = sim.finite_element.component_to_system_index(/*velocity component=*/ sim.introspection.component_indices.velocities[dir],
+                                                                                             /*dof index within component=*/ j);
+                    distributed_mesh_velocity[cell_dof_indices[support_point_index]] = velocity_values[j][dir];
+                  }
+            }
+          ++fscell;
+        }
 
       distributed_mesh_velocity.compress(VectorOperation::insert);
       mesh_velocity = distributed_mesh_velocity;
@@ -1359,10 +1360,15 @@ namespace aspect
           // need to evaluate the mapping later.
           for (unsigned int level = 0; level < n_levels; ++level)
             {
+#if DEAL_II_VERSION_GTE(9,7,0)
+              const IndexSet relevant_mg_dofs = DoFTools::extract_locally_relevant_level_dofs(mesh_deformation_dof_handler, level);
+#else
               IndexSet relevant_mg_dofs;
               DoFTools::extract_locally_relevant_level_dofs(mesh_deformation_dof_handler,
                                                             level,
                                                             relevant_mg_dofs);
+#endif
+
               level_displacements[level].reinit(mesh_deformation_dof_handler.locally_owned_mg_dofs(level),
                                                 relevant_mg_dofs,
                                                 sim.mpi_communicator);
@@ -1412,8 +1418,12 @@ namespace aspect
       }
 
       mesh_locally_owned = mesh_deformation_dof_handler.locally_owned_dofs();
+#if DEAL_II_VERSION_GTE(9,7,0)
+      mesh_locally_relevant = DoFTools::extract_locally_relevant_dofs(mesh_deformation_dof_handler);
+#else
       DoFTools::extract_locally_relevant_dofs (mesh_deformation_dof_handler,
                                                mesh_locally_relevant);
+#endif
 
       // This will initialize the mesh displacement and free surface
       // mesh velocity vectors with zero-valued entries.
@@ -1477,15 +1487,22 @@ namespace aspect
                                                                        this->get_triangulation().get_communicator());
       dealii::LinearAlgebra::ReadWriteVector<double> rwv;
       rwv.reinit(mesh_displacements);
-      displacements.import(rwv, VectorOperation::insert);
+      displacements.import_elements(rwv, VectorOperation::insert);
+
+      const unsigned int n_levels = sim.triangulation.n_global_levels();
+      for (unsigned int level = 0; level < n_levels; ++level)
+        {
+          level_displacements[level].zero_out_ghost_values();
+        }
 
       mg_transfer.interpolate_to_mg(mesh_deformation_dof_handler,
                                     level_displacements,
                                     displacements);
 
-      const unsigned int n_levels = sim.triangulation.n_global_levels();
       for (unsigned int level = 0; level < n_levels; ++level)
-        level_displacements[level].update_ghost_values();
+        {
+          level_displacements[level].update_ghost_values();
+        }
 
     }
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -19,11 +19,15 @@
 */
 
 
-#ifndef _aspect_model_grain_size_h
-#define _aspect_model_grain_size_h
+#ifndef _aspect_material_model_grain_size_h
+#define _aspect_material_model_grain_size_h
 
 #include <aspect/material_model/interface.h>
+#include <aspect/material_model/reaction_model/grain_size_evolution.h>
+
+#include <aspect/material_model/utilities.h>
 #include <aspect/simulator_access.h>
+#include <aspect/material_model/rheology/drucker_prager.h>
 
 #include <deal.II/matrix_free/fe_point_evaluation.h>
 
@@ -71,8 +75,8 @@ namespace aspect
      * determine the grain size evolution in dependence of the strain rate,
      * temperature, phase transitions, and the creep regime.
      * This material model only works if a compositional field
-     * named 'grain_size' is present. In the diffusion
-     * creep regime, the viscosity depends on this grain size. We use the grain
+     * with the name 'grain_size' is present.
+     * The diffusion creep viscosity depends on this grain size. We use the grain
      * size evolution laws described in Behn et al., 2009. Implications of grain
      * size evolution on the seismic structure of the oceanic upper mantle, Earth
      * Planet. Sci. Letters, 282, 178–189. Other material parameters are either
@@ -107,6 +111,9 @@ namespace aspect
          */
         bool is_compressible () const override;
 
+        /**
+         * Evaluate the material model at the given input points.
+         */
         void evaluate(const typename Interface<dim>::MaterialModelInputs &in,
                       typename Interface<dim>::MaterialModelOutputs &out) const override;
 
@@ -127,13 +134,12 @@ namespace aspect
         void
         parse_parameters (ParameterHandler &prm) override;
 
-
-        void
-        create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const override;
-
         /**
          * @}
          */
+
+        void
+        create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
         /**
          * Returns the enthalpy as calculated by HeFESTo.
@@ -157,7 +163,7 @@ namespace aspect
         std::array<std::pair<double, unsigned int>,2>
         enthalpy_derivative (const typename Interface<dim>::MaterialModelInputs &in) const;
 
-      protected:
+      private:
         double reference_rho;
         double reference_T;
         double eta;
@@ -173,125 +179,6 @@ namespace aspect
          * The thermal conductivity.
          */
         double k_value;
-
-        /**
-         * The index of the compositional field that represents the grain size.
-         */
-        unsigned int grain_size_index;
-
-        /**
-         * Parameters controlling the grain size evolution.
-         */
-        std::vector<double> grain_growth_activation_energy;
-        std::vector<double> grain_growth_activation_volume;
-        std::vector<double> grain_growth_rate_constant;
-        std::vector<double> grain_growth_exponent;
-        double              minimum_grain_size;
-        std::vector<double> reciprocal_required_strain;
-        std::vector<double> recrystallized_grain_size;
-
-        /**
-         * Parameters controlling the dynamic grain recrystallization.
-         */
-        std::vector<double> grain_boundary_energy;
-        std::vector<double> boundary_area_change_work_fraction;
-        std::vector<double> geometric_constant;
-
-        /**
-          * A struct that contains information about which
-          * formulation of grain size evolution should be used.
-          */
-        struct Formulation
-        {
-          /**
-           * This enum lists available options that
-           * determine the equations being used for grain size evolution.
-           *
-           * We currently support three approaches:
-           *
-           * 'paleowattmeter':
-           * Austin, N. J., & Evans, B. (2007). Paleowattmeters: A scaling
-           * relation for dynamically recrystallized grain size. Geology, 354), 343-346.).
-           *
-           * 'paleopiezometer':
-           * Hall, C. E., Parmentier, E. M. (2003). Influence of grain size
-           * evolution on convective instability. Geochemistry, Geophysics,
-           * Geosystems, 4(3).
-           *
-           * 'pinned_grain_damage':
-           * Mulyukova, E., & Bercovici, D. (2018). Collapse of passive margins
-           * by lithospheric damage and plunging grain size. Earth and Planetary
-           * Science Letters, 484, 341-352.
-           */
-          enum Kind
-          {
-            paleowattmeter,
-            paleopiezometer,
-            pinned_grain_damage
-          };
-
-          /**
-           * This function translates an input string into the
-           * available enum options.
-           */
-          static
-          Kind
-          parse(const std::string &input)
-          {
-            if (input == "paleowattmeter")
-              return Formulation::paleowattmeter;
-            else if (input == "paleopiezometer")
-              return Formulation::paleopiezometer;
-            else if (input == "pinned grain damage")
-              return Formulation::pinned_grain_damage;
-            else
-              AssertThrow(false, ExcNotImplemented());
-
-            return Formulation::Kind();
-          }
-        };
-
-        /**
-         * A variable that records the formulation of how to evolve grain size.
-         * See the type of this variable for a description of available options.
-        */
-        typename Formulation::Kind grain_size_evolution_formulation;
-
-        /**
-        * This function returns the fraction of shear heating energy partitioned
-        * into grain damage using the implementation by Mulyukova and Bercovici (2018)
-        * Collapse of passive margins by lithospheric damage
-        * and plunging grain size. Earth and Planetary Science Letters, 484, 341-352.
-        */
-        double  compute_partitioning_fraction (const double temperature) const;
-
-        /**
-         * Parameters controlling the partitioning of energy
-         * into grain damage in the pinned state.
-         */
-        double grain_size_reduction_work_fraction_exponent;
-        double minimum_grain_size_reduction_work_fraction;
-        double maximum_grain_size_reduction_work_fraction;
-        double temperature_minimum_partitioning_power;
-        double temperature_maximum_partitioning_power;
-
-        /**
-         * Functions and parameters controlling conversion from interface roughness to grain size,
-         * used in pinned state formulation of grain damage. This conversion depends on the
-         * proportion of the two mineral phases.
-         *
-         * A detailed description of this approach can be found in Appendix H.1, in Equation (8) in
-         * the main manuscript, and in equation (F.28) of Bercovici, David, and Yanick Ricard (2012).
-         * Mechanisms for the generation of plate tectonics by two-phase grain-damage
-         * and pinning. Physics of the Earth and Planetary Interiors 202 (2012): 27-55.
-         */
-        double phase_distribution;
-
-        /**
-         * The factor used to convert roughness into the equivalent mean grain
-         * size for a given volume fraction of a mineral in the two-phase damage model.
-        */
-        double roughness_to_grain_size;
 
         /**
          * Parameters controlling the viscosity.
@@ -321,21 +208,18 @@ namespace aspect
         double min_thermal_expansivity;
         double max_thermal_expansivity;
         unsigned int max_latent_heat_substeps;
-        double min_grain_size;
-        double pv_grain_size_scaling;
+        double minimum_grain_size;
 
         /**
-         * Whether to advect the real grain size, or the logarithm of the
-         * grain size. The logarithm reduces jumps.
+         * Calculate the diffusion viscosity in dependence of temperature,
+         * pressure, grain size, and phase.
          */
-        bool advect_log_grainsize;
-
         double diffusion_viscosity (const double temperature,
                                     const double adiabatic_temperature,
                                     const double adiabatic_pressure,
                                     const double grain_size,
                                     const double second_strain_rate_invariant,
-                                    const Point<dim> &position) const;
+                                    const unsigned int phase_index) const;
 
         /**
          * This function calculates the dislocation viscosity. For this purpose
@@ -352,7 +236,7 @@ namespace aspect
                                       const double adiabatic_temperature,
                                       const double adiabatic_pressure,
                                       const SymmetricTensor<2,dim> &strain_rate,
-                                      const Point<dim> &position,
+                                      const unsigned int phase_index,
                                       const double diffusion_viscosity,
                                       const double viscosity_guess = 0) const;
 
@@ -392,71 +276,31 @@ namespace aspect
                            const std::vector<double> &compositional_fields,
                            const Point<dim> &position) const;
 
-        /**
-         * Rate of grain size growth (Ostwald ripening) or reduction
-         * (due to dynamic recrystallization and phase transformations)
-         * in dependence on temperature, pressure, strain rate, mineral
-         * phase and creep regime.
-         * We use the grain size growth laws as for example described
-         * in Behn, M. D., Hirth, G., & Elsenbeck, J. R. (2009). Implications
-         * of grain size evolution on the seismic structure of the oceanic
-         * upper mantle. Earth and Planetary Science Letters, 282(1), 178-189.
-         *
-         * For the rate of grain size reduction due to dynamic crystallization
-         * there is the choice between the paleowattmeter (Austins and
-         * Evans, 2007) and the paleopiezometer (Hall and Parmentier, 2003)
-         * as described in the parameter use_paleowattmeter.
-         */
-        double
-        grain_size_change (const double                  temperature,
-                           const double                  pressure,
-                           const std::vector<double>    &compositional_fields,
-                           const SymmetricTensor<2,dim> &strain_rate,
-                           const Tensor<1,dim>          &velocity,
-                           const Point<dim>             &position,
-                           const unsigned int            grain_size_index,
-                           const int                     crossed_transition) const;
-
-        /**
-         * Function that defines the phase transition interface
-         * (0 above, 1 below the phase transition).This is done
-         * individually for each transition and summed up in the end.
-         */
-        double
-        phase_function (const Point<dim> &position,
-                        const double temperature,
-                        const double pressure,
-                        const unsigned int phase) const;
 
         /**
          * Function that returns the phase for a given
-         * position, temperature, pressure and compositional
-         * field index.
+         * temperature, depth, pressure, and density gradient
+         * (which are all contained in the @p in argument).
+         * Because the function returns just the dominant
+         * phase, phase transitions are discrete in this
+         * material model (they have a zero width).
          */
         unsigned int
-        get_phase_index (const Point<dim> &position,
-                         const double temperature,
-                         const double pressure) const;
+        get_phase_index (const MaterialUtilities::PhaseFunctionInputs<dim> &in) const;
+
 
         /**
-         * Function that takes an object in the same format
-         * as in.composition as argument and converts the
-         * vector that corresponds to the grain size to its
-         * logarithms and limits the grain size to
-         * a global minimum. The input argument @p compositional_fields
-         * is modified in-place.
+         * Number of phase transitions for the one chemical composition used in this model.
          */
-        void
-        convert_log_grain_size (std::vector<double> &compositional_fields) const;
+        unsigned int n_phase_transitions;
 
         /**
-         * list of depth, width and Clapeyron slopes for the different phase
-         * transitions and in which phase they occur
+         * Object that handles phase transitions.
+         * Allows it to compute the phase function for each individual phase
+         * transition in the model, given the temperature, pressure, depth,
+         * and density gradient.
          */
-        std::vector<double> transition_depths;
-        std::vector<double> transition_temperatures;
-        std::vector<double> transition_slopes;
-        std::vector<double> transition_widths;
+        std::shared_ptr<MaterialUtilities::PhaseFunction<dim>> phase_function;
 
 
         /**
@@ -497,6 +341,20 @@ namespace aspect
          */
         mutable std::unique_ptr<FEPointEvaluation<1, dim>> temperature_evaluator;
         mutable std::unique_ptr<FEPointEvaluation<1, dim>> pressure_evaluator;
+
+        /*
+         * Object for computing plastic stresses, viscosities, and additional outputs,
+         * as well as an object for the required input parameters.
+         */
+        bool enable_drucker_prager_rheology;
+        bool use_adiabatic_pressure_for_yielding;
+        Rheology::DruckerPrager<dim> drucker_prager_plasticity;
+        Rheology::DruckerPragerParameters drucker_prager_parameters;
+
+        /**
+         * The reaction model that calculates the grain size change over time.
+         */
+        std::unique_ptr<ReactionModel::GrainSizeEvolution<dim>> grain_size_evolution;
     };
 
   }

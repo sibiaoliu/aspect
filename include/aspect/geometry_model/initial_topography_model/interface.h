@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -50,54 +50,27 @@ namespace aspect
      * @ingroup InitialTopographyModels
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
         /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface() = default;
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual void initialize ();
-
-        /**
-         * Return the value of the elevation at the given point.
+         * Return the value of the elevation at the given surface point.
+         *
+         * Note that different geometry models use different conventions for
+         * how they describe surface points. In general, the models use
+         * their own "natural" coordinate system. For example, box-type
+         * geometry models will generally provide points as x-y coordinates
+         * on the surface, whereas spherical-type geometry models will generally
+         * provide surface points in spherical coordinates.
          */
         virtual
-        double value (const Point<dim-1> &p) const = 0;
+        double value (const Point<dim-1> &surface_point) const = 0;
 
         /**
          * Return the maximum value of the elevation.
          */
         virtual
         double max_topography () const = 0;
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
     };
 
 

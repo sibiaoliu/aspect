@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,6 +28,7 @@
 #include <iostream>
 #include <aspect/material_model/rheology/visco_plastic.h>
 #include <aspect/material_model/steinberger.h>
+#include <aspect/material_model/equation_of_state/interface.h>
 
 namespace aspect
 {
@@ -76,7 +77,7 @@ namespace aspect
                               "'projected density field' approximation "
                               "for the mass conservation equation, which is not selected."));
 
-      AssertThrow (this->introspection().compositional_name_exists("entropy"),
+      AssertThrow (this->introspection().composition_type_exists(CompositionalFieldDescription::Type::entropy),
                    ExcMessage("The 'entropy model' material model requires the existence of a compositional field "
                               "named 'entropy'. This field does not exist."));
 
@@ -85,8 +86,17 @@ namespace aspect
                              "iterates over the advection equations but a non iterating solver scheme was selected. "
                              "Please check the consistency of your solver scheme."));
 
-      entropy_reader = std::make_unique<MaterialUtilities::Lookup::EntropyReader>();
-      entropy_reader->initialize(this->get_mpi_communicator(), data_directory, material_file_name);
+      AssertThrow(material_file_names.size() == 1 || SimulatorAccess<dim>::get_end_time () == 0,
+                  ExcMessage("The 'entropy model' material model can only handle one composition, "
+                             "and can therefore only read one material lookup table."));
+
+
+
+      for (unsigned int i = 0; i < material_file_names.size(); ++i)
+        {
+          entropy_reader.push_back(std::make_unique<MaterialUtilities::Lookup::EntropyReader>());
+          entropy_reader[i]->initialize(this->get_mpi_communicator(), data_directory, material_file_names[i]);
+        }
 
       lateral_viscosity_prefactor_lookup = std::make_unique<internal::LateralViscosityLookup>(data_directory+lateral_viscosity_file_name,
                                            this->get_mpi_communicator());
@@ -154,7 +164,18 @@ namespace aspect
                                 MaterialModel::MaterialModelOutputs<dim> &out) const
     {
       const unsigned int projected_density_index = this->introspection().compositional_index_for_name("density_field");
-      const unsigned int entropy_index = this->introspection().compositional_index_for_name("entropy");
+      //TODO : need to make it work for more than one field
+      const std::vector<unsigned int> &entropy_indices = this->introspection().get_indices_for_fields_of_type(CompositionalFieldDescription::entropy);
+      const unsigned int entropy_index = entropy_indices[0];
+      const std::vector<unsigned int> &composition_indices = this->introspection().get_indices_for_fields_of_type(CompositionalFieldDescription::chemical_composition);
+
+      AssertThrow(composition_indices.size() == material_file_names.size() - 1,
+                  ExcMessage("The 'entropy model' material model assumes that there exists a background field in addition to the compositional fields, "
+                             "and therefore it requires one more lookup table than there are chemical compositional fields."));
+
+      EquationOfStateOutputs<dim> eos_outputs (material_file_names.size());
+      std::vector<double> volume_fractions (material_file_names.size());
+      std::vector<double> mass_fractions (material_file_names.size());
 
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
@@ -166,17 +187,41 @@ namespace aspect
           const double entropy = in.composition[i][entropy_index];
           const double pressure = this->get_adiabatic_conditions().pressure(in.position[i]) / 1.e5;
 
-          out.densities[i] = entropy_reader->density(entropy,pressure);
-          out.thermal_expansion_coefficients[i] = entropy_reader->thermal_expansivity(entropy,pressure);
-          out.specific_heat[i] = entropy_reader->specific_heat(entropy,pressure);
+          // Loop over all material files, and store the looked-up values for all compositions.
+          for (unsigned int j=0; j<material_file_names.size(); ++j)
+            {
+              eos_outputs.densities[j] = entropy_reader[j]->density(entropy, pressure);
+              eos_outputs.thermal_expansion_coefficients[j] = entropy_reader[j]->thermal_expansivity(entropy,pressure);
+              eos_outputs.specific_heat_capacities[j] = entropy_reader[j]->specific_heat(entropy,pressure);
 
-          const Tensor<1, 2> density_gradient = entropy_reader->density_gradient(entropy,pressure);
-          const Tensor<1, 2> pressure_unit_vector({0.0, 1.0});
-          out.compressibilities[i] = (density_gradient * pressure_unit_vector) / out.densities[i];
+              const Tensor<1, 2> pressure_unit_vector({0.0, 1.0});
+              eos_outputs.compressibilities[j] = ((entropy_reader[j]->density_gradient(entropy,pressure)) * pressure_unit_vector) / eos_outputs.densities[j];
+            }
 
+          // Calculate volume fractions from mass fractions
+          // If there is only one lookup table, set the mass and volume fractions to 1
+          if (material_file_names.size() == 1)
+            mass_fractions [0] = 1.0;
+
+          else
+            {
+              // We only want to compute mass/volume fractions for fields that are chemical compositions.
+              mass_fractions = MaterialUtilities::compute_only_composition_fractions(in.composition[i], this->introspection().chemical_composition_field_indices());
+            }
+
+          volume_fractions = MaterialUtilities::compute_volumes_from_masses(mass_fractions,
+                                                                            eos_outputs.densities,
+                                                                            true);
+
+          out.densities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.densities, MaterialUtilities::arithmetic);
+          out.thermal_expansion_coefficients[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.thermal_expansion_coefficients, MaterialUtilities::arithmetic);
+
+          out.specific_heat[i] = MaterialUtilities::average_value (mass_fractions, eos_outputs.specific_heat_capacities, MaterialUtilities::arithmetic);
+
+          out.compressibilities[i] = MaterialUtilities::average_value (mass_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
 
           // Thermal conductivity can be pressure temperature dependent
-          const double temperature_lookup =  entropy_reader->temperature(entropy,pressure);
+          const double temperature_lookup =  entropy_reader[0]->temperature(entropy,pressure);
           out.thermal_conductivities[i] = thermal_conductivity(temperature_lookup, in.pressure[i], in.position[i]);
 
           out.entropy_derivative_pressure[i]    = 0.;
@@ -254,8 +299,16 @@ namespace aspect
           // fill seismic velocities outputs if they exist
           if (SeismicAdditionalOutputs<dim> *seismic_out = out.template get_additional_output<SeismicAdditionalOutputs<dim>>())
             {
-              seismic_out->vp[i] = entropy_reader->seismic_vp(entropy, pressure);
-              seismic_out->vs[i] = entropy_reader->seismic_vs(entropy, pressure);
+
+              std::vector<double> vp (material_file_names.size());
+              std::vector<double> vs (material_file_names.size());
+              for (unsigned int j=0; j<material_file_names.size(); ++j)
+                {
+                  vp[j] = entropy_reader[j]->seismic_vp(entropy,pressure);
+                  vs[j] = entropy_reader[j]->seismic_vs(entropy,pressure);
+                }
+              seismic_out->vp[i] = MaterialUtilities::average_value (volume_fractions, vp, MaterialUtilities::arithmetic);
+              seismic_out->vs[i] = MaterialUtilities::average_value (volume_fractions, vs, MaterialUtilities::arithmetic);
             }
         }
     }
@@ -279,7 +332,7 @@ namespace aspect
                              "files located in the `data/' subdirectory of ASPECT.");
           prm.declare_entry ("Material file name", "material_table.txt",
                              Patterns::List (Patterns::Anything()),
-                             "The file name of the material data.");
+                             "The file name of the material data. The first material data file is intended for the background composition. ");
           prm.declare_entry ("Reference viscosity", "1e22",
                              Patterns::Double(0),
                              "The viscosity that is used in this model. "
@@ -302,16 +355,15 @@ namespace aspect
                              "caused by temperature deviations. The viscosity may vary "
                              "laterally by this factor squared.");
           prm.declare_entry ("Angle of internal friction", "0.",
-                             Patterns::Anything(),
-                             "List of angles of internal friction, $\\phi$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
+                             Patterns::Double (0.),
+                             "The value of the angle of internal friction, $\\phi$."
                              "For a value of zero, in 2D the von Mises criterion is retrieved. "
-                             "Angles higher than 30 degrees are harder to solve numerically. Units: degrees.");
+                             "Angles higher than 30 degrees are harder to solve numerically."
+                             "Units: degrees.");
           prm.declare_entry ("Cohesion", "1e20",
-                             Patterns::Anything(),
-                             "List of cohesions, $C$, for background material and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "The extremely large default cohesion value (1e20 Pa) prevents the viscous stress from "
+                             Patterns::Double (0.),
+                             "The value of the cohesion, $C$. The extremely large default"
+                             "cohesion value (1e20 Pa) prevents the viscous stress from "
                              "exceeding the yield stress. Units: \\si{\\pascal}.");
           prm.declare_entry ("Thermal conductivity", "4.7",
                              Patterns::Double (0),
@@ -405,7 +457,7 @@ namespace aspect
         prm.enter_subsection("Entropy model");
         {
           data_directory              = Utilities::expand_ASPECT_SOURCE_DIR(prm.get ("Data directory"));
-          material_file_name          = prm.get ("Material file name");
+          material_file_names          = Utilities::split_string_list(prm.get ("Material file name"));
           lateral_viscosity_file_name  = prm.get ("Lateral viscosity file name");
           min_eta                     = prm.get_double ("Minimum viscosity");
           max_eta                     = prm.get_double ("Maximum viscosity");
@@ -443,7 +495,7 @@ namespace aspect
                                                                        "Saturation prefactors");
           maximum_conductivity = prm.get_double ("Maximum thermal conductivity");
 
-          angle_of_internal_friction = prm.get_double("Angle of internal friction");
+          angle_of_internal_friction = prm.get_double ("Angle of internal friction") * constants::degree_to_radians;
           cohesion = prm.get_double("Cohesion");
 
           prm.leave_subsection();
@@ -478,7 +530,7 @@ namespace aspect
             std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_points));
         }
 
-      if (out.template get_additional_output<PrescribedFieldOutputs<dim>>() == NULL)
+      if (out.template get_additional_output<PrescribedFieldOutputs<dim>>() == nullptr)
         {
           const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(
@@ -486,7 +538,7 @@ namespace aspect
             (n_points, this->n_compositional_fields()));
         }
 
-      if (out.template get_additional_output<PrescribedTemperatureOutputs<dim>>() == NULL)
+      if (out.template get_additional_output<PrescribedTemperatureOutputs<dim>>() == nullptr)
         {
           const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -43,10 +43,10 @@ namespace aspect
                                         const double min_radius,
                                         const double max_depth)
         :
+        topo (&topo),
         point1_lon(min_longitude),
         inner_radius(min_radius),
-        max_depth(max_depth),
-        topo (&topo)
+        max_depth(max_depth)
       {}
 
 
@@ -361,9 +361,22 @@ namespace aspect
         Point<dim-1> surface_point;
         for (unsigned int d=0; d<dim-1; ++d)
           surface_point[d] = r_phi_theta[d+1];
-        // Convert latitude to colatitude
+
+        // While throughout ASPECT we use co-latitude as a convention when
+        // representing points in spherical coordinates (see for example
+        // the Utilities::Coordinates::cartesian_to_spherical_coordinates()
+        // function), the current class uses latitude in its pull back and
+        // push forward functions. As a consequence, the argument provided
+        // to this function has latitude as one coordinate (at least in 3d).
+        // On the other hand, the InitialTopography::Interface::value()
+        // function expects colatitude (=standard form spherical coordinates)
+        // for geometry models that are (parts of) spherical objects.
+        //
+        // So do the conversion:
         if (dim == 3)
           surface_point[1] = 0.5*numbers::PI - surface_point[1];
+
+        // Then query the topography at this point:
         const double topography = topo->value(surface_point);
 
         // adjust the radius based on the radius of the point
@@ -372,10 +385,10 @@ namespace aspect
         const double topo_radius = std::max(inner_radius,radius + (radius-inner_radius)/max_depth*topography);
 
         // return the point with adjusted radius
-        Point<dim> topor_phi_theta = r_phi_theta;
-        topor_phi_theta[0] = topo_radius;
+        Point<dim> topo_r_phi_theta = r_phi_theta;
+        topo_r_phi_theta[0] = topo_radius;
 
-        return topor_phi_theta;
+        return topo_r_phi_theta;
       }
 
 
@@ -383,26 +396,41 @@ namespace aspect
       template <int dim>
       Point<dim>
       ChunkGeometry<dim>::
-      pull_back_topo(const Point<dim> &topor_phi_theta) const
+      pull_back_topo(const Point<dim> &topo_r_phi_theta) const
       {
         // the radius of the point with topography
-        const double topo_radius = topor_phi_theta[0];
+        const double topo_radius = topo_r_phi_theta[0];
 
         // Grab lon,lat coordinates
         Point<dim-1> surface_point;
         for (unsigned int d=0; d<dim-1; ++d)
-          surface_point[d] = topor_phi_theta[d+1];
-        // Convert latitude to colatitude
+          surface_point[d] = topo_r_phi_theta[d+1];
+
+        // While throughout ASPECT we use co-latitude as a convention when
+        // representing points in spherical coordinates (see for example
+        // the Utilities::Coordinates::cartesian_to_spherical_coordinates()
+        // function), the current class uses latitude in its pull back and
+        // push forward functions. As a consequence, the argument provided
+        // to this function has latitude as one coordinate (at least in 3d).
+        // On the other hand, the InitialTopography::Interface::value()
+        // function expects colatitude (=standard form spherical coordinates)
+        // for geometry models that are (parts of) spherical objects.
+        //
+        // So do the conversion:
         if (dim == 3)
           surface_point[1] = 0.5*numbers::PI - surface_point[1];
+
+        // Then query the topography at this point:
         const double topography = topo->value(surface_point);
 
         // remove the topography (which scales with radius)
-        const double radius = std::max(inner_radius,(topo_radius*max_depth+inner_radius*topography)/(max_depth+topography));
+        const double radius = std::max(inner_radius,
+                                       (topo_radius*max_depth+inner_radius*topography)/(max_depth+topography));
 
         // return the point without topography
-        Point<dim> r_phi_theta = topor_phi_theta;
+        Point<dim> r_phi_theta = topo_r_phi_theta;
         r_phi_theta[0] = radius;
+
         return r_phi_theta;
       }
 
@@ -576,7 +604,8 @@ namespace aspect
       // at a depth beneath the top surface
       p[0] = point2[0]-depth;
 
-      // Now convert to Cartesian coordinates
+      // Now convert to Cartesian coordinates. This ignores the surface topography,
+      // but that is as documented.
       return manifold->push_forward_sphere(p);
     }
 
@@ -649,6 +678,11 @@ namespace aspect
     double
     Chunk<dim>::maximal_depth() const
     {
+      // The depth is defined as relative to a reference surface (without
+      // topography) and since we don't apply topography on the CMB,
+      // the maximal depth really is the formula below, unless one applies a
+      // topography that is always strictly below zero (i.e., where the
+      // actual surface lies strictly below the reference surface).
       return point2[0]-point1[0];
     }
 
@@ -720,14 +754,23 @@ namespace aspect
     std::array<double,dim>
     Chunk<dim>::cartesian_to_natural_coordinates(const Point<dim> &position_point) const
     {
-      // the chunk manifold has a order of radius, longitude, latitude.
+      // The chunk manifold uses (radius, longitude, latitude).
       // This is exactly what we need.
+
       // Ignore the topography to avoid a loop when calling the
       // AsciiDataBoundary for topography which uses this function....
       const Point<dim> transformed_point = manifold->pull_back_sphere(position_point);
       std::array<double,dim> position_array;
       for (unsigned int i = 0; i < dim; ++i)
         position_array[i] = transformed_point(i);
+
+      // Internally, the Chunk geometry uses longitudes in the range -pi...pi,
+      // and that is what pull_back_sphere() produces. But externally, we need
+      // to use 0...2*pi to match what Utilities::Coordinates::cartesian_to_spherical_coordinates()
+      // returns, for example, and what we document the AsciiBoundaryData class
+      // wants to see from input files.
+      if (position_array[1] < 0)
+        position_array[1] += 2*numbers::PI;
 
       return position_array;
     }

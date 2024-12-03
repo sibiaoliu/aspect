@@ -1,5 +1,5 @@
 {
-  "version": "0.5",
+  "version": "1.0",
   "specific heat": 1250,
   "thermal diffusivity": 1e-06,
   "thermal expansion coefficient": 3.1e-05,
@@ -22,7 +22,7 @@
   "features": [
     {
       "model": "oceanic plate",
-      "name": "Overiding plate",
+      "name": "Overriding plate",
       "max depth": 150000.0,
       "min depth": -100000.0,
       "coordinates": [
@@ -160,7 +160,8 @@
           "density": 3300,
           "thermal conductivity": 3.3,
           "adiabatic heating": true,
-          "plate velocity": 0.05,
+          "spreading velocity":0.05,
+          "subducting velocity":0.05,
           "ridge coordinates": [
             [
               [

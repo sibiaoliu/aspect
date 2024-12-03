@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -37,6 +37,7 @@
 #include <aspect/simulator/assemblers/interface.h>
 #include <aspect/geometry_model/initial_topography_model/zero_topography.h>
 #include <aspect/material_model/rheology/elasticity.h>
+#include <aspect/time_stepping/repeat_on_nonlinear_fail.h>
 
 #include <deal.II/base/index_set.h>
 #include <deal.II/base/conditional_ostream.h>
@@ -63,7 +64,6 @@
 
 #include <fstream>
 #include <iostream>
-#include <iomanip>
 #include <locale>
 #include <string>
 
@@ -110,12 +110,8 @@ namespace aspect
       if (geometry_model.has_curved_elements())
         return std::make_unique<MappingQCache<dim>>(4);
 
-#if DEAL_II_VERSION_GTE(9,4,1)
       if (Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(initial_topography_model))
         return std::make_unique<MappingCartesian<dim>>();
-#else
-      (void) initial_topography_model;
-#endif
 
       return std::make_unique<MappingQ1<dim>>();
     }
@@ -194,12 +190,12 @@ namespace aspect
                    nullptr),
 #endif
     boundary_heat_flux (BoundaryHeatFlux::create_boundary_heat_flux<dim>(prm)),
-    particle_world(nullptr),
     time (numbers::signaling_nan<double>()),
     time_step (numbers::signaling_nan<double>()),
     old_time_step (numbers::signaling_nan<double>()),
     timestep_number (numbers::invalid_unsigned_int),
     nonlinear_iteration (numbers::invalid_unsigned_int),
+    nonlinear_solver_failures (0),
 
     // We need to disable eliminate_refined_boundary_islands as this leads to
     // a deadlock for deal.II <= 9.2.0 as described in
@@ -208,7 +204,7 @@ namespace aspect
     // important as it does not improve accuracy. Otherwise, these flags
     // correspond to smoothing_on_refinement|smoothing_on_coarsening.
     triangulation (mpi_communicator,
-                   typename Triangulation<dim>::MeshSmoothing
+                   static_cast<typename Triangulation<dim>::MeshSmoothing>
                    (
                      Triangulation<dim>::limit_level_difference_at_vertices |
                      (Triangulation<dim>::eliminate_unrefined_islands |
@@ -217,9 +213,10 @@ namespace aspect
                       Triangulation<dim>::do_not_produce_unrefined_islands)
                    )
                    ,
-                   (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg
+                   (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg ||
+                    parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::default_solver
                     ?
-                    typename parallel::distributed::Triangulation<dim>::Settings
+                    static_cast<typename parallel::distributed::Triangulation<dim>::Settings>
                     (parallel::distributed::Triangulation<dim>::mesh_reconstruction_after_repartitioning |
                      parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy)
                     :
@@ -428,6 +425,9 @@ namespace aspect
         newton_handler->parameters.parse_parameters(prm);
       }
 
+    // choose the default solver and averaging scheme
+    select_default_solver_and_averaging();
+
     if (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg)
       {
         switch (parameters.stokes_velocity_degree)
@@ -447,14 +447,24 @@ namespace aspect
     postprocess_manager.initialize_simulator (*this);
     postprocess_manager.parse_parameters (prm);
 
-    if (postprocess_manager.template has_matching_postprocessor<Postprocess::Particles<dim>>())
+    if (postprocess_manager.template has_matching_active_plugin<Postprocess::Particles<dim>>())
       {
-        particle_world = std::make_unique<Particle::World<dim>>();
-        if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(particle_world.get()))
-          sim->initialize_simulator (*this);
+        particle_managers.resize(parameters.n_particle_managers);
 
-        particle_world->parse_parameters(prm);
-        particle_world->initialize();
+        AssertThrow(particle_managers.size() <= ASPECT_MAX_NUM_PARTICLE_SYSTEMS,
+                    ExcMessage("You have selected " + std::to_string(particle_managers.size()) + " particle managers, but ASPECT "
+                               "has been compiled with a maximum of " + std::to_string(ASPECT_MAX_NUM_PARTICLE_SYSTEMS) + ". "
+                               "Please recompile ASPECT with a higher value for ASPECT_MAX_NUM_PARTICLE_SYSTEMS. You can set a higher number "
+                               "specifying the CMake variable -DASPECT_MAX_NUM_PARTICLE_SYSTEMS=<number>"));
+
+        for (unsigned int particle_manager_index = 0 ; particle_manager_index < particle_managers.size(); ++particle_manager_index)
+          {
+            if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&particle_managers[particle_manager_index]))
+              sim->initialize_simulator (*this);
+
+            particle_managers[particle_manager_index].parse_parameters(prm,particle_manager_index);
+            particle_managers[particle_manager_index].initialize();
+          }
       }
 
     mesh_refinement_manager.initialize_simulator (*this);
@@ -482,9 +492,12 @@ namespace aspect
     if (MappingQCache<dim> *map = dynamic_cast<MappingQCache<dim>*>(&(*mapping)))
       map->initialize(MappingQGeneric<dim>(4), triangulation);
 
+    bool dg_limiter_enabled = parameters.use_limiter_for_discontinuous_temperature_solution;
+    for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+      dg_limiter_enabled = dg_limiter_enabled || parameters.use_limiter_for_discontinuous_composition_solution[c];
+
     // Check that DG limiters are only used with cartesian mapping
-    if (parameters.use_limiter_for_discontinuous_temperature_solution ||
-        parameters.use_limiter_for_discontinuous_composition_solution)
+    if (dg_limiter_enabled)
       AssertThrow(geometry_model->natural_coordinate_system() == Utilities::Coordinates::CoordinateSystem::cartesian,
                   ExcMessage("The limiter for the discontinuous temperature and composition solutions "
                              "has not been tested in non-Cartesian geometries and currently requires "
@@ -532,7 +545,7 @@ namespace aspect
         AssertThrow (prm_out,
                      ExcMessage (std::string("Could not open file <") +
                                  parameters.output_directory + "parameters.prm>."));
-        prm.print_parameters(prm_out, ParameterHandler::Text);
+        prm.print_parameters(prm_out, ParameterHandler::PRM);
 
         std::ofstream json_out ((parameters.output_directory + "parameters.json"));
         AssertThrow (json_out,
@@ -547,7 +560,7 @@ namespace aspect
     // check that the setup of equations, material models, and heating terms is consistent
     check_consistency_of_formulation();
 
-    if (parameters.use_discontinuous_temperature_discretization || parameters.use_discontinuous_composition_discretization)
+    if (parameters.use_discontinuous_temperature_discretization || parameters.have_discontinuous_composition_discretization)
       CitationInfo::add("dg");
 
     // now that all member variables have been set up, also
@@ -562,11 +575,11 @@ namespace aspect
   template <int dim>
   Simulator<dim>::~Simulator ()
   {
-    // The particle_world object is declared before the triangulation, and so
+    // The particle_manager object is declared before the triangulation, and so
     // is destroyed after the latter. But it stores a pointer to the
     // triangulation and uses it during destruction. This results in
     // trouble. So destroy it first.
-    particle_world.reset();
+    particle_managers.clear();
 
     // wait if there is a thread that's still writing the statistics
     // object (set from the output_statistics() function)
@@ -606,8 +619,9 @@ namespace aspect
 
     // Copy particle handler to restore particle location and properties
     // before repeating a timestep
-    if (particle_world.get() != nullptr)
-      particle_world->backup_particles();
+    for (auto &particle_manager : particle_managers)
+      particle_manager.backup_particles();
+
 
     // then interpolate the current boundary velocities. copy constraints
     // into current_constraints and then add to current_constraints
@@ -628,6 +642,7 @@ namespace aspect
     // notify different system components that we started the next time step
     // TODO: implement this for all plugins that might need it at one place.
     // Temperature BC are currently updated in compute_current_constraints
+    geometry_model->update();
     material_model->update();
     gravity_model->update();
     heating_model_manager.update();
@@ -638,6 +653,9 @@ namespace aspect
 
     if (prescribed_stokes_solution.get())
       prescribed_stokes_solution->update();
+
+    for (auto &particle_manager : particle_managers)
+      particle_manager.update();
 
     // do the same for the traction boundary conditions and other things
     // that end up in the bilinear form. we update those that end up in
@@ -718,13 +736,13 @@ namespace aspect
     if (!boundary_composition_manager.allows_fixed_composition_on_outflow_boundaries())
       replace_outflow_boundary_ids(boundary_id_offset);
 
-    // now do the same for the composition variable:
-    if (!parameters.use_discontinuous_composition_discretization)
-      {
-        // obtain the boundary indicators that belong to Dirichlet-type
-        // composition boundary conditions and interpolate the composition
-        // there
-        for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+    // now do the same for the composition variables:
+    {
+      // obtain the boundary indicators that belong to Dirichlet-type
+      // composition boundary conditions and interpolate the composition
+      // there
+      for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
+        if (parameters.use_discontinuous_composition_discretization[c] == false)
           for (const auto p : boundary_composition_manager.get_fixed_composition_boundary_indicators())
             {
               VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
@@ -742,7 +760,7 @@ namespace aspect
                                                         new_current_constraints,
                                                         introspection.component_masks.compositional_fields[c]);
             }
-      }
+    }
 
     if (!boundary_composition_manager.allows_fixed_composition_on_outflow_boundaries())
       restore_outflow_boundary_ids(boundary_id_offset);
@@ -799,7 +817,6 @@ namespace aspect
 #if DEAL_II_VERSION_GTE(9,6,0)
     current_constraints = std::move(new_current_constraints);
 #else
-    current_constraints.clear();
     current_constraints.reinit (introspection.index_sets.system_relevant_set);
     current_constraints.copy_from(new_current_constraints);
 #endif
@@ -876,28 +893,38 @@ namespace aspect
 
 
     template <int dim>
+    bool compositional_field_needs_matrix_block(const Introspection<dim> &introspection, const unsigned int composition_index)
+    {
+      const typename Simulator<dim>::AdvectionField adv_field (Simulator<dim>::AdvectionField::composition(composition_index));
+      switch (adv_field.advection_method(introspection))
+        {
+          case Parameters<dim>::AdvectionFieldMethod::fem_field:
+          case Parameters<dim>::AdvectionFieldMethod::fem_melt_field:
+          case Parameters<dim>::AdvectionFieldMethod::fem_darcy_field:
+          case Parameters<dim>::AdvectionFieldMethod::prescribed_field_with_diffusion:
+            return true;
+          case Parameters<dim>::AdvectionFieldMethod::particles:
+          case Parameters<dim>::AdvectionFieldMethod::volume_of_fluid:
+          case Parameters<dim>::AdvectionFieldMethod::static_field:
+          case Parameters<dim>::AdvectionFieldMethod::prescribed_field:
+            break;
+          default:
+            Assert (false, ExcNotImplemented());
+        }
+      return false;
+    }
+
+
+
+    template <int dim>
     bool compositional_fields_need_matrix_block(const Introspection<dim> &introspection)
     {
       // Check if any compositional field method actually requires a matrix block
       // (as opposed to all are advected by other means or prescribed fields)
       for (unsigned int c=0; c<introspection.n_compositional_fields; ++c)
         {
-          const typename Simulator<dim>::AdvectionField adv_field (Simulator<dim>::AdvectionField::composition(c));
-          switch (adv_field.advection_method(introspection))
-            {
-              case Parameters<dim>::AdvectionFieldMethod::fem_field:
-              case Parameters<dim>::AdvectionFieldMethod::fem_melt_field:
-              case Parameters<dim>::AdvectionFieldMethod::fem_darcy_field:
-              case Parameters<dim>::AdvectionFieldMethod::prescribed_field_with_diffusion:
-                return true;
-              case Parameters<dim>::AdvectionFieldMethod::particles:
-              case Parameters<dim>::AdvectionFieldMethod::volume_of_fluid:
-              case Parameters<dim>::AdvectionFieldMethod::static_field:
-              case Parameters<dim>::AdvectionFieldMethod::prescribed_field:
-                break;
-              default:
-                Assert (false, ExcNotImplemented());
-            }
+          if (compositional_field_needs_matrix_block(introspection, c))
+            return true;
         }
       return false;
     }
@@ -1005,11 +1032,21 @@ namespace aspect
         &&
         compositional_fields_need_matrix_block(introspection))
       {
-        // If we need at least one compositional field block, we
-        // create a matrix block in the first compositional block. Its sparsity
-        // pattern will later be used to allocate composition matrices as
-        // needed. All other matrix blocks are left empty to save memory.
-        coupling[x.compositional_fields[0]][x.compositional_fields[0]] = DoFTools::always;
+        // We reuse matrix blocks for compositional fields, but we need different blocks for each base_element.
+        // All other matrix blocks are left empty to save memory.
+        for (const unsigned int base_element_index : introspection.get_composition_base_element_indices())
+          {
+            bool block_needed = false;
+            for (const unsigned int c : introspection.get_compositional_field_indices_with_base_element(base_element_index))
+              if (compositional_field_needs_matrix_block(introspection, c))
+                block_needed = true;
+
+            if (block_needed)
+              {
+                const unsigned int first_c = introspection.get_compositional_field_indices_with_base_element(base_element_index).front();
+                coupling[x.compositional_fields[first_c]][x.compositional_fields[first_c]] = DoFTools::always;
+              }
+          }
       }
 
     // If we are using volume of fluid interface tracking, create a matrix block in the
@@ -1042,7 +1079,7 @@ namespace aspect
 
 
     if ((parameters.use_discontinuous_temperature_discretization) ||
-        (parameters.use_discontinuous_composition_discretization) ||
+        (parameters.have_discontinuous_composition_discretization) ||
         (parameters.volume_of_fluid_tracking_enabled))
       {
         Table<2,DoFTools::Coupling> face_coupling (introspection.n_components,
@@ -1057,10 +1094,20 @@ namespace aspect
             parameters.temperature_method != Parameters<dim>::AdvectionFieldMethod::static_field)
           face_coupling[x.temperature][x.temperature] = DoFTools::always;
 
-        if (parameters.use_discontinuous_composition_discretization &&
-            solver_scheme_solves_advection_equations(parameters) &&
-            compositional_fields_need_matrix_block(introspection))
-          face_coupling[x.compositional_fields[0]][x.compositional_fields[0]] = DoFTools::always;
+        for (const unsigned int base_element_index : introspection.get_composition_base_element_indices())
+          {
+            bool block_needed = false;
+            for (const unsigned int c : introspection.get_compositional_field_indices_with_base_element(base_element_index))
+              if (compositional_field_needs_matrix_block(introspection, c))
+                block_needed = true;
+
+            const unsigned int first_c = introspection.get_compositional_field_indices_with_base_element(base_element_index).front();
+
+            if (parameters.use_discontinuous_composition_discretization[first_c]
+                && solver_scheme_solves_advection_equations(parameters)
+                && block_needed)
+              face_coupling[x.compositional_fields[first_c]][x.compositional_fields[first_c]] = DoFTools::always;
+          }
 
         if (parameters.volume_of_fluid_tracking_enabled)
           {
@@ -1077,9 +1124,7 @@ namespace aspect
                                               Utilities::MPI::
                                               this_mpi_process(mpi_communicator));
 
-        if (solver_scheme_solves_advection_equations(parameters)
-            &&
-            compositional_fields_need_matrix_block(introspection))
+        if (solver_scheme_solves_advection_equations(parameters))
           {
             // If we solve for more than one compositional field make sure we keep constrained entries
             // to allow different boundary conditions for different fields. In order to keep constrained
@@ -1089,20 +1134,24 @@ namespace aspect
                                                              introspection.n_components);
             composition_coupling.fill (DoFTools::none);
 
-            const unsigned int component = introspection.component_indices.compositional_fields[0];
-            composition_coupling[component][component] = coupling[component][component];
+            for (const unsigned int base_element_index : introspection.get_composition_base_element_indices())
+              {
+                const unsigned int first_c = introspection.get_compositional_field_indices_with_base_element(base_element_index).front();
+                const unsigned int component = x.compositional_fields[first_c];
+                composition_coupling[component][component] = coupling[component][component];
 
-            const unsigned int block = introspection.get_components_to_blocks()[component];
-            sp.block(block,block).reinit(sp.block(block,block).locally_owned_range_indices(),
-                                         sp.block(block,block).locally_owned_domain_indices());
+                const unsigned int block = introspection.block_indices.compositional_field_sparsity_pattern[first_c];
+                sp.block(block,block).reinit(sp.block(block,block).locally_owned_range_indices(),
+                                             sp.block(block,block).locally_owned_domain_indices());
 
-            DoFTools::make_flux_sparsity_pattern (dof_handler,
-                                                  sp,
-                                                  current_constraints, true,
-                                                  composition_coupling,
-                                                  face_coupling,
-                                                  Utilities::MPI::
-                                                  this_mpi_process(mpi_communicator));
+                DoFTools::make_flux_sparsity_pattern (dof_handler,
+                                                      sp,
+                                                      current_constraints, true,
+                                                      composition_coupling,
+                                                      face_coupling,
+                                                      Utilities::MPI::
+                                                      this_mpi_process(mpi_communicator));
+              }
           }
       }
     else
@@ -1279,6 +1328,8 @@ namespace aspect
       }
 
     system_preconditioner_matrix.reinit (sp);
+    if (parameters.use_bfbt)
+      inverse_lumped_mass_matrix.reinit(introspection.index_sets.stokes_partitioning);
   }
 
 
@@ -1459,7 +1510,6 @@ namespace aspect
 
 
     // Reconstruct the constraint-matrix:
-    constraints.clear();
 #if DEAL_II_VERSION_GTE(9,6,0)
     constraints.reinit (dof_handler.locally_owned_dofs(), introspection.index_sets.system_relevant_set);
 #else
@@ -1522,8 +1572,12 @@ namespace aspect
       IndexSet system_index_set = dof_handler.locally_owned_dofs();
       introspection.index_sets.system_partitioning = system_index_set.split_by_block(introspection.system_dofs_per_block);
 
+#if DEAL_II_VERSION_GTE(9,7,0)
+      introspection.index_sets.system_relevant_set = DoFTools::extract_locally_relevant_dofs (dof_handler);
+#else
       DoFTools::extract_locally_relevant_dofs (dof_handler,
                                                introspection.index_sets.system_relevant_set);
+#endif
       introspection.index_sets.system_relevant_partitioning =
         introspection.index_sets.system_relevant_set.split_by_block(introspection.system_dofs_per_block);
 
@@ -1693,8 +1747,6 @@ namespace aspect
       // Possibly store data of plugins associated with cells
       signals.pre_refinement_store_user_data(triangulation);
 
-
-
       exchange_refinement_flags();
 
       triangulation.prepare_coarsening_and_refinement();
@@ -1846,91 +1898,128 @@ namespace aspect
     if (parameters.use_operator_splitting)
       compute_reactions ();
 
-    switch (parameters.nonlinear_solver)
+    try
       {
-        case NonlinearSolver::single_Advection_single_Stokes:
-        {
-          solve_single_advection_single_stokes();
-          break;
-        }
+        switch (parameters.nonlinear_solver)
+          {
+            case NonlinearSolver::single_Advection_single_Stokes:
+            {
+              solve_single_advection_single_stokes();
+              break;
+            }
 
-        case NonlinearSolver::no_Advection_iterated_Stokes:
-        {
-          solve_no_advection_iterated_stokes();
-          break;
-        }
+            case NonlinearSolver::no_Advection_iterated_Stokes:
+            {
+              solve_no_advection_iterated_stokes();
+              break;
+            }
 
-        case NonlinearSolver::no_Advection_single_Stokes:
-        {
-          solve_no_advection_single_stokes();
-          break;
-        }
+            case NonlinearSolver::no_Advection_single_Stokes:
+            {
+              solve_no_advection_single_stokes();
+              break;
+            }
 
-        case NonlinearSolver::iterated_Advection_and_Stokes:
-        {
-          solve_iterated_advection_and_stokes();
-          break;
-        }
+            case NonlinearSolver::iterated_Advection_and_Stokes:
+            {
+              solve_iterated_advection_and_stokes();
+              break;
+            }
 
-        case NonlinearSolver::single_Advection_iterated_Stokes:
-        {
-          solve_single_advection_iterated_stokes();
-          break;
-        }
+            case NonlinearSolver::single_Advection_iterated_Stokes:
+            {
+              solve_single_advection_iterated_stokes();
+              break;
+            }
 
-        case NonlinearSolver::no_Advection_iterated_defect_correction_Stokes:
-        {
-          solve_no_advection_iterated_defect_correction_stokes();
-          break;
-        }
+            case NonlinearSolver::no_Advection_iterated_defect_correction_Stokes:
+            {
+              solve_no_advection_iterated_defect_correction_stokes();
+              break;
+            }
 
-        case NonlinearSolver::single_Advection_iterated_defect_correction_Stokes:
-        {
-          solve_single_advection_iterated_defect_correction_stokes();
-          break;
-        }
+            case NonlinearSolver::single_Advection_iterated_defect_correction_Stokes:
+            {
+              solve_single_advection_iterated_defect_correction_stokes();
+              break;
+            }
 
-        case NonlinearSolver::iterated_Advection_and_defect_correction_Stokes:
-        {
-          solve_iterated_advection_and_defect_correction_stokes();
-          break;
-        }
+            case NonlinearSolver::iterated_Advection_and_defect_correction_Stokes:
+            {
+              solve_iterated_advection_and_defect_correction_stokes();
+              break;
+            }
 
-        case NonlinearSolver::iterated_Advection_and_Newton_Stokes:
-        {
-          solve_iterated_advection_and_newton_stokes();
-          break;
-        }
+            case NonlinearSolver::iterated_Advection_and_Newton_Stokes:
+            {
+              solve_iterated_advection_and_newton_stokes(/*use_newton_iterations =*/ true);
+              break;
+            }
 
-        case NonlinearSolver::single_Advection_iterated_Newton_Stokes:
-        {
-          solve_single_advection_and_iterated_newton_stokes();
-          break;
-        }
+            case NonlinearSolver::single_Advection_iterated_Newton_Stokes:
+            {
+              solve_single_advection_and_iterated_newton_stokes(/*use_newton_iterations =*/ true);
+              break;
+            }
 
-        case NonlinearSolver::single_Advection_no_Stokes:
-        {
-          solve_single_advection_no_stokes();
-          break;
-        }
+            case NonlinearSolver::single_Advection_no_Stokes:
+            {
+              solve_single_advection_no_stokes();
+              break;
+            }
 
-        case NonlinearSolver::first_timestep_only_single_Stokes:
-        {
-          solve_first_timestep_only_single_stokes();
-          break;
-        }
+            case NonlinearSolver::first_timestep_only_single_Stokes:
+            {
+              solve_first_timestep_only_single_stokes();
+              break;
+            }
 
-        case NonlinearSolver::no_Advection_no_Stokes:
-        {
-          solve_no_advection_no_stokes();
-          break;
-        }
+            case NonlinearSolver::no_Advection_no_Stokes:
+            {
+              solve_no_advection_no_stokes();
+              break;
+            }
 
-        default:
-          Assert (false, ExcNotImplemented());
+            default:
+              Assert (false, ExcNotImplemented());
+          }
+        pcout << std::endl;
       }
+    catch (ExcNonlinearSolverNoConvergence &)
+      {
+        pcout << "\nWARNING: The nonlinear solver in the current timestep failed to converge." << std::endl
+              << "Acting according to the parameter 'Nonlinear solver failure strategy'..." << std::endl;
+        ++nonlinear_solver_failures;
 
-    pcout << std::endl;
+        switch (parameters.nonlinear_solver_failure_strategy)
+          {
+            case Parameters<dim>::NonlinearSolverFailureStrategy::continue_with_next_timestep:
+            {
+              pcout << "Continuing to the next timestep even though solution is not fully converged." << std::endl;
+              // do nothing and continue
+              break;
+            }
+            case Parameters<dim>::NonlinearSolverFailureStrategy::cut_timestep_size:
+            {
+              if (timestep_number == 0)
+                {
+                  pcout << "Error: We can not cut the timestep in step 0, so we are aborting."
+                        << std::endl;
+                  throw;
+                }
+              time_stepping_manager.template get_matching_active_plugin<TimeStepping::RepeatOnNonlinearFail<dim>>().nonlinear_solver_has_failed();
+              break;
+            }
+            case Parameters<dim>::NonlinearSolverFailureStrategy::abort_program:
+            {
+              pcout << "Aborting simulation as requested." << std::endl;
+              // rethrow the current exception
+              throw;
+            }
+            default:
+              AssertThrow(false, ExcNotImplemented());
+          }
+      }
   }
 
 
@@ -2027,8 +2116,7 @@ namespace aspect
     simulator_is_past_initialization = true;
     do
       {
-        // Only solve if we are not in pre-refinement, or we do not want to skip
-        // solving in pre-refinement.
+        // During pre-refinement, do not solve if we are asked to skip it:
         if (! (parameters.skip_solvers_on_initial_refinement
                && pre_refinement_step < parameters.initial_adaptive_refinement))
           {
@@ -2097,8 +2185,8 @@ namespace aspect
             // Restore particles through stored copy of particle handler,
             // created in start_timestep(),
             // but only if this timestep is to be repeated.
-            if (particle_world.get() != nullptr)
-              particle_world->restore_particles();
+            for (auto &particle_manager : particle_managers)
+              particle_manager.restore_particles();
 
             continue; // repeat time step loop
           }
@@ -2130,8 +2218,11 @@ namespace aspect
     // throwing an exception. Therefore, we have to do this manually here:
     computing_timer.print_summary ();
 
+    if (nonlinear_solver_failures > 0)
+      pcout << "\nWARNING: During this computation " << nonlinear_solver_failures << " nonlinear solver failures occurred!" << std::endl;
+
     pcout << "-- Total wallclock time elapsed including restarts: "
-          << round(wall_timer.wall_time()+total_walltime_until_last_snapshot)
+          << std::round(wall_timer.wall_time()+total_walltime_until_last_snapshot)
           << 's' << std::endl;
 
     CitationInfo::print_info_block (pcout);

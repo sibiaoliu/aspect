@@ -1,4 +1,4 @@
-# Copyright (C) 2023 by the authors of the ASPECT code.
+# Copyright (C) 2023 - 2024 by the authors of the ASPECT code.
 #
 # This file is part of ASPECT.
 #
@@ -16,9 +16,9 @@
 # along with ASPECT; see the file doc/COPYING.  If not see
 # <http://www.gnu.org/licenses/>.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.13.4)
 
-MESSAGE(STATUS "===== Configuring ASPECT cookbooks =============")
+MESSAGE(STATUS "===== Configuring ASPECT cookbooks =================")
 
 SET(Aspect_DIR ${CMAKE_BINARY_DIR})
 

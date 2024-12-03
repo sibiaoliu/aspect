@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2023 by the authors of the ASPECT code.
+  Copyright (C) 2023 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -142,6 +142,6 @@ namespace aspect
                                               "Slab2 and the example data file assume spherical geometry "
                                               "(latitude, longitude coordinates), however, that is not "
                                               "necessary for this plugin, data files in "
-                                              "cartesian coordinates will work with box geometries.")
+                                              "Cartesian coordinates will work with box geometries.")
   }
 }

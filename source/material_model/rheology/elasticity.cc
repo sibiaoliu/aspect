@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -69,10 +69,11 @@ namespace aspect
       Elasticity<dim>::declare_parameters (ParameterHandler &prm)
       {
         prm.declare_entry ("Elastic shear moduli", "75.0e9",
-                           Patterns::List(Patterns::Double (0.)),
+                           Patterns::List(Patterns::Double(0.)),
                            "List of elastic shear moduli, $G$, "
                            "for background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields or only "
+                           "those corresponding to chemical compositions. "
                            "The default value of 75 GPa is representative of mantle rocks. Units: Pa.");
         prm.declare_entry ("Use fixed elastic time step", "unspecified",
                            Patterns::Selection("true|false|unspecified"),
@@ -94,13 +95,17 @@ namespace aspect
         prm.declare_entry ("Stabilization time scale factor", "1.",
                            Patterns::Double (1.),
                            "A stabilization factor for the elastic stresses that influences how fast "
-                           "elastic stresses adjust to deformation. 1.0 is equivalent to no stabilization "
-                           "and may lead to oscillatory motion. Setting the factor to 2 "
-                           "avoids oscillations, but still enables an immediate elastic response. "
-                           "However, in complex models this can lead to problems of convergence, in which "
-                           "case the factor needs to be increased slightly. Setting the factor to "
-                           "infinity is equivalent to not applying elastic stresses at all. The "
-                           "factor is multiplied with the computational time step to create a time scale. ");
+                           "elastic stresses adjust to deformation. This value is equal to the "
+                           "elastic time step divided by the computational time step. "
+                           "The default value of 1.0 may lead to oscillatory motion. "
+                           "Increasing this factor to 2.0 can reduce oscillations while "
+                           "preserving an immediate elastic response. In complex models the factor "
+                           "can be increased further to improve convergence behaviour. "
+                           "As the stabilization factor increases, the effective viscosity "
+                           "gets smaller, and is balanced by an increasing body force term. "
+                           "For composite rheologies that use this formulation of elasticity, "
+                           "setting an infinite shear modulus only recovers the nonelastic part of "
+                           "the rheology if this stabilization factor is equal to 1.0.");
         prm.declare_entry ("Elastic damper viscosity", "0.0",
                            Patterns::Double (0.),
                            "Viscosity of a viscous damper that acts in parallel with the elastic "
@@ -114,15 +119,21 @@ namespace aspect
       Elasticity<dim>::parse_parameters (ParameterHandler &prm)
       {
         // Retrieve the list of composition names
-        const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
+        std::vector<std::string> compositional_field_names = this->introspection().get_composition_names();
+
+        // Retrieve the list of names of fields that represent chemical compositions, and not, e.g.,
+        // plastic strain
+        std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
 
         // Establish that a background field is required here
-        const bool has_background_field = true;
+        compositional_field_names.insert(compositional_field_names.begin(), "background");
+        chemical_field_names.insert(chemical_field_names.begin(),"background");
 
-        elastic_shear_moduli = Utilities::parse_map_to_double_array (prm.get("Elastic shear moduli"),
-                                                                     list_of_composition_names,
-                                                                     has_background_field,
-                                                                     "Elastic shear moduli");
+        Utilities::MapParsing::Options options(chemical_field_names, "Elastic shear moduli");
+        options.list_of_allowed_keys = compositional_field_names;
+
+        elastic_shear_moduli = Utilities::MapParsing::parse_map_to_double_array (prm.get("Elastic shear moduli"),
+                                                                                 options);
 
         // Stabilize elasticity through a viscous damper
         elastic_damper_viscosity = prm.get_double("Elastic damper viscosity");
@@ -200,21 +211,22 @@ namespace aspect
                                "'single Advection, iterated defect correction Stokes' "));
 
         // Functionality to average the additional RHS terms over the cell is not implemented.
+        // Also, there is no option implemented in this rheology module to project to Q1 the viscosity
+        // in the elastic force term for the RHS.
         // Consequently, it is only possible to use elasticity with the Material averaging schemes
-        // 'none', 'harmonic average only viscosity', 'geometric average only viscosity', and
-        // 'project to Q1 only viscosity'.
+        // 'none', 'harmonic average only viscosity', and 'geometric average only viscosity'.
+        // TODO: Find a way to include 'project to Q1 only viscosity'.
         AssertThrow((this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::none
                      ||
                      this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::harmonic_average_only_viscosity
                      ||
                      this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::geometric_average_only_viscosity
                      ||
-                     this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::project_to_Q1_only_viscosity),
+                     this->get_parameters().material_averaging == MaterialModel::MaterialAveraging::default_averaging),
                     ExcMessage("Material models with elasticity can only be used with the material "
-                               "averaging schemes 'none', 'harmonic average only viscosity', "
-                               "'geometric average only viscosity', and 'project to Q1 only viscosity'. "
-                               "This parameter ('Material averaging') is located within the 'Material "
-                               "model' subsection."));
+                               "averaging schemes 'none', 'harmonic average only viscosity' and "
+                               "'geometric average only viscosity'. This parameter ('Material averaging') "
+                               "is located within the 'Material model' subsection."));
       }
 
 
@@ -235,33 +247,55 @@ namespace aspect
 
       template <int dim>
       void
-      Elasticity<dim>::fill_elastic_force_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                                   const std::vector<double> &average_elastic_shear_moduli,
-                                                   MaterialModel::MaterialModelOutputs<dim> &out) const
+      Elasticity<dim>::fill_elastic_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
+                                             const std::vector<double> &average_elastic_shear_moduli,
+                                             MaterialModel::MaterialModelOutputs<dim> &out) const
       {
-        // Create a reference to the structure for the elastic force terms that are needed to compute the
-        // right-hand side of the Stokes system
+        // Create a reference to the structure for the elastic outputs
         MaterialModel::ElasticOutputs<dim>
-        *force_out = out.template get_additional_output<MaterialModel::ElasticOutputs<dim>>();
+        *elastic_out = out.template get_additional_output<MaterialModel::ElasticOutputs<dim>>();
 
-        if (force_out == nullptr)
+        if (elastic_out == nullptr)
           return;
 
         if (in.requests_property(MaterialProperties::additional_outputs))
-          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-            {
-              // Get old stresses from compositional fields
-              SymmetricTensor<2,dim> stress_old;
-              for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
-                stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+          {
+            // The viscosity should be averaged if material averaging is applied.
+            std::vector<double> effective_creep_viscosities;
+            if (this->get_parameters().material_averaging != MaterialAveraging::none)
+              {
+                MaterialModelOutputs<dim> out_copy(out.n_evaluation_points(),
+                                                   this->introspection().n_compositional_fields);
+                out_copy.viscosities = out.viscosities;
 
-              // Average viscoelastic viscosity
-              const double average_viscoelastic_viscosity = out.viscosities[i];
+                const MaterialAveraging::AveragingOperation averaging_operation_for_viscosity =
+                  get_averaging_operation_for_viscosity(this->get_parameters().material_averaging);
+                MaterialAveraging::average(averaging_operation_for_viscosity,
+                                           in.current_cell,
+                                           this->introspection().quadratures.velocities,
+                                           this->get_mapping(),
+                                           in.requested_properties,
+                                           out_copy);
 
-              // Fill elastic force outputs (See equation 30 in Moresi et al., 2003, J. Comp. Phys.)
-              force_out->elastic_force[i] = -1. * ( average_viscoelastic_viscosity / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) * stress_old );
+                effective_creep_viscosities = out_copy.viscosities;
+              }
+            else
+              effective_creep_viscosities = out.viscosities;
 
-            }
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+              {
+                // Get old stresses from compositional fields
+                const SymmetricTensor<2,dim> stress_old (Utilities::Tensors::to_symmetric_tensor<dim>(&in.composition[i][0],
+                                                         &in.composition[i][0]+SymmetricTensor<2,dim>::n_independent_components));
+
+                elastic_out->elastic_force[i] = -effective_creep_viscosities[i] / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) * stress_old;
+                // The viscoelastic strain rate is needed only when the Newton method is selected.
+                const typename Parameters<dim>::NonlinearSolver::Kind nonlinear_solver = this->get_parameters().nonlinear_solver;
+                if ((nonlinear_solver == Parameters<dim>::NonlinearSolver::iterated_Advection_and_Newton_Stokes) ||
+                    (nonlinear_solver == Parameters<dim>::NonlinearSolver::single_Advection_iterated_Newton_Stokes))
+                  elastic_out->viscoelastic_strain_rate[i] = calculate_viscoelastic_strain_rate(in.strain_rate[i], stress_old, average_elastic_shear_moduli[i]);
+              }
+          }
       }
 
 
@@ -299,19 +333,43 @@ namespace aspect
             const double dte = elastic_timestep();
             const double dt = this->get_timestep();
 
+            // The viscosity should be averaged if material averaging is applied.
+            // Here the averaging scheme "project to Q1 (only viscosity)"  is
+            // excluded, because there is no way to know the quadrature formula
+            // used for evaluation.
+            // TODO: find a way to include "project to Q1 (only viscosity)" as well.
+            std::vector<double> effective_creep_viscosities;
+            if (this->get_parameters().material_averaging != MaterialAveraging::none &&
+                this->get_parameters().material_averaging != MaterialAveraging::project_to_Q1 &&
+                this->get_parameters().material_averaging != MaterialAveraging::project_to_Q1_only_viscosity)
+              {
+                MaterialModelOutputs<dim> out_copy(out.n_evaluation_points(),
+                                                   this->introspection().n_compositional_fields);
+                out_copy.viscosities = out.viscosities;
+
+                const MaterialAveraging::AveragingOperation averaging_operation_for_viscosity =
+                  get_averaging_operation_for_viscosity(this->get_parameters().material_averaging);
+                MaterialAveraging::average(averaging_operation_for_viscosity,
+                                           in.current_cell,
+                                           Quadrature<dim>(quadrature_positions),
+                                           this->get_mapping(),
+                                           in.requested_properties,
+                                           out_copy);
+
+                effective_creep_viscosities = out_copy.viscosities;
+              }
+            else
+              effective_creep_viscosities = out.viscosities;
+
             for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
               {
                 // Get old stresses from compositional fields
-                SymmetricTensor<2,dim> stress_old;
-                for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
-                  stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+                const SymmetricTensor<2,dim> stress_old(Utilities::Tensors::to_symmetric_tensor<dim>(&in.composition[i][0],
+                                                        &in.composition[i][0]+SymmetricTensor<2,dim>::n_independent_components));
 
                 // Calculate the rotated stresses
                 // Rotation (vorticity) tensor (equation 25 in Moresi et al., 2003, J. Comp. Phys.)
                 const Tensor<2,dim> rotation = 0.5 * (evaluator->get_gradient(i) - transpose(evaluator->get_gradient(i)));
-
-                // Average viscoelastic viscosity
-                const double average_viscoelastic_viscosity = out.viscosities[i];
 
                 // Calculate the current (new) stored elastic stress, which is a function of the material
                 // properties (viscoelastic viscosity, shear modulus), elastic time step size, strain rate,
@@ -327,7 +385,7 @@ namespace aspect
                 Assert(std::isfinite(in.strain_rate[i].norm()),
                        ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                                   "not filled by the caller."));
-                const SymmetricTensor<2,dim> stress_creep = 2. * average_viscoelastic_viscosity * ( deviator(in.strain_rate[i]) + stress_0 / (2. * damped_elastic_viscosity ) );
+                const SymmetricTensor<2,dim> stress_creep = 2. * effective_creep_viscosities[i] * ( deviator(in.strain_rate[i]) + stress_0 / (2. * damped_elastic_viscosity ) );
 
                 // stress_new is the (new) stored elastic stress
                 SymmetricTensor<2,dim> stress_new = stress_creep * (1. - (elastic_damper_viscosity / damped_elastic_viscosity)) + elastic_damper_viscosity * stress_0 / damped_elastic_viscosity;
@@ -338,11 +396,12 @@ namespace aspect
                 // timestep, then no averaging occurs as dt/dte = 1.
                 stress_new = ( ( 1. - ( dt / dte ) ) * stress_old ) + ( ( dt / dte ) * stress_new ) ;
 
-                // Fill reaction terms
-                for (unsigned int j = 0; j < SymmetricTensor<2,dim>::n_independent_components ; ++j)
-                  out.reaction_terms[i][j] = -stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)]
-                                             + stress_new[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)];
+                const SymmetricTensor<2,dim> stress_update = stress_new - stress_old;
 
+                // Fill reaction terms
+                Utilities::Tensors::unroll_symmetric_tensor_into_array(stress_update,
+                                                                       &out.reaction_terms[i][0],
+                                                                       &out.reaction_terms[i][0]+SymmetricTensor<2,dim>::n_independent_components);
               }
           }
       }
@@ -405,7 +464,7 @@ namespace aspect
 
 
       template <int dim>
-      double
+      SymmetricTensor<2,dim>
       Elasticity<dim>::
       calculate_viscoelastic_strain_rate(const SymmetricTensor<2,dim> &strain_rate,
                                          const SymmetricTensor<2,dim> &stored_stress,
@@ -418,10 +477,8 @@ namespace aspect
         // elastic stresses stored from the last time step.
         // Note the parallels with the viscous part of the strain rate deviator,
         // which is equal to 0.5 * stress / viscosity.
-        const SymmetricTensor<2,dim> edot_deviator = deviator(strain_rate) + 0.5*stored_stress /
-                                                     calculate_elastic_viscosity(shear_modulus);
-        // Return the norm of the strain rate, or 0, whichever is larger.
-        return std::sqrt(std::max(-second_invariant(edot_deviator), 0.));
+        return deviator(strain_rate) + 0.5 * deviator(stored_stress) /
+               calculate_elastic_viscosity(shear_modulus);
       }
     }
   }

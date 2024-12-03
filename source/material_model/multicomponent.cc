@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -42,7 +42,8 @@ namespace aspect
           // The (incompressible) Boussinesq approximation treats the
           // buoyancy term as Delta rho[i] * C[i], which implies that
           // compositional fields are given as volume fractions.
-          const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(in.composition[i], this->introspection().chemical_composition_field_indices());
+          const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(in.composition[i],
+                                                       this->introspection().chemical_composition_field_indices());
 
           equation_of_state.evaluate(in, i, eos_outputs);
           out.viscosities[i] = MaterialUtilities::average_value(volume_fractions, viscosities, viscosity_averaging);

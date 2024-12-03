@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -95,7 +95,11 @@ namespace aspect
       std::vector<Tensor<1,dim>> velocity_values(n_face_q_points);
 
       // set up constraints
-      AffineConstraints<double> mass_matrix_constraints(mesh_locally_relevant);
+      AffineConstraints<double> mass_matrix_constraints(
+#if DEAL_II_VERSION_GTE(9,6,0)
+        mesh_deformation_dof_handler.locally_owned_dofs(),
+#endif
+        mesh_locally_relevant);
       DoFTools::make_hanging_node_constraints(mesh_deformation_dof_handler, mass_matrix_constraints);
 
       using periodic_boundary_pairs = std::set<std::pair<std::pair<types::boundary_id, types::boundary_id>, unsigned int>>;
@@ -218,9 +222,7 @@ namespace aspect
       LinearAlgebra::Vector boundary_velocity;
 
       const IndexSet &mesh_locally_owned = mesh_deformation_dof_handler.locally_owned_dofs();
-      IndexSet mesh_locally_relevant;
-      DoFTools::extract_locally_relevant_dofs (mesh_deformation_dof_handler,
-                                               mesh_locally_relevant);
+      const IndexSet mesh_locally_relevant = DoFTools::extract_locally_relevant_dofs (mesh_deformation_dof_handler);
       boundary_velocity.reinit(mesh_locally_owned, mesh_locally_relevant,
                                this->get_mpi_communicator());
       project_velocity_onto_boundary(mesh_deformation_dof_handler, mesh_locally_owned,

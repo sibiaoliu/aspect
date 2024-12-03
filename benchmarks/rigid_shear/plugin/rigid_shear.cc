@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,7 +22,7 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/postprocess/particles.h>
 #include <aspect/particle/property/interface.h>
-#include <aspect/particle/world.h>
+#include <aspect/particle/manager.h>
 #include <aspect/boundary_velocity/interface.h>
 #include <aspect/postprocess/interface.h>
 #include <aspect/simulator_access.h>
@@ -68,7 +68,7 @@ namespace aspect
         return std::exp(t)-1.;
       }
 
-      template<int dim>
+      template <int dim>
       double
       density(const Point<dim> &p,
               const double t,
@@ -83,7 +83,7 @@ namespace aspect
       /**
        * The exact solution for the Rigid Shear benchmark.
        */
-      template<int dim>
+      template <int dim>
       class FunctionRigidShear : public Function<dim>
       {
         public:
@@ -121,7 +121,7 @@ namespace aspect
      * A material model for the stationary form of the rigid shear benchmark. All properties
      * are defined in dependence of position.
      */
-    template<int dim>
+    template <int dim>
     class RigidShearMaterial : public MaterialModel::Interface<dim>, public SimulatorAccess<dim>
     {
       public:
@@ -246,7 +246,7 @@ namespace aspect
      * The implementation of error evaluators that correspond to the
      * benchmarks defined in the paper Gassmoeller et al. referenced above.
      */
-    template<int dim>
+    template <int dim>
     class RigidShearPostprocessor : public Postprocess::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:

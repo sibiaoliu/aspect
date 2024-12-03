@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -64,7 +64,7 @@ DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 #include <aspect/time_stepping/interface.h>
 #include <aspect/postprocess/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
-#include <aspect/particle/world.h>
+#include <aspect/particle/manager.h>
 
 #include <boost/iostreams/tee.hpp>
 #include <boost/iostreams/stream.hpp>
@@ -167,6 +167,14 @@ namespace aspect
     Tensor<1,dim> tensor_angular_momentum;
     Tensor<1,dim> tensor_rotation;
   };
+
+  /**
+   * Exception to be thrown when the nonlinear solver needs too many iterations to converge.
+   */
+  DeclExceptionMsg(ExcNonlinearSolverNoConvergence,
+                   "Nonlinear solver failed to converge in the prescribed number of steps. "
+                   "Consider changing `Max nonlinear iterations` or `Nonlinear solver failure "
+                   "strategy`.");
 
   /**
    * This is the main class of ASPECT. It implements the overall simulation
@@ -344,6 +352,15 @@ namespace aspect
         unsigned int block_index(const Introspection<dim> &introspection) const;
 
         /**
+         * Look up the block index where the sparsity pattern for this field
+         * is stored. This can be different than block_index() as several fields
+         * can use the same pattern (typically in the first compositional field
+         * if all fields are compatible). See Introspection::block_indices
+         * for more information.
+         */
+        unsigned int sparsity_pattern_block_index(const Introspection<dim> &introspection) const;
+
+        /**
          * Returns an index that runs from 0 (temperature field) to n (nth
          * compositional field), and uniquely identifies the current advection
          * field among the list of all advection fields. Can be used to index
@@ -371,6 +388,13 @@ namespace aspect
          * field. See Introspection::polynomial_degree for more information.
          */
         unsigned int polynomial_degree(const Introspection<dim> &introspection) const;
+
+        /**
+         * Return a string that describes the field type and the compositional
+         * variable number and name, if applicable.
+         */
+        std::string
+        name(const Introspection<dim> &introspection) const;
       };
 
     private:
@@ -671,10 +695,14 @@ namespace aspect
        * number of iterations is reached. This can greatly improve the
        * convergence rate for particularly nonlinear viscosities.
        *
+       * @param use_newton_iterations Sets whether this function should only use defect
+       * correction iterations (use_newton_iterations = false) or also use Newton iterations
+       * (use_newton_iterations = true).
+       *
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      void solve_iterated_advection_and_newton_stokes ();
+      void solve_iterated_advection_and_newton_stokes (bool use_newton_iterations);
 
       /**
        * This function implements one scheme for the various
@@ -688,10 +716,14 @@ namespace aspect
        * number of iterations is reached. This can greatly improve the
        * convergence rate for particularly nonlinear viscosities.
        *
+       * @param use_newton_iterations Sets whether this function should only use defect
+       * correction iterations (use_newton_iterations = false) or also use Newton iterations
+       * (use_newton_iterations = true).
+       *
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      void solve_single_advection_and_iterated_newton_stokes ();
+      void solve_single_advection_and_iterated_newton_stokes (bool use_newton_iterations);
 
       /**
        * This function implements one scheme for the various
@@ -752,7 +784,7 @@ namespace aspect
        * Assemble and solve the temperature equation.
        * This function returns the residual after solving.
        *
-       * If the `redidual` argument is not a `nullptr`, the function computes
+       * If the `residual` argument is not a `nullptr`, the function computes
        * the residual and puts it into this variable. The function returns
        * the current residual divided by the initial residual given as the
        * first argument. The two arguments may point to the same variable,
@@ -770,7 +802,7 @@ namespace aspect
        * (fields or particles). This function returns the residuals for
        * all fields after solving.
        *
-       * If the `redidual` argument is not a `nullptr`, the function computes
+       * If the `residual` argument is not a `nullptr`, the function computes
        * the residual and puts it into this variable. The function returns
        * the current residual divided by the initial residual given as the
        * first argument. The two arguments may point to the same variable,
@@ -787,7 +819,7 @@ namespace aspect
        * Assemble and solve the Stokes equation.
        * This function returns the nonlinear residual after solving.
        *
-       * If the `redidual` argument is not a `nullptr`, the function computes
+       * If the `residual` argument is not a `nullptr`, the function computes
        * the residual and puts it into this variable. The function returns
        * the current residual divided by the initial residual given as the
        * first argument. The two arguments may point to the same variable,
@@ -835,14 +867,6 @@ namespace aspect
        * <code>source/simulator/solver.cc</code>.
        */
       double solve_advection (const AdvectionField &advection_field);
-
-      /**
-       * Interpolate a particular particle property to the solution field.
-       *
-       * @deprecated: Use interpolate_particle_property_vector() instead.
-       */
-      DEAL_II_DEPRECATED
-      void interpolate_particle_properties (const AdvectionField &advection_field);
 
       /**
        * Interpolate the corresponding particle properties into the given
@@ -1705,6 +1729,18 @@ namespace aspect
       stokes_matrix_depends_on_solution () const;
 
       /**
+       * Return whether to the best of our knowledge the A block of the
+       * Stokes system is symmetric. This is the case for most models, except
+       * if additional non-symmetric terms are added by special assemblers
+       * (e.g., the free surface stabilization term).
+       *
+       * This function is implemented in
+       * <code>source/simulator/helper_functions.cc</code>.
+       */
+      bool
+      stokes_A_block_is_symmetric () const;
+
+      /**
        * This function checks that the user-selected formulations of the
        * equations are consistent with the other inputs. If an incorrect
        * selection is detected it throws an exception. It for example assures that
@@ -1718,6 +1754,14 @@ namespace aspect
        */
       void
       check_consistency_of_formulation ();
+
+      /**
+       * This function checks if the default solver and/or material
+       * averaging were selected and if so, determines the appropriate
+       * solver and/or averaging option.
+       */
+      void
+      select_default_solver_and_averaging ();
 
       /**
        * This function checks that the user-selected boundary conditions do not
@@ -1941,15 +1985,9 @@ namespace aspect
       const std::unique_ptr<BoundaryHeatFlux::Interface<dim>>                boundary_heat_flux;
 
       /**
-       * The world holding the particles
+       * The managers holding different sets of particles
        */
-      std::unique_ptr<Particle::World<dim>> particle_world;
-
-      /**
-       * A copy of the particle handler to reset the particles
-       * when repeating a time step.
-       */
-      dealii::Particles::ParticleHandler<dim> particle_handler_copy;
+      std::vector<Particle::Manager<dim>> particle_managers;
 
       /**
        * @}
@@ -1964,6 +2002,7 @@ namespace aspect
       unsigned int                                              timestep_number;
       unsigned int                                              pre_refinement_step;
       unsigned int                                              nonlinear_iteration;
+      unsigned int                                              nonlinear_solver_failures;
       /**
        * @}
        */
@@ -2067,6 +2106,12 @@ namespace aspect
        * solving.
        */
       LinearAlgebra::BlockSparseMatrix                          system_matrix;
+
+      /**
+       * This vector is used for the weighted BFBT preconditioner. It
+       * stores the inverted lumped velocity mass matrix.
+       */
+      LinearAlgebra::BlockVector                                inverse_lumped_mass_matrix;
 
       /**
        * An object that contains the entries of preconditioner

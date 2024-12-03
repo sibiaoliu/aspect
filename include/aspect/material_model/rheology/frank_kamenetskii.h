@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2020 by the authors of the ASPECT code.
+  Copyright (C) 2020 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,9 +36,12 @@ namespace aspect
       /**
        * A class that computes a Frank-Kamenetskii viscosity approximation
        * of the form:
-       * viscosity = A * exp(E * 0.5 * (1.0-(T/ref_T)))
+       * viscosity = A * exp(E * 0.5 * (1.0-(T/ref_T)) + F * (P-ref_P)/(rho*g*h))
        * A: prefactor of viscosity, E: adjusted viscosity ratio,
-       * ref_T: reference temperature, T: temperature.
+       * ref_T: reference temperature, T: temperature. F: prefactor of pressure,
+       * ref_P: reference pressure, rho: density, g: gravity, h, model depth
+       *
+       * Refer to Noack and Breuer, 2013, GJI. doi: 10.1093/gji/ggt248 Eq. 2.10 for reference.
        */
 
       template <int dim>
@@ -68,7 +71,10 @@ namespace aspect
            */
           double
           compute_viscosity (const double temperature,
-                             const unsigned int composition) const;
+                             const unsigned int composition,
+                             const double pressure = std::numeric_limits<double>::infinity(),
+                             const double density = std::numeric_limits<double>::infinity(),
+                             const double gravity = std::numeric_limits<double>::infinity()) const;
 
         private:
           /**
@@ -80,6 +86,14 @@ namespace aspect
            * List of Frank-Kamenetskii prefactors (A).
            */
           std::vector<double> prefactors_frank_kamenetskii;
+
+          /**
+           * List of Frank-Kamenetskii pressure prefactors (F).
+           */
+          std::vector<double> pressure_prefactors_frank_kamenetskii;
+
+          std::vector<double> reference_temperatures;
+          std::vector<double> reference_pressures;
       };
     }
   }

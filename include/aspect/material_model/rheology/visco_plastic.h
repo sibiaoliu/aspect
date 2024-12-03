@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2020 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2020 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,6 +31,7 @@
 #include <aspect/material_model/rheology/frank_kamenetskii.h>
 #include <aspect/material_model/rheology/peierls_creep.h>
 #include <aspect/material_model/rheology/constant_viscosity_prefactors.h>
+#include <aspect/material_model/rheology/compositional_viscosity_prefactors.h>
 #include <aspect/material_model/rheology/drucker_prager.h>
 #include <aspect/material_model/rheology/elasticity.h>
 #include <aspect/simulator_access.h>
@@ -282,6 +283,15 @@ namespace aspect
           bool use_adiabatic_pressure_in_creep;
 
           /**
+           * Whether to use the adiabatic pressure instead of the full pressure
+           * when calculating the plastic yield stress.
+           * This may be helpful in models where the full pressure has
+           * large variations resulting in solver convergence issues.
+           * Be aware that this setting will change the plastic shear band angle.
+           */
+          bool use_adiabatic_pressure_in_plasticity;
+
+          /**
            * Depth of the mantle dehydration zone
            */
           double mantle_dehydration_depth;
@@ -325,6 +335,11 @@ namespace aspect
            * viscoelastic viscosity or plastic viscosity.
            */
           Rheology::ConstantViscosityPrefactors<dim> constant_viscosity_prefactors;
+
+          /**
+           * Object for computing the viscosity multiplied by a given prefactor term.
+           */
+          Rheology::CompositionalViscosityPrefactors<dim> compositional_viscosity_prefactors;
 
           /*
            * Object for computing plastic stresses, viscosities, and additional outputs

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,7 +32,7 @@ namespace aspect
     PrmPolygon<dim>::
     value (const Point<dim-1> &p) const
     {
-      Point<2> p1 = (dim == 2 ?Point<2>(p[0],0) : Point<2>(p[0],p[1]));
+      const Point<2> p1 = (dim == 2 ? Point<2>(p[0],0) : Point<2>(p[0],p[1]));
 
       /**
        * We go through the loop in the reverse order, because we

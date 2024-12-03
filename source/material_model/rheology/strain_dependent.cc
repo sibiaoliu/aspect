@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 - 2023 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -104,7 +104,8 @@ namespace aspect
                            "List of strain weakening interval initial strains "
                            "for the cohesion and friction angle parameters of the "
                            "background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
                            "If only one value is given, then all use the same value. Units: None.");
 
         prm.declare_entry ("End plasticity strain weakening intervals", "1.",
@@ -112,21 +113,24 @@ namespace aspect
                            "List of strain weakening interval final strains "
                            "for the cohesion and friction angle parameters of the "
                            "background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
                            "If only one value is given, then all use the same value.  Units: None.");
 
         prm.declare_entry ("Cohesion strain weakening factors", "1.",
                            Patterns::List(Patterns::Double (0.)),
                            "List of cohesion strain weakening factors "
                            "for background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
                            "If only one value is given, then all use the same value.  Units: None.");
 
         prm.declare_entry ("Friction strain weakening factors", "1.",
                            Patterns::List(Patterns::Double (0.)),
                            "List of friction strain weakening factors "
                            "for background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
                            "If only one value is given, then all use the same value.  Units: None.");
 
         prm.declare_entry ("Start prefactor strain weakening intervals", "0.",
@@ -134,7 +138,8 @@ namespace aspect
                            "List of strain weakening interval initial strains "
                            "for the diffusion and dislocation prefactor parameters of the "
                            "background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
                            "If only one value is given, then all use the same value.  Units: None.");
 
         prm.declare_entry ("End prefactor strain weakening intervals", "1.",
@@ -142,15 +147,54 @@ namespace aspect
                            "List of strain weakening interval final strains "
                            "for the diffusion and dislocation prefactor parameters of the "
                            "background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
                            "If only one value is given, then all use the same value.  Units: None.");
 
         prm.declare_entry ("Prefactor strain weakening factors", "1.",
                            Patterns::List(Patterns::Double(0., 1.)),
                            "List of viscous strain weakening factors "
                            "for background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
                            "If only one value is given, then all use the same value.  Units: None.");
+
+
+        prm.declare_entry ("Use temperature activated strain softening", "false",
+                           Patterns::Bool (),
+                           "Whether viscous strain softening factor depends on temperature");
+
+        prm.declare_entry ("Lower temperature for onset of strain weakening", "823.",
+                           Patterns::List(Patterns::Double (0.)),
+                           "List of lower temperature for onset of strain weakening "
+                           "for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
+                           "If only one value is given, then all use the same value. Units: \\si{\\kelvin}.");
+
+        prm.declare_entry ("Lower temperature for maximum strain weakening", "923.",
+                           Patterns::List(Patterns::Double (0.)),
+                           "List of lower temperature for maximum strain weakening "
+                           "for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
+                           "If only one value is given, then all use the same value. Units: \\si{\\kelvin}.");
+
+        prm.declare_entry ("Upper temperature for maximum strain weakening", "1023.",
+                           Patterns::List(Patterns::Double (0.)),
+                           "List of upper temperatures for maximum strain weakening "
+                           "for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
+                           "If only one value is given, then all use the same value. Units: \\si{\\kelvin}.");
+
+        prm.declare_entry ("Upper temperature for onset of strain weakening", "1123.",
+                           Patterns::List(Patterns::Double (0.)),
+                           "List of upper temperatures for onset of strain weakening"
+                           "for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of all compositional fields "
+                           "or only those corresponding to chemical compositions. "
+                           "If only one value is given, then all use the same value. Units: \\si{\\kelvin}.");
 
         prm.declare_entry ("Strain healing mechanism", "no healing",
                            Patterns::Selection("no healing|temperature dependent|fracture healing"),
@@ -310,45 +354,64 @@ namespace aspect
 
 
         // Retrieve the list of composition names
-        const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
+        std::vector<std::string> compositional_field_names = this->introspection().get_composition_names();
+
+        // Retrieve the list of names of fields that represent chemical compositions, and not, e.g.,
+        // plastic strain
+        std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
 
         // Establish that a background field is required here
-        const bool has_background_field = true;
+        compositional_field_names.insert(compositional_field_names.begin(), "background");
+        chemical_field_names.insert(chemical_field_names.begin(),"background");
 
-        start_plastic_strain_weakening_intervals = Utilities::parse_map_to_double_array (prm.get("Start plasticity strain weakening intervals"),
-                                                   list_of_composition_names,
-                                                   has_background_field,
-                                                   "Start plasticity strain weakening intervals");
+        Utilities::MapParsing::Options options(chemical_field_names, "Start plasticity strain weakening intervals");
+        options.list_of_allowed_keys = compositional_field_names;
 
-        end_plastic_strain_weakening_intervals = Utilities::parse_map_to_double_array (prm.get("End plasticity strain weakening intervals"),
-                                                                                       list_of_composition_names,
-                                                                                       has_background_field,
-                                                                                       "End plasticity strain weakening intervals");
+        start_plastic_strain_weakening_intervals = Utilities::MapParsing::parse_map_to_double_array(prm.get("Start plasticity strain weakening intervals"),
+                                                   options);
 
-        start_viscous_strain_weakening_intervals = Utilities::parse_map_to_double_array (prm.get("Start prefactor strain weakening intervals"),
-                                                   list_of_composition_names,
-                                                   has_background_field,
-                                                   "Start prefactor strain weakening intervals");
+        options.property_name = "End plasticity strain weakening intervals";
+        end_plastic_strain_weakening_intervals = Utilities::MapParsing::parse_map_to_double_array(prm.get("End plasticity strain weakening intervals"),
+                                                 options);
 
-        end_viscous_strain_weakening_intervals = Utilities::parse_map_to_double_array (prm.get("End prefactor strain weakening intervals"),
-                                                                                       list_of_composition_names,
-                                                                                       has_background_field,
-                                                                                       "End prefactor strain weakening intervals");
+        options.property_name = "Start prefactor strain weakening intervals";
+        start_viscous_strain_weakening_intervals = Utilities::MapParsing::parse_map_to_double_array(prm.get("Start prefactor strain weakening intervals"),
+                                                   options);
 
-        viscous_strain_weakening_factors = Utilities::parse_map_to_double_array (prm.get("Prefactor strain weakening factors"),
-                                                                                 list_of_composition_names,
-                                                                                 has_background_field,
-                                                                                 "Prefactor strain weakening factors");
+        options.property_name = "End prefactor strain weakening intervals";
+        end_viscous_strain_weakening_intervals = Utilities::MapParsing::parse_map_to_double_array(prm.get("End prefactor strain weakening intervals"),
+                                                 options);
 
-        cohesion_strain_weakening_factors = Utilities::parse_map_to_double_array (prm.get("Cohesion strain weakening factors"),
-                                                                                  list_of_composition_names,
-                                                                                  has_background_field,
-                                                                                  "Cohesion strain weakening factors");
+        options.property_name = "Prefactor strain weakening factors";
+        viscous_strain_weakening_factors = Utilities::MapParsing::parse_map_to_double_array(prm.get("Prefactor strain weakening factors"),
+                                           options);
 
-        friction_strain_weakening_factors = Utilities::parse_map_to_double_array (prm.get("Friction strain weakening factors"),
-                                                                                  list_of_composition_names,
-                                                                                  has_background_field,
-                                                                                  "Friction strain weakening factors");
+        options.property_name = "Lower temperature for onset of strain weakening";
+        viscous_strain_weakening_T0 = Utilities::MapParsing::parse_map_to_double_array(prm.get("Lower temperature for onset of strain weakening"),
+                                                                                       options);
+
+        options.property_name = "Lower temperature for maximum strain weakening";
+        viscous_strain_weakening_T1 = Utilities::MapParsing::parse_map_to_double_array(prm.get("Lower temperature for maximum strain weakening"),
+                                                                                       options);
+
+        options.property_name = "Upper temperature for maximum strain weakening";
+        viscous_strain_weakening_T2 = Utilities::MapParsing::parse_map_to_double_array(prm.get("Upper temperature for maximum strain weakening"),
+                                                                                       options);
+
+        options.property_name = "Upper temperature for onset of strain weakening";
+        viscous_strain_weakening_T3 = Utilities::MapParsing::parse_map_to_double_array(prm.get("Upper temperature for onset of strain weakening"),
+                                                                                       options);
+
+        use_temperature_activated_strain_softening = prm.get_bool("Use temperature activated strain softening");
+
+
+        options.property_name = "Cohesion strain weakening factors";
+        cohesion_strain_weakening_factors = Utilities::MapParsing::parse_map_to_double_array(prm.get("Cohesion strain weakening factors"),
+                                            options);
+
+        options.property_name = "Friction strain weakening factors";
+        friction_strain_weakening_factors = Utilities::MapParsing::parse_map_to_double_array(prm.get("Friction strain weakening factors"),
+                                            options);
 
         if (prm.get ("Strain healing mechanism") == "no healing")
           healing_mechanism = no_healing;
@@ -360,12 +423,13 @@ namespace aspect
           AssertThrow(false, ExcMessage("Not a valid Strain healing mechanism!"));
 
         // Currently this functionality only works in field composition
-        if (healing_mechanism != no_healing && this->get_postprocess_manager().template has_matching_postprocessor<Postprocess::Particles<dim>>())
+        if (healing_mechanism != no_healing && this->n_particle_managers() > 0)
           {
-            const Postprocess::Particles<dim> &particle_postprocessor = this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Particles<dim>>();
-            const Particle::Property::Manager<dim> &particle_property_manager = particle_postprocessor.get_particle_world().get_property_manager();
-
-            AssertThrow(particle_property_manager.plugin_name_exists("viscoplastic strain invariants") == false, ExcMessage("This healing mechanism currently does not work if the strain is tracked on particles."));
+            for (unsigned int i=0; i<this->n_particle_managers(); ++i)
+              {
+                const Particle::Property::Manager<dim> &particle_property_manager = this->get_particle_manager(i).get_property_manager();
+                AssertThrow(particle_property_manager.plugin_name_exists("viscoplastic strain invariants") == false, ExcMessage("This healing mechanism currently does not work if the strain is tracked on particles."));
+              }
           }
 
         // Temperature dependent strain healing requires that adiabatic surface temperature is non zero
@@ -385,11 +449,12 @@ namespace aspect
       }
 
 
+
       template <int dim>
       std::array<double, 3>
       StrainDependent<dim>::
-      compute_strain_weakening_factors(const unsigned int j,
-                                       const std::vector<double> &composition) const
+      compute_strain_weakening_factors(const std::vector<double> &composition,
+                                       const unsigned int j) const
       {
         double viscous_weakening = 1.0;
         std::pair<double, double> brittle_weakening (1.0, 1.0);
@@ -403,9 +468,8 @@ namespace aspect
             case finite_strain_tensor:
             {
               // Calculate second invariant of left stretching tensor "L"
-              Tensor<2,dim> strain;
-              for (unsigned int q = 0; q < Tensor<2,dim>::n_independent_components ; ++q)
-                strain[Tensor<2,dim>::unrolled_to_component_indices(q)] = composition[q];
+              const Tensor<2,dim> strain(make_array_view(&composition[0],
+                                                         &composition[0] + Tensor<2,dim>::n_independent_components));
               const SymmetricTensor<2,dim> L = symmetrize( strain * transpose(strain) );
 
               const double strain_ii = std::fabs(second_invariant(L));
@@ -458,6 +522,48 @@ namespace aspect
         return weakening_factors;
 
       }
+
+
+
+      template <int dim>
+      std::array<double, 3>
+      StrainDependent<dim>::
+      compute_strain_weakening_factors(const unsigned int j,
+                                       const std::vector<double> &composition) const
+      {
+        return compute_strain_weakening_factors(composition,j);
+      }
+
+
+
+      template <int dim>
+      std::array<double, 3>
+      StrainDependent<dim>::
+      apply_temperature_dependence_to_strain_weakening_factors(const std::array<double, 3> &weakening_factors,
+                                                               const double temperature,
+                                                               const unsigned int j) const
+      {
+
+        double factor = 1;
+        const double T0 = viscous_strain_weakening_T0[j];
+        const double T1 = viscous_strain_weakening_T1[j];
+        const double T2 = viscous_strain_weakening_T2[j];
+        const double T3 = viscous_strain_weakening_T3[j];
+        std::array<double, 3> output = weakening_factors;
+
+        if (temperature>T0 && temperature<=T1)
+          factor = (output[2]-1.) / (T1-T0)*(temperature-T0) + 1.;
+        else if (temperature>T1 && temperature<=T2)
+          factor = output[2];
+        else if (temperature>T2 && temperature<=T3)
+          factor = (1-output[2]) / (T3-T2)*(temperature-T2) + output[2];
+        output[2] = factor;
+
+        return output;
+
+      }
+
+
 
       template <int dim>
       double
@@ -585,10 +691,8 @@ namespace aspect
             // Prepare the field function and extract the old solution values at the current cell.
             std::vector<Point<dim>> quadrature_positions(1,this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]));
 
-            // Use a boost::small_vector to avoid memory allocation if possible.
-            // Create 100 values by default, which should be enough for most cases.
-            // If there are more than 100 DoFs per cell, this will work like a normal vector.
-            boost::container::small_vector<double, 100> old_solution_values(this->get_fe().dofs_per_cell);
+            // Use a small_vector to avoid memory allocation if possible.
+            small_vector<double> old_solution_values(this->get_fe().dofs_per_cell);
             in.current_cell->get_dof_values(this->get_old_solution(),
                                             old_solution_values.begin(),
                                             old_solution_values.end());

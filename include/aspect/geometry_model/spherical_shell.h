@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -43,11 +43,10 @@ namespace aspect
         public:
           /**
            * Constructor.
-           *
-           * @param[in] center The center of the coordinate system. Defaults to the
-           * origin.
            */
-          SphericalManifoldWithTopography(const Point<dim> center = Point<dim>());
+          SphericalManifoldWithTopography(const InitialTopographyModel::Interface<dim> &topography,
+                                          const double inner_radius,
+                                          const double outer_radius);
 
           /**
            * Copy constructor.
@@ -59,6 +58,20 @@ namespace aspect
            */
           virtual std::unique_ptr<Manifold<dim, dim>>
           clone() const override;
+
+          /**
+           * Given a point in the undeformed spherical geometry, push it forward to the
+           * corresponding point in the sphere with surface topography.
+           */
+          Point<dim>
+          push_forward_from_sphere (const Point<dim> &p) const;
+
+          /**
+           * Given a point in the deformed spherical geometry with topography, pull it
+           * back to the corresponding point in the undeformed sphere.
+           */
+          Point<dim>
+          pull_back_to_sphere (const Point<dim> &p) const;
 
           /**
            * Given any two points in space, first project them on the surface
@@ -82,6 +95,18 @@ namespace aspect
 
           /**
            * @copydoc Manifold::normal_vector()
+           *
+           * We fudge here, but for a good reason. What the function is supposed
+           * to compute is the normal vector to the surface. This *should* be the
+           * normal to the surface with topography, but instead we return the
+           * normal to the undeformed surface -- i.e., the radial direction. This
+           * is, in particular, used to compute no-flux boundary conditions,
+           * for which we want to impose a boundary
+           * condition that allows for plate-like motion -- that is, we need
+           * to allow *horizontal motion*, even if that is not tangential to
+           * the surface along the slopes of mountains or ocean trenches. Using
+           * the radial direction, i.e., the normal vector to the undeformed surface
+           * (= a radial vector) allows for exactly this.
            */
           virtual Tensor<1, dim>
           normal_vector(
@@ -124,6 +149,23 @@ namespace aspect
           virtual Point<dim>
           get_new_point(const ArrayView<const Point<dim>> &vertices,
                         const ArrayView<const double>          &weights) const override;
+
+        private:
+          /**
+           * A pointer to the topography model.
+           */
+          const InitialTopographyModel::Interface<dim> *topo;
+
+          /**
+           * Inner and outer radii of the spherical shell.
+           */
+          const double R0, R1;
+
+          /**
+           * Return the topography of the surface directly above the point given
+           * by the coordinates stored in the argument.
+           */
+          double topography_for_point (const Point<dim> &x_y_z) const;
       };
 
     }
@@ -403,7 +445,7 @@ namespace aspect
         /**
          * Give a symbolic name to the manifold id to be used by this class.
          */
-        static const types::manifold_id my_manifold_id = 99;
+        static constexpr types::manifold_id my_manifold_id = 99;
     };
   }
 }
