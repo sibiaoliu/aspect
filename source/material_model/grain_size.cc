@@ -83,6 +83,8 @@ namespace aspect
     void
     GrainSize<dim>::initialize()
     {
+      CitationInfo::add("grainsize");
+
       n_material_data = material_file_names.size();
       for (unsigned i = 0; i < n_material_data; ++i)
         {
@@ -576,7 +578,7 @@ namespace aspect
 
                   for (unsigned int k=0; k<n_phase_transitions; ++k)
                     {
-                      phase_inputs.phase_index = k;
+                      phase_inputs.phase_transition_index = k;
                       phase_function_values[k] = phase_function->compute_value(phase_inputs);
                     }
 

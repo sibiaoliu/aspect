@@ -21,7 +21,6 @@
 #include <aspect/particle/manager.h>
 #include <aspect/global.h>
 #include <aspect/utilities.h>
-#include <aspect/citation_info.h>
 #include <aspect/simulator.h>
 #include <aspect/melt.h>
 
@@ -48,17 +47,18 @@ namespace aspect
       = default;
 
     template <int dim>
-    Manager<dim>::Manager(Manager &&other)
-      : generator(std::move(other.generator)),
-        integrator(std::move(other.integrator)),
-        interpolator(std::move(other.interpolator)),
-        particle_handler(std::move(other.particle_handler)),
-        particle_handler_backup(), // can not move
-        property_manager(std::move(other.property_manager)),
-        particle_load_balancing(other.particle_load_balancing),
-        min_particles_per_cell(other.min_particles_per_cell),
-        max_particles_per_cell(other.max_particles_per_cell),
-        particle_weight(other.particle_weight)
+    Manager<dim>::Manager(Manager &&other) noexcept
+  :
+    generator(std::move(other.generator)),
+              integrator(std::move(other.integrator)),
+              interpolator(std::move(other.interpolator)),
+              particle_handler(std::move(other.particle_handler)),
+              particle_handler_backup(), // can not move
+              property_manager(std::move(other.property_manager)),
+              particle_load_balancing(other.particle_load_balancing),
+              min_particles_per_cell(other.min_particles_per_cell),
+              max_particles_per_cell(other.max_particles_per_cell),
+              particle_weight(other.particle_weight)
     {}
 
 
@@ -445,7 +445,7 @@ namespace aspect
     void
     Manager<dim>::local_update_particles(Property::ParticleUpdateInputs<dim> &inputs,
                                          small_vector<Point<dim>> &positions,
-                                         std::vector<EvaluationFlags::EvaluationFlags> &evaluation_flags,
+                                         const std::vector<EvaluationFlags::EvaluationFlags> &evaluation_flags,
                                          SolutionEvaluator<dim> &evaluator)
     {
       const unsigned int n_particles = particle_handler->n_particles_in_cell(inputs.current_cell);
@@ -467,8 +467,8 @@ namespace aspect
                                           solution_values.end());
 
       EvaluationFlags::EvaluationFlags evaluation_flags_union = EvaluationFlags::nothing;
-      for (unsigned int i=0; i<evaluation_flags.size(); ++i)
-        evaluation_flags_union |= evaluation_flags[i];
+      for (const auto &flag : evaluation_flags)
+        evaluation_flags_union |= flag;
 
       if (evaluation_flags_union & (EvaluationFlags::values | EvaluationFlags::gradients))
         {

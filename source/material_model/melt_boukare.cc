@@ -71,6 +71,8 @@ namespace aspect
     void
     MeltBoukare<dim>::initialize()
     {
+      CitationInfo::add("boukaremelt");
+
       // Compute parameters for the modified Tait equation of state for the different endmembers
       // derived from the isothermal bulk modulus and its two first pressure derivatives.
       // This corresponds to Equation 4 from Holland and Powell, 2011 (https://doi.org/10.1111/j.1525-1314.2010.00923.x).
@@ -188,7 +190,7 @@ namespace aspect
                                                       (a + (1. - a) * std::pow(1 + b * (pressure - Pth), c)));
 
           const double Cp_ref = reference_specific_heats[i] + specific_heat_linear_coefficients[i] * in.temperature[q]
-                                + specific_heat_second_coefficients[i] * std::pow(in.temperature[q], -2.)
+                                + specific_heat_second_coefficients[i] * Utilities::fixed_power<-2>(in.temperature[q])
                                 + specific_heat_third_coefficients[i] * std::pow(in.temperature[q], -0.5);
 
           const long double dSdT0 = reference_volumes[i] * reference_bulk_moduli[i] * Utilities::fixed_power<2>(heat_capacity_ratio * reference_thermal_expansivities[i])

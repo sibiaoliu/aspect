@@ -33,7 +33,8 @@ with open('../../VERSION', 'r') as file:
 extensions = [
     "myst_parser",
     "sphinxcontrib.bibtex",
-    "sphinxcontrib.tikz"
+    "sphinxcontrib.tikz",
+    "sphinxcontrib.cairosvgconverter"
 ]
 myst_enable_extensions = [
     "colon_fence",
@@ -88,6 +89,18 @@ html_theme_options = {
     "primary_sidebar_end": "navbar_end.html"
 }
 
+latex_engine = 'xelatex'
+latex_elements = {
+# Additional stuff for the LaTeX preamble.
+'preamble': r'''
+% to allow for the degree symbol
+\usepackage{gensymb}
+\usepackage{siunitx}
+\usepackage{etoolbox}
+\pretocmd{\hyperlink}{\protect}{}{}
+'''
+}
+
 bibtex_bibfiles = ["references.bib"]
 bibtex_default_style = "alpha"
 bibtex_reference_style = "author_year"
@@ -105,3 +118,7 @@ html_context = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 html_last_updated_fmt = ""
+
+linkcheck_allowed_redirects = {r'https://doi.org/*': r'https://*',
+                               r'https://youtu.be/*': r'https://youtube.com/*',
+                               r'https://www.github.com/*': r'https://github.com/*'}

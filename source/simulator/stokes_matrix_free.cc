@@ -20,7 +20,6 @@
 
 
 #include <aspect/stokes_matrix_free.h>
-#include <aspect/citation_info.h>
 #include <aspect/mesh_deformation/interface.h>
 #include <aspect/mesh_deformation/free_surface.h>
 #include <aspect/melt.h>
@@ -1424,8 +1423,15 @@ namespace aspect
 
                   for (unsigned int q=0; q<n_q_points; ++q)
                     {
-                      const SymmetricTensor<2,dim> effective_strain_rate =
-                        elastic_out == nullptr ? deviator(in.strain_rate[q]) : elastic_out->viscoelastic_strain_rate[q];
+                      // use the correct strain rate for the Jacobian
+                      // when elasticity is enabled use viscoelastic strain rate
+                      // when stabilization is enabled, use the deviatoric strain rate because the SPD factor
+                      // that is computed is only safe for the deviatoric strain rate (see PR #5580 and issue #5555)
+                      SymmetricTensor<2,dim> effective_strain_rate = in.strain_rate[q];
+                      if (elastic_out != nullptr)
+                        effective_strain_rate = elastic_out->viscoelastic_strain_rate[q];
+                      else if ((sim.newton_handler->parameters.velocity_block_stabilization & Newton::Parameters::Stabilization::PD) != Newton::Parameters::Stabilization::none)
+                        effective_strain_rate = deviator(effective_strain_rate);
 
                       // use the spd factor when the stabilization is PD or SPD.
                       const double alpha =  (sim.newton_handler->parameters.velocity_block_stabilization
@@ -1726,7 +1732,7 @@ namespace aspect
 
 
   template <int dim, int velocity_degree>
-  std::pair<double,double> StokesMatrixFreeHandlerImplementation<dim,velocity_degree>::solve()
+  std::pair<double,double> StokesMatrixFreeHandlerImplementation<dim,velocity_degree>::solve(LinearAlgebra::BlockVector &solution_vector)
   {
     double initial_nonlinear_residual = numbers::signaling_nan<double>();
     double final_linear_residual      = numbers::signaling_nan<double>();
@@ -1919,8 +1925,7 @@ namespace aspect
         linearized_stokes_initial_guess.block (block_p) = sim.current_linearization_point.block (block_p);
 
         sim.denormalize_pressure (sim.last_pressure_normalization_adjustment,
-                                  linearized_stokes_initial_guess,
-                                  sim.current_linearization_point);
+                                  linearized_stokes_initial_guess);
       }
     else
       {
@@ -2342,8 +2347,8 @@ namespace aspect
 
     // then copy back the solution from the temporary (non-ghosted) vector
     // into the ghosted one with all solution components
-    sim.solution.block(block_vel) = distributed_stokes_solution.block(block_vel);
-    sim.solution.block(block_p) = distributed_stokes_solution.block(block_p);
+    solution_vector.block(block_vel) = distributed_stokes_solution.block(block_vel);
+    solution_vector.block(block_p) = distributed_stokes_solution.block(block_p);
 
     if (print_details)
       {
@@ -2358,16 +2363,16 @@ namespace aspect
       }
 
     // do some cleanup now that we have the solution
-    sim.remove_nullspace(sim.solution, distributed_stokes_solution);
+    sim.remove_nullspace(solution_vector, distributed_stokes_solution);
     if (sim.assemble_newton_stokes_system == false)
-      sim.last_pressure_normalization_adjustment = sim.normalize_pressure(sim.solution);
+      sim.last_pressure_normalization_adjustment = sim.normalize_pressure(solution_vector);
 
 
     // convert melt pressures
     // TODO: We assert in the StokesMatrixFreeHandler constructor that we
     //       are not including melt transport.
     if (sim.parameters.include_melt_transport)
-      sim.melt_handler->compute_melt_variables(sim.system_matrix,sim.solution,sim.system_rhs);
+      sim.melt_handler->compute_melt_variables(sim.system_matrix,solution_vector,sim.system_rhs);
 
 
     return std::pair<double,double>(initial_nonlinear_residual,

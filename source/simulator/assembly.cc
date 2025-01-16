@@ -23,7 +23,6 @@
 #include <aspect/utilities.h>
 #include <aspect/compat.h>
 #include <aspect/simulator_access.h>
-#include <aspect/citation_info.h>
 
 #include <aspect/simulator/assemblers/interface.h>
 #include <aspect/melt.h>
@@ -726,9 +725,6 @@ namespace aspect
 
     TimerOutput::Scope timer (computing_timer,
                               timer_section_name);
-
-    // Re-compute the pressure scaling factor.
-    pressure_scaling = compute_pressure_scaling_factor();
 
     if (rebuild_stokes_matrix == true)
       system_matrix = 0;
