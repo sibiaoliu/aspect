@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2024 by the authors of the ASPECT code.
+  Copyright (C) 2021 - 2024 by the authors of the ASPECT code.
   This file is part of ASPECT.
   ASPECT is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -247,14 +247,12 @@ namespace aspect
               // We need to obtain the values of chemical compositional fields
               // at the previous time step, as the values from the current
               // linearization point are an extrapolation of the solution from
-              // the old timesteps. Prepare the field function and extract the
-              // old solution values at the current cell.
-              quadrature_positions.resize(1,this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]));
+              // the old timesteps.
+              // Prepare the field function and extract the old solution values at the current cell.
+              std::vector<Point<dim>> quadrature_positions(1,this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]));
 
-              // Use a boost::small_vector to avoid memory allocation if possible.
-              // Create 100 values by default, which should be enough for most cases.
-              // If there are more than 100 DoFs per cell, this will work like a normal vector.
-              boost::container::small_vector<double, 100> old_solution_values(this->get_fe().dofs_per_cell);
+               // Use a small_vector to avoid memory allocation if possible.
+              small_vector<double> old_solution_values(this->get_fe().dofs_per_cell);
               in.current_cell->get_dof_values(this->get_old_solution(),
                                               old_solution_values.begin(),
                                               old_solution_values.end());
@@ -281,15 +279,15 @@ namespace aspect
                   composition_evaluators[c]->reinit(in.current_cell, quadrature_positions);
                   composition_evaluators[c]->evaluate({old_solution_values.data(),old_solution_values.size()},
                                                       EvaluationFlags::values);
-                  const double old_solution_composition = composition_evaluators[c]->get_value(0);
+                  double old_solution_composition = composition_evaluators[c]->get_value(0);
 
                   if (c == injection_phase_index)
                     {
-                      // If the value increases to greater than 1, it is not increased anymore.
+                      // If the value increases to greater than 1, no longer let it increase.
                       if (old_solution_composition + injected_material_amount >= 1.0)
                         out.reaction_terms[i][c] = 0.0;
                       else
-                        out.reaction_terms[i][c] = std::max(injected_material_amount, -old_solution_composition);
+                        out.reaction_terms[i][c] = injected_material_amount;
 
                       // Fill reaction rate outputs instead of the reaction terms if
                       // we use operator splitting (and then set the latter to zero).
@@ -319,13 +317,23 @@ namespace aspect
                       // = - c_1_old * (c_dike_add / (1.0001 - c_dike_old))
                       // To avoid dividing by 0, we will use 1.0001 instead of 1.0.
 
-                      // We limit the value of the injection phase compositional
-                      // field from the previous timestep to [0,1].
-                      double injection_phase_composition = std::max(std::min(composition_evaluators[injection_phase_index]->get_value(0),1.0),0.0);
+                      // Only create the evaluator the first time if we have not been to injection_phase composition before.
+                      if (!composition_evaluators[injection_phase_index])
+                        composition_evaluators[injection_phase_index]
+                          = std::make_unique<FEPointEvaluation<1, dim>>(this->get_mapping(),
+                                                                        this->get_fe(),
+                                                                        update_values,
+                                                                        component_indices[injection_phase_index]);
+
+                      composition_evaluators[injection_phase_index]->reinit(in.current_cell, quadrature_positions);
+                      composition_evaluators[injection_phase_index]->evaluate({old_solution_values.data(),old_solution_values.size()},
+                                                                               EvaluationFlags::values);
+
+                      // We limit the value of the injection phase compositional field from the previous timestep to [0,1].
+                      double old_injection_phase_composition = std::max(std::min(composition_evaluators[injection_phase_index]->get_value(0),1.0),0.0);
 
                       out.reaction_terms[i][c] = -old_solution_composition 
-                                                 * std::min(injected_material_amount 
-                                                 / (1.0001 - injection_phase_composition), 1.0);
+                                                 * std::min(injected_material_amount / (1.0001 - old_injection_phase_composition), 1.0);
 
                       // Fill reaction rate outputs instead of the reaction terms if
                       // we use operator splitting (and then set the latter to zero).
@@ -362,6 +370,7 @@ namespace aspect
                     out.reaction_terms[i][this->introspection().compositional_index_for_name("total_strain")] = 0.0;
                   if (this->introspection().compositional_name_exists("noninitial_plastic_strain"))
                     out.reaction_terms[i][this->introspection().compositional_index_for_name("noninitial_plastic_strain")] = 0.0;
+                  //TODO: Check and test elastic stress reaction terms.
                 }
             }
 
