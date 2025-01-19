@@ -317,7 +317,8 @@ namespace aspect
                       // = - c_1_old * (c_dike_add / (1.0001 - c_dike_old))
                       // To avoid dividing by 0, we will use 1.0001 instead of 1.0.
 
-                      // Only create the evaluator the first time if we have not been to injection_phase composition before.
+                      // Only create the evaluator the first time if we have not been
+                      // to injection_phase composition before.
                       if (!composition_evaluators[injection_phase_index])
                         composition_evaluators[injection_phase_index]
                           = std::make_unique<FEPointEvaluation<1, dim>>(this->get_mapping(),
@@ -332,7 +333,7 @@ namespace aspect
                       // We limit the value of the injection phase compositional field from the previous timestep to [0,1].
                       double old_injection_phase_composition = std::max(std::min(composition_evaluators[injection_phase_index]->get_value(0),1.0),0.0);
 
-                      out.reaction_terms[i][c] = -old_solution_composition 
+                      out.reaction_terms[i][c] = - old_solution_composition 
                                                  * std::min(injected_material_amount / (1.0001 - old_injection_phase_composition), 1.0);
 
                       // Fill reaction rate outputs instead of the reaction terms if
@@ -571,6 +572,7 @@ namespace aspect
                                    "material properties are derived. It adds source "
                                    "terms in the Stokes equations to implement the dike "
                                    "intrusion process in the model. It also adds the "
-                                   "material for a dike field.")
+                                   "material for a dike field. Note that a compositional "
+                                   "field called 'injection_phase' is required for this model.");
   }
 }

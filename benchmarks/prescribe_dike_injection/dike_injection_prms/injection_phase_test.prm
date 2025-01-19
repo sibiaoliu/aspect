@@ -1,54 +1,59 @@
-# This is a 2D test model to determine if the dike injection functionality is
-# working properly. Material is injected throughout the left half of the model
-# domain with a rate that corresponds to a velocity divergence of 1e-15 1/s
-# and can flow out through the right-side boundary. This corresponds to a 
-# linear velocity increase from 0 to 500 m * 1e-15 1/yr = 5e-13 m/s in the
-# right half of the domain.
+# This is a 2D test model of the dike injection functionality to determine that the
+# prescribed compositional field in the injection area is working properly.
+# This field can be used for tracking the motion of injected material. Within the
+# dike, the value of compositional field 'injection_phase' is increased by
+# 0.1 per timestep, while the value of the other compositional field 'another_phase' 
+# is decreased by 0.1 correspondingly.
 
 set Additional shared libraries            = ../dike_src/libprescribed_dike_injection.debug.so
 set Dimension                              = 2
 set Adiabatic surface temperature          = 0
-set Nonlinear solver scheme                = single Advection, iterated defect correction Stokes
-set Output directory                       = output_injection_test
-set End time                               = 1e10
-set Use years in output instead of seconds = false
+set Nonlinear solver scheme                = single Advection, iterated Stokes
+set Output directory                       = output_injection_phase_test
+set End time                               = 4e3
+set Maximum time step                      = 2e3
+set Use years in output instead of seconds = true
 
 ##################### Prescribed dilation ########################
 # We need to enable the assembler that allows us to add terms
-# to the Stokes equations.
+# to the Stokes equation.
 subsection Formulation
   set Enable prescribed dilation    = true
-  set Enable dike injection         = true
+  set Enable dike injection    = true
 end
 
 # Here we use the Stokes discretization that is locally conservative for dike
 # injection function, otherwise the solutions within the dike might be wrong.
 subsection Discretization
   set Use locally conservative discretization      = true
-  set Use discontinuous temperature discretization = true
-  set Use discontinuous composition discretization = true 
+  set Use discontinuous temperature discretization = true  
+  set Use discontinuous composition discretization = true
 end
 
 subsection Material model
   set Model name = prescribed dike injection
+
+  # Parameters of dike injection zones
   subsection Prescribed dike injection
     set Base model = simple
-    
-    set Dike material injection amount = 1.0
-    subsection Dike injection function
-      set Function expression  = if(x<500,1e-15,0)
+    # For test only, we set the bottom temperature of the dike to be 0.
+    set Dike bottom temperature = 0.
+    # Prescribe the amount of newly injected material, 0.1 means 10% melt.
+    set Dike material injection amount = 0.1
+    subsection Dike injection rate function
+      set Function expression  = if(x>=400 && x<=600, 1e-15, 0)
     end
   end
+
   subsection Simple model
     set Reference density             = 1000.
     set Reference specific heat       = 1000.
     set Thermal expansion coefficient = 0.
-    set Thermal conductivity = 0.
+    set Thermal conductivity          = 0.0
   end
 end
 
 ##################### Model geometry ########################
-
 subsection Geometry model
   set Model name = box
   subsection Box
@@ -75,40 +80,40 @@ end
 ##################### Initial & Boundary Conditions ########################
 
 subsection Boundary velocity model
-  set Tangential velocity boundary indicators = top, bottom, left
+  set Tangential velocity boundary indicators = top, bottom
 end
 
 # We prescribe the lithostatic pressure as a boundary traction on 
-# the right side of the model, so that material can flow out according 
+# both side boundaries of the model, so that material can flow out according 
 # to the inflow induced by the dike injection.   
 subsection Boundary traction model
-  set Prescribed traction boundary indicators = right:initial lithostatic pressure
+  set Prescribed traction boundary indicators = right:initial lithostatic pressure, \
+                                                left:initial lithostatic pressure
   subsection Initial lithostatic pressure
     set Representative point         = 1000, 1000
   end
 end
 
-# We choose a very small initial temperature perturbation so that a solution
+# We choose a very small initial termperature perturbation so that a solution
 # can be found in the first step.
 subsection Initial temperature model
   set Model name = function
   subsection Function
-   set Variable names = x,y
-    set Function expression = 0
+    set Function expression       = 0
   end
 end
 
 subsection Compositional fields
-  set Number of fields      = 1
-  set Names of fields       = injection_phase
-  set Types of fields       = chemical composition
+  set Number of fields      = 2
+  set Names of fields       = injection_phase, another_phase
+  set Types of fields       = chemical composition, chemical composition
 end
 
 subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      =x,y
-    set Function expression = 0
+    set Function expression = 0; 1
   end
 end
 
@@ -117,6 +122,6 @@ subsection Postprocess
   subsection Visualization
     set List of output variables      = heating, named additional outputs,  strain rate, strain rate tensor
     set Time between graphical output = 0
-    set Interpolate output = false
+    set Interpolate output            = false
   end
 end
