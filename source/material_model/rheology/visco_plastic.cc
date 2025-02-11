@@ -246,9 +246,13 @@ namespace aspect
             // Step 1f: if mantle dehydration is enabled.
             if (enable_mantle_dehydration)
               {
+                double pressure_for_dehydration = in.pressure[i];
+                if (use_adiabatic_pressure_in_mantle_dehydration)
+                  pressure_for_dehydration = this->get_adiabatic_conditions().pressure(in.position[i]);
+
                 if ((this->get_geometry_model().depth(in.position[i]) <= mantle_dehydration_depth) ||
-                    (in.temperature[i] >= 1120.7 + 273 + 132.9 * in.pressure[i] / 1e9
-                                          - 5.1 * (in.pressure[i] / 1e9) * (in.pressure[i] / 1e9)))
+                    (in.temperature[i] >= 1120.7 + 273 + 132.9 * pressure_for_dehydration / 1e9
+                                          - 5.1 * (pressure_for_dehydration / 1e9) * (pressure_for_dehydration / 1e9)))
                   non_yielding_viscosity *= mantle_dehydration_multiples;
               }
 
@@ -606,6 +610,10 @@ namespace aspect
         prm.declare_entry ("Enable mantle dehydration", "false",
                            Patterns::Bool (),
                            "Whether to enable the simplified mantle dehyrdation process. ");
+        prm.declare_entry ("Use adiabatic pressure in mantle dehydration", "false",
+                           Patterns::Bool (),
+                           "Whether to use the adiabatic pressure instead of the full "
+                           "pressure when calculating mantle solidus temperature. ");
         prm.declare_entry ("Mantle dehydration multiples", "1.0", Patterns::Double (0.),
                            "Increase multiples in the effective viscosity due to mantle "
                            "dehydration, Units: none.");
@@ -783,6 +791,7 @@ namespace aspect
 
         // Enable mantle dehydration
         enable_mantle_dehydration  = prm.get_bool("Enable mantle dehydration");
+        use_adiabatic_pressure_in_mantle_dehydration = prm.get_bool("Use adiabatic pressure in mantle dehydration");
         mantle_dehydration_depth   = prm.get_double("Mantle dehydration depth");
         mantle_dehydration_multiples = prm.get_double("Mantle dehydration multiples");
 

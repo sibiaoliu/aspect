@@ -299,6 +299,12 @@ namespace aspect
           bool enable_mantle_dehydration;
 
           /**
+           * Whether to use the adiabatic pressure instead of the full pressure
+           * when calculating the mantle solidus temperature.
+           */
+          bool use_adiabatic_pressure_in_mantle_dehydration;
+
+          /**
            * Depth of the mantle dehydration zone
            */
           double mantle_dehydration_depth;
