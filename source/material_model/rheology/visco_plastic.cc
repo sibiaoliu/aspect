@@ -243,9 +243,18 @@ namespace aspect
             // Step 1e: multiply the viscosity by a constant (default value is 1)
             non_yielding_viscosity = constant_viscosity_prefactors.compute_viscosity(non_yielding_viscosity, j);
 
-            // Step: if mantle dehydration is included.
-            if  ((this->get_geometry_model().depth(in.position[i]) <= mantle_dehydration_depth) || (in.temperature[i] >= 1120.7+273+132.9*in.pressure[i]/1e9-5.1*(in.pressure[i]/1e9)*(in.pressure[i]/1e9)))
-              non_yielding_viscosity *= mantle_dehydration_factors[j];
+            // Step 1f: if mantle dehydration is enabled.
+            if (enable_mantle_dehydration)
+              {
+                double pressure_for_dehydration = in.pressure[i];
+                if (use_adiabatic_pressure_in_mantle_dehydration)
+                  pressure_for_dehydration = this->get_adiabatic_conditions().pressure(in.position[i]);
+
+                if ((this->get_geometry_model().depth(in.position[i]) <= mantle_dehydration_depth) ||
+                    (in.temperature[i] >= 1120.7 + 273 + 132.9 * pressure_for_dehydration / 1e9
+                                          - 5.1 * (pressure_for_dehydration / 1e9) * (pressure_for_dehydration / 1e9)))
+                  non_yielding_viscosity *= mantle_dehydration_multiples;
+              }
 
             // Step 2: calculate strain weakening factors for the cohesion, friction, and pre-yield viscosity
             // If no strain weakening is applied, the factors are 1.
@@ -588,16 +597,6 @@ namespace aspect
                            "full pressure has an unusually large negative value arising from "
                            "large negative dynamic pressure, resulting in solver convergence "
                            "issue and in some cases a viscosity of zero.");
-        // Mantle dehydration scale factors
-        prm.declare_entry ("Mantle dehydration scale factors", "1.0",
-                           Patterns::List(Patterns::Double (0.)),
-                           "List of scale factors of the effective viscosity due to mantle dehydration, "
-                           "for background material and compositional fields, "
-                           "for a total of N+1 values, where N is the number of compositional fields. "
-                           "Units: none.");
-         // Mantle dehydration depths
-        prm.declare_entry ("Mantle dehydration depth", "0.0", Patterns::Double (0.),
-                           "Depth of the mantle dehydration zone, Units: m.");
                     
         prm.declare_entry ("Use adiabatic pressure in plasticity", "false",
                            Patterns::Bool (),
@@ -607,6 +606,21 @@ namespace aspect
                            "full pressure has unusually large variations, resulting "
                            "in solver convergence issues. Be aware that this setting "
                            "will change the plastic shear band angle.");
+
+        // Mantle dehydration scale factors
+        prm.declare_entry ("Enable mantle dehydration", "false",
+                           Patterns::Bool (),
+                           "Whether to enable the simplified mantle dehyrdation process. ");
+        prm.declare_entry ("Use adiabatic pressure in mantle dehydration", "false",
+                           Patterns::Bool (),
+                           "Whether to use the adiabatic pressure instead of the full "
+                           "pressure when calculating mantle solidus temperature. ");
+        prm.declare_entry ("Mantle dehydration multiples", "1.0", Patterns::Double (0.),
+                           "Increase multiples in the effective viscosity due to mantle "
+                           "dehydration, Units: none.");
+         // Mantle dehydration depth
+        prm.declare_entry ("Mantle dehydration depth", "0.0", Patterns::Double (0.),
+                           "Depth of the mantle dehydration zone, Units: m.");
 
         // Diffusion creep parameters
         Rheology::DiffusionCreep<dim>::declare_parameters(prm);
@@ -773,12 +787,14 @@ namespace aspect
         constant_viscosity_prefactors.initialize_simulator (this->get_simulator());
         constant_viscosity_prefactors.parse_parameters(prm);
 
-        // Mantle dehydration depth
-        mantle_dehydration_depth = prm.get_double("Mantle dehydration depth");
+        compositional_viscosity_prefactors.initialize_simulator (this->get_simulator());
+        compositional_viscosity_prefactors.parse_parameters(prm);
 
-        // Mantle dehydration scale factors
-        options.property_name = "Mantle dehydration scale factors";
-        mantle_dehydration_factors = Utilities::MapParsing::parse_map_to_double_array (prm.get("Mantle dehydration scale factors"), options);
+        // Enable mantle dehydration
+        enable_mantle_dehydration  = prm.get_bool("Enable mantle dehydration");
+        use_adiabatic_pressure_in_mantle_dehydration = prm.get_bool("Use adiabatic pressure in mantle dehydration");
+        mantle_dehydration_depth   = prm.get_double("Mantle dehydration depth");
+        mantle_dehydration_multiples = prm.get_double("Mantle dehydration multiples");
 
         // Plasticity parameters
         drucker_prager_plasticity.initialize_simulator (this->get_simulator());

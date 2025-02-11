@@ -292,6 +292,19 @@ namespace aspect
           bool use_adiabatic_pressure_in_plasticity;
 
           /**
+           * Whether to enable the simplified mantle dehydration process
+           * (Ito et al, 1999), which will increase the effective viscosity when
+           * mantle temperature surpasses its dry solidus (Zhang et al., 2023).
+           */
+          bool enable_mantle_dehydration;
+
+          /**
+           * Whether to use the adiabatic pressure instead of the full pressure
+           * when calculating the mantle solidus temperature.
+           */
+          bool use_adiabatic_pressure_in_mantle_dehydration;
+
+          /**
            * Depth of the mantle dehydration zone
            */
           double mantle_dehydration_depth;
