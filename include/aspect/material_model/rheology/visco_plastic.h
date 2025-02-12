@@ -305,14 +305,19 @@ namespace aspect
           bool use_adiabatic_pressure_in_mantle_dehydration;
 
           /**
-           * Depth of the mantle dehydration zone
+           * Upper depth of the mantle dehydration zone
            */
-          double mantle_dehydration_depth;
+          double mantle_dehydration_upper_depth;
 
           /**
-           * List of scale factors of the effective viscosity due to mantle dehydration
+           * Lower depth of the mantle dehydration zone
            */
-          std::vector<double> mantle_dehydration_factors;
+          double mantle_dehydration_lower_depth;
+
+          /**
+           * Increase multiples in the effective viscosity due to mantle dehydration
+           */
+          double mantle_dehydration_multiples;
 
           /**
            * List of exponents controlling the behavior of the stress limiter

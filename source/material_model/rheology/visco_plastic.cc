@@ -250,7 +250,8 @@ namespace aspect
                 if (use_adiabatic_pressure_in_mantle_dehydration)
                   pressure_for_dehydration = this->get_adiabatic_conditions().pressure(in.position[i]);
 
-                if ((this->get_geometry_model().depth(in.position[i]) <= mantle_dehydration_depth) ||
+                if ((this->get_geometry_model().depth(in.position[i]) <= mantle_dehydration_lower_depth) &&
+                    (this->get_geometry_model().depth(in.position[i]) >= mantle_dehydration_upper_depth) &&
                     (in.temperature[i] >= 1120.7 + 273 + 132.9 * pressure_for_dehydration / 1e9
                                           - 5.1 * (pressure_for_dehydration / 1e9) * (pressure_for_dehydration / 1e9)))
                   non_yielding_viscosity *= mantle_dehydration_multiples;
@@ -619,9 +620,10 @@ namespace aspect
                            "Increase multiples in the effective viscosity due to mantle "
                            "dehydration, Units: none.");
          // Mantle dehydration depth
-        prm.declare_entry ("Mantle dehydration depth", "0.0", Patterns::Double (0.),
-                           "Depth of the mantle dehydration zone, Units: m.");
-
+        prm.declare_entry ("Mantle dehydration upper depth", "0.0", Patterns::Double (0.),
+                           "Upper depth of the mantle dehydration zone, Units: m.");
+        prm.declare_entry ("Mantle dehydration lower depth", "1e9", Patterns::Double (0.),
+                           "Lower depth of the mantle dehydration zone, Units: m.");
         // Diffusion creep parameters
         Rheology::DiffusionCreep<dim>::declare_parameters(prm);
 
@@ -793,7 +795,8 @@ namespace aspect
         // Enable mantle dehydration
         enable_mantle_dehydration  = prm.get_bool("Enable mantle dehydration");
         use_adiabatic_pressure_in_mantle_dehydration = prm.get_bool("Use adiabatic pressure in mantle dehydration");
-        mantle_dehydration_depth   = prm.get_double("Mantle dehydration depth");
+        mantle_dehydration_upper_depth   = prm.get_double("Mantle dehydration upper depth");
+        mantle_dehydration_lower_depth   = prm.get_double("Mantle dehydration lower depth");
         mantle_dehydration_multiples = prm.get_double("Mantle dehydration multiples");
 
         // Plasticity parameters
