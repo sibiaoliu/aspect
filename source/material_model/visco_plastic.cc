@@ -185,47 +185,37 @@ namespace aspect
               // option was selected.
               out.thermal_conductivities[i] = MaterialUtilities::average_value (volume_fractions, thermal_conductivities, MaterialUtilities::arithmetic);
 
-              if (define_hydrothermal_cooling == true)
-                {
-                  // Approximate the effect of the simplified hydrothermal circulation process
-                  // on the temperature field by enhancing the thermal conductivity.
-                  // The smoothing function is from Gregg et al. (2009) 
-                  // "Melt generation, crystallization, and extraction beneath
-                  // segmented oceanic transform faults". DOI: 10.1029/2008JB006100.
-                  double current_thermal_conductivity = 0.0;
-                  double current_Nusselt_number = 0.0;
-                  double current_A_smoothing = 0.0;
-                  double current_T_cooling = 0.0;
-                  double current_D_cooling = 0.0;
-                  for (unsigned int j=0; j < volume_fractions.size(); ++j)
-                    {
-                      current_Nusselt_number += volume_fractions[j] * Nusselt_number[j];
-                      current_A_smoothing += volume_fractions[j] * A_smoothing[j];
-                      current_T_cooling += volume_fractions[j] * T_cooling[j];
-                      current_D_cooling += volume_fractions[j] * D_cooling[j];
-                    }
-                  //Enhanced thermal conductivity due to hydrothermal circulation
-                  //at the given positions where the temperature is not greater
-                  //than cut-off temperature.
-                  // Note that the unit of the temperature (>=0) used in the 
-                  // smoothing part is Celcius, not the default unit Kelvin.
-                  const double temperature_in_C = in.temperature[i]-273;
-                  const double point_depth = this->get_geometry_model().depth(in.position[i]);
-                  const double smoothing_part = std::exp(current_A_smoothing *(2.0 -
-                                                std::max(temperature_in_C,0.0) / (current_T_cooling-273)
-                                                - point_depth / current_D_cooling));
-                  if (in.temperature[i]<= current_T_cooling && point_depth <= current_D_cooling)                
-                    {
-                      // No smoothing
-                      if (current_A_smoothing == 0.0)
-                        out.thermal_conductivities[i] *= current_Nusselt_number;
-                      else
-                        out.thermal_conductivities[i] *= (1 + (current_Nusselt_number - 1.0) * smoothing_part);
-                    }
-                  else
-                    out.thermal_conductivities[i] = current_thermal_conductivity;
+              if (define_hydrothermal_cooling)
+              {
+                // Approximate the effect of the simplified hydrothermal cooling process
+                // on the temperature field by enhancing the thermal conductivity.
+                // The smoothing function is from Gregg et al. (2009).
+                // "Melt generation, crystallization, and extraction beneath
+                // segmented oceanic transform faults". DOI: 10.1029/2008JB006100.
+                const double current_thermal_conductivity = MaterialUtilities::average_value(volume_fractions, thermal_conductivities, MaterialUtilities::arithmetic);
+                const double current_Nusselt_number = MaterialUtilities::average_value(volume_fractions, Nusselt_number, MaterialUtilities::arithmetic);
+                const double current_A_smoothing = MaterialUtilities::average_value(volume_fractions, A_smoothing, MaterialUtilities::arithmetic);
+                const double current_T_cooling = MaterialUtilities::average_value(volume_fractions, T_cooling, MaterialUtilities::arithmetic);
+                const double current_D_cooling = MaterialUtilities::average_value(volume_fractions, D_cooling, MaterialUtilities::arithmetic);
 
-                }
+                // Enhanced thermal conductivity due to hydrothermal circulation at the given
+                // positions where the temperature is not greater than cut-off temperature.
+                // Note that the unit of the temperature (>=0) used in the 
+                // smoothing part is Celcius, not the default unit Kelvin.
+                const double temperature_in_C = in.temperature[i] - 273;
+                const double point_depth = this->get_geometry_model().depth(in.position[i]);
+                const double smoothing_part = std::exp(current_A_smoothing * (2.0 - std::max(temperature_in_C, 0.0) / (current_T_cooling - 273)
+                                                                                  - point_depth / current_D_cooling));
+                if (current_A_smoothing == 0.0)
+                  {
+                    if (in.temperature[i] <= current_T_cooling && point_depth <= current_D_cooling)
+                      out.thermal_conductivities[i] *= current_Nusselt_number;
+                    else
+                      out.thermal_conductivities[i] = current_thermal_conductivity;
+                  }
+                else
+                  out.thermal_conductivities[i] *= (1 + (current_Nusselt_number - 1.0) * smoothing_part);
+              }
             }
 
           out.compressibilities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
