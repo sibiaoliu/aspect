@@ -289,6 +289,20 @@ namespace aspect
             // Step 1e: multiply the viscosity by a constant (default value is 1)
             non_yielding_viscosity = constant_viscosity_prefactors.compute_viscosity(non_yielding_viscosity, j);
 
+            // Step 1f: if mantle dehydration is enabled.
+            if (enable_mantle_dehydration)
+              {
+                double pressure_for_dehydration = in.pressure[i];
+                if (use_adiabatic_pressure_in_mantle_dehydration)
+                  pressure_for_dehydration = this->get_adiabatic_conditions().pressure(in.position[i]);
+
+                if ((this->get_geometry_model().depth(in.position[i]) <= mantle_dehydration_lower_depth) &&
+                    (this->get_geometry_model().depth(in.position[i]) >= mantle_dehydration_upper_depth) &&
+                    (in.temperature[i] >= 1120.7 + 273 + 132.9 * pressure_for_dehydration / 1e9
+                                          - 5.1 * (pressure_for_dehydration / 1e9) * (pressure_for_dehydration / 1e9)))
+                  non_yielding_viscosity *= mantle_dehydration_multiples;
+              }
+
             // Step 2: calculate strain weakening factors for the cohesion, friction, and pre-yield viscosity
             // If no strain weakening is applied, the factors are 1.
             std::array<double, 3> weakening_factors = strain_rheology.compute_strain_weakening_factors(in.composition[i], j);
@@ -708,6 +722,23 @@ namespace aspect
                            "in solver convergence issues. Be aware that this setting "
                            "will change the plastic shear band angle.");
 
+        // Mantle dehydration scale factors
+        prm.declare_entry ("Enable mantle dehydration", "false",
+                           Patterns::Bool (),
+                           "Whether to enable the simplified mantle dehyrdation process. ");
+        prm.declare_entry ("Use adiabatic pressure in mantle dehydration", "false",
+                           Patterns::Bool (),
+                           "Whether to use the adiabatic pressure instead of the full "
+                           "pressure when calculating mantle solidus temperature. ");
+        prm.declare_entry ("Mantle dehydration multiples", "1.0", Patterns::Double (0.),
+                           "Increase multiples in the effective viscosity due to mantle "
+                           "dehydration, Units: none.");
+         // Mantle dehydration depth
+        prm.declare_entry ("Mantle dehydration upper depth", "0.0", Patterns::Double (0.),
+                           "Upper depth of the mantle dehydration zone, Units: m.");
+        prm.declare_entry ("Mantle dehydration lower depth", "1e9", Patterns::Double (0.),
+                           "Lower depth of the mantle dehydration zone, Units: m.");
+
         // Diffusion creep parameters
         Rheology::DiffusionCreep<dim>::declare_parameters(prm);
 
@@ -900,6 +931,13 @@ namespace aspect
 
         compositional_viscosity_prefactors.initialize_simulator (this->get_simulator());
         compositional_viscosity_prefactors.parse_parameters(prm);
+
+        // Enable mantle dehydration
+        enable_mantle_dehydration  = prm.get_bool("Enable mantle dehydration");
+        use_adiabatic_pressure_in_mantle_dehydration = prm.get_bool("Use adiabatic pressure in mantle dehydration");
+        mantle_dehydration_upper_depth   = prm.get_double("Mantle dehydration upper depth");
+        mantle_dehydration_lower_depth   = prm.get_double("Mantle dehydration lower depth");
+        mantle_dehydration_multiples = prm.get_double("Mantle dehydration multiples");
 
         // Plasticity parameters
         drucker_prager_plasticity.initialize_simulator (this->get_simulator());
