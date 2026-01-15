@@ -62,20 +62,13 @@ namespace aspect
           parse_parameters (ParameterHandler &prm);
 
           /**
-           * Compute all the reaction rate variables needed for a reactive transport model
+           * Compute all the reaction term variables needed for the melting model
            * based on the Morgan 2001 formulation.
            */
-          void calculate_reaction_rate_outputs(const typename Interface<dim>::MaterialModelInputs &in,
-                                               typename Interface<dim>::MaterialModelOutputs &out) const;
+          void fill_reaction_outputs (const typename Interface<dim>::MaterialModelInputs &in,
+                                      typename Interface<dim>::MaterialModelOutputs &out) const;
 
         private:
-          void
-          compute_Xm_Xb_from_Xs (const std::vector<double> &Xs,
-                                 const std::vector<double> &F,
-                                 const std::vector<double> &f_trapped,
-                                 std::vector<double>       &Xm,
-                                 std::vector<double>       &Xb) const;
-
           void
           compute_current_solidus (const double              P_GPa_positive,
                                    const std::vector<double> &Dpl,
@@ -114,15 +107,6 @@ namespace aspect
                                                   std::vector<double>       &dXs_dF,
                                                   std::vector<double>       &dXm_dF) const;
 
-          void
-          calculate_total_water (const std::vector<double> &f_trapped,
-                                 const std::vector<double> &Xs,
-                                 const std::vector<double> &Xm,
-                                 std::vector<double>       &Xb,
-                                 double                    &X_total,
-                                 double                    &Xs_all,
-                                 double                    &Xm_trapped_all) const;
-
           std::vector<double>
           equilibrate_water_between_solids (const std::vector<double> &Vol,
                                             const std::vector<double> &f_trapped,
@@ -134,27 +118,30 @@ namespace aspect
                                   const double Cp,
                                   const std::vector<double> &F,
                                   const std::vector<double> &f_trapped,
+                                  const std::vector<double> &Vol,
                                   const std::vector<double> &Xm,
                                   const std::vector<double> &Xm_sat,
-                                  const std::vector<double> &Xb) const;
-
+                                  const std::vector<double> &Xb,
+                                  std::vector<double>       &Xm_equil,
+                                  std::vector<double>       &dXs_dF_equil) const;
+          /**
+           * Parameters for hydrous melting of multicomponent mantle after Morgan, 2001
+           */
           unsigned int nc;
           std::string melt_mode;
           bool equilibrate_Xs;
-          std::vector<double> Vol;
+          std::vector<double> Vol0;
           std::vector<double> Dpl0;
-          std::vector<double> Xs0;
           std::vector<double> Xm0;
           std::vector<double> Xb0;
           std::vector<double> Dm_H2O;
           std::vector<double> Ds_H2O;
-          double f_trapped_ini;
-          double f_trapped_max;
+          std::vector<double> f_trapped_max;
           std::vector<double> Ts0;
           std::vector<double> dTs_dP_intrinsic;
           std::vector<double> dTs_dDpl_intrinsic;
+          std::vector<double> dH;          
           double L0_equil;
-          std::vector<double> dH;
           bool include_cpx_out;
           bool include_plag_field;
           std::vector<double> Dpl_cpx_out;
@@ -164,7 +151,8 @@ namespace aspect
 
           std::vector<unsigned int> F_field_indices;
           std::vector<unsigned int> f_trapped_field_indices;
-          std::vector<unsigned int> Xs_field_indices;
+          std::vector<unsigned int> Xb_field_indices;
+          std::vector<unsigned int> Vol_field_indices;
       };
     }
 
