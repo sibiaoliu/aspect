@@ -419,7 +419,7 @@ namespace aspect
         // Only the solid fraction participates in re-equilibration
         std::vector<double> Vol_solids(nc);
         for (unsigned int i = 0; i < nc; ++i)
-          Vol_solids[i] = Vol[i] * (1.0 - f_trapped[i]);
+          Vol_solids[i] = (Vol[i] < Vol_cutoff) ? 0.0 : Vol[i] * (1.0 - f_trapped[i]);
 
         // Total water stored in solids (must be conserved)
         double Xs_total = 0.0;
@@ -430,9 +430,9 @@ namespace aspect
         // Enforce:
         //   Xs_equil_i / Xs_equil_0 = Ds_H2O_i / Ds_H2O_0
         // and conservation of total solid water
-        double denominator = Vol[0];
+        double denominator = Vol_solids[0];
         for (unsigned int i = 1; i < nc; ++i)
-          denominator += Vol[i] * (Ds_H2O[i] / Ds_H2O[0]);
+          denominator += Vol_solids[i] * (Ds_H2O[i] / Ds_H2O[0]);
 
         AssertThrow(denominator > 0.0,
                     ExcMessage("Invalid denominator in solid water equilibration"));
@@ -524,9 +524,6 @@ namespace aspect
         // Step 1. Determine which components are eligible for melting
         //---------------------------------------------------------------------
         std::vector<unsigned int> melt_index;
-        // Volume fraction below which a mantle component is treated as "vanished"
-        const double Vol_cutoff = 1e-3;  // 0.1% vol.%
-
         for (unsigned int i = 0; i < nc; ++i)
           if (T_Celsius > Ts_wet[i] && Dpl[i] < 1.0 && Vol[i] > Vol_cutoff)
             melt_index.push_back(i);
@@ -766,7 +763,7 @@ namespace aspect
             std::vector<double> F(nc), Xb(nc), f_trapped(nc), Vol(nc);
             for (unsigned int i = 0; i < nc; ++i)
             {
-              Vol[i]       = Vol0[i];
+              Vol[i]       = Vol0[i]; // constant in non-incremental melting mode
               F[i]         = in.composition[q][F_field_indices[i]];
               if (melt_mode == "incremental")
               {
@@ -811,7 +808,7 @@ namespace aspect
             // Equilibrate Xs between different components if needed
             if (equilibrate_Xs)
             {
-              Xs = equilibrate_water_between_solids(Vol,f_trapped,Xs);
+              Xs = equilibrate_water_between_solids(Vol_equil,f_trapped,Xs);
               // Maintain an instantaneous local solid–liquid equilibrium
               // after Xs changes
               for (unsigned int i = 0; i < nc; ++i)
@@ -822,8 +819,9 @@ namespace aspect
             // 2. solve for changes in degree of melting (dF) at this point
             //-----------------------------------------------------------------
             std::vector<double> dF(nc, 0.0), Xm_equil(nc, 0.0), dXs_dF_equil(nc, 0.0);
-            dF = calculate_dF_iterative(T_Celsius, P_GPa_positive, Cp, F, f_trapped,
-                                          Vol, Xm, Xm_sat, Xb, Xm_equil, dXs_dF_equil);
+            dF = calculate_dF_iterative(T_Celsius, P_GPa_positive, Cp, F, 
+                                        f_trapped, Vol_equil, Xm, Xm_sat, Xb,
+                                        Xm_equil, dXs_dF_equil);
 
             //-----------------------------------------------------------------
             // 3. Write reaction terms to specific compositional fields
@@ -832,59 +830,78 @@ namespace aspect
             for (unsigned int i = 0; i < nc; ++i)
               dF_limited[i] = std::min(std::max(0.0, dF[i]), 1.0 - F[i]);
 
-            // Compute extracted melt fraction beyond trapped capacity
-            if (melt_mode == "incremental")
+            if (melt_mode == "batch")
+            {
+              for (unsigned int i = 0; i < nc; ++i)
+              {
+                // Cumulative degree of melting evolution
+                const unsigned int F_index = F_field_indices[i];
+                out.reaction_terms[q][F_index] = dF_limited[i];
+
+                // Bulk water content evolution
+                const unsigned int Xb_idx = Xb_field_indices[i];
+                out.reaction_terms[q][Xb_idx] = 0.0;
+              }
+            }
+            else if (melt_mode == "fractional")
+            {
+              for (unsigned int i = 0; i < nc; ++i)
+              {
+                const unsigned int F_index = F_field_indices[i];
+                out.reaction_terms[q][F_index] = dF_limited[i];
+                // Xb = residue solid water Xs
+                const unsigned int Xb_idx = Xb_field_indices[i];
+                out.reaction_terms[q][Xb_idx] = dXs_dF_equil[i] * dF_limited[i];
+              }
+            }
+            else if (melt_mode == "incremental")
+            {
+              // 1. Compute extracted melt fraction beyond trapped capacity
               for (unsigned int i = 0; i < nc; ++i)
                 dF_extracted[i] = std::max(0.0, std::min(dF_limited[i],
                                                          f_trapped[i]
                                                          + dF_limited[i]
                                                          - f_trapped_max));
 
-            // Write reaction terms for each component
-            for (unsigned int i = 0; i < nc; ++i)
-            {
-              // Cumulative degree of melting evolution
-              const unsigned int F_index = F_field_indices[i];
-              out.reaction_terms[q][F_index] = dF_limited[i];
-
-              // Bulk water content evolution
-              // Note that in fractional mode, Xb = residue solid water Xs
-              // Incremental mode: Xb decreases by extracted melt beyond trapped capacity
-              const unsigned int Xb_idx = Xb_field_indices[i];
-              if (melt_mode == "batch")
-                out.reaction_terms[q][Xb_idx] = 0.0;
-              else if (melt_mode == "fractional")
-                out.reaction_terms[q][Xb_idx] = dXs_dF_equil[i] * dF_limited[i];
-              else if (melt_mode == "incremental")
-                out.reaction_terms[q][Xb_idx] = - dF_extracted[i] * Xm_equil[i];
-
-              // Trapped melt fraction evolution (incremental melting only)
-              if (melt_mode == "incremental")
-              {
-                const unsigned int f_index = f_trapped_field_indices[i];
-                if (f_trapped[i] < f_trapped_max)
-                  out.reaction_terms[q][f_index] = dF_limited[i];
-                else
-                  out.reaction_terms[q][f_index] = 0.0;
-              }
-            }
-
-            // Solid volume fraction evolution (incremental melting only)
-            if (melt_mode == "incremental")
-            {
+              // 2. Compute total residual volume after extraction
               double Vol_sum = 0.0;
-              // Compute total residual volume after extraction
               for (unsigned int i = 0; i < nc; ++i)
                 Vol_sum += Vol[i] * (1.0 - dF_extracted[i]);
 
               const double inv_Vol_sum = (Vol_sum > 0.0 ? 1.0 / Vol_sum : 0.0);
 
-              // Renormalize component volumes and write dVol.
+              // 3. Write reaction terms for each component
               for (unsigned int i = 0; i < nc; ++i)
               {
+                const unsigned int F_index = F_field_indices[i];
+                const unsigned int Xb_idx = Xb_field_indices[i];
+                const unsigned int f_index = f_trapped_field_indices[i];
                 const unsigned int Vol_index = Vol_field_indices[i];
-                const double Vol_new = Vol[i] * (1.0 - dF_extracted[i]) * inv_Vol_sum;
-                out.reaction_terms[q][Vol_index] = Vol_new - Vol[i];
+
+                if (Vol[i] < Vol_cutoff) // "Vanished" component
+                {
+                  out.reaction_terms[q][F_index]   = 1.0 - F[i];
+                  out.reaction_terms[q][f_index]   = 1.0 - f_trapped[i];
+                  out.reaction_terms[q][Xb_idx]    = 1e-10 - Xb[i];
+                  out.reaction_terms[q][Vol_index] = 1e-10 - Vol[i];           
+                }
+                else
+                {
+                  out.reaction_terms[q][F_index] = dF_limited[i];
+
+                  // Xb decreases by extracted melt beyond trapped capacity
+                  out.reaction_terms[q][Xb_idx] = - dF_extracted[i] * Xm_equil[i];
+
+                  // Trapped melt volume fraction evolution
+                  if (f_trapped[i] < f_trapped_max)
+                    out.reaction_terms[q][f_index] = dF_limited[i];
+                  else
+                    out.reaction_terms[q][f_index] = 0.0;
+
+                  // Renormalize component volumes and write dVol.
+                  const double Vol_new = Vol[i] * (1.0 - dF_extracted[i]) * inv_Vol_sum;
+                  out.reaction_terms[q][Vol_index] = Vol_new - Vol[i];
+                }
               }
             }
           }
@@ -955,8 +972,8 @@ namespace aspect
                             "Ds(2) = Xs(2) / Xs(0). Length = nc. Units: None.");
           prm.declare_entry ("Equilibrate solid water between components", "true",
                             Patterns::Bool (),
-                            "Specify whether the lithologic component participates in water"
-                            "re-equilibration between solids.");
+                            "Specify whether the lithologic component participates in "
+                            "water re-equilibration between solids.");
           prm.declare_entry ("Water diffusive length scale L0_equil", "1000.0",
                             Patterns::Double(),
                             "Characteristic equilibration length scale for solid water. "
@@ -967,9 +984,13 @@ namespace aspect
                             "re-equilibration use a small value (~1). Units: meters (m).");
           prm.declare_entry ("Maximum trapped melt volume fraction", "0.05",
                             Patterns::List(Patterns::Double()),
-                            "Maximum volume fraction of the trapped melt remaining in equilibrium "
-                            "with residual rock (all additional melt is extraced). This parameter "
-                            "is used in the melting mode of "incremental". Units: None");
+                            "Maximum volume fraction of the trapped melt remaining in  "
+                            "equilibrium with residual rock (all additional melt is extraced). "
+                            "This parameter is used in the melting mode of \"incremental\". Units: None");
+          prm.declare_entry("Volume fraction cutoff", "1e-3",
+                            Patterns::Double(),
+                            "Volume fraction below which a mantle component is treated as vanished. "
+                            "Units: none.");
           prm.declare_entry("Latent heat of fusion", "660000",
                             Patterns::List(Patterns::Double()),
                             "Latent heat for each mantle component. "
@@ -1042,11 +1063,12 @@ namespace aspect
           Xb0 = Utilities::string_to_double(Utilities::split_string_list(prm.get("Initial bulk water Xb0")));
           Dm_H2O = Utilities::string_to_double(Utilities::split_string_list(prm.get("Water partition coefficient Dm_H2O")));
           Ds_H2O = Utilities::string_to_double(Utilities::split_string_list(prm.get("Water partition coefficient Ds_H2O")));
-          f_trapped_max = Utilities::string_to_double(Utilities::split_string_list(prm.get("Maximum trapped melt volume fraction");
+          f_trapped_max = Utilities::string_to_double(Utilities::split_string_list(prm.get("Maximum trapped melt volume fraction")));
           Ts0 = Utilities::string_to_double(Utilities::split_string_list(prm.get("Solidus temperature at surface")));
           dTs_dP_intrinsic = Utilities::string_to_double(Utilities::split_string_list(prm.get("Solidus-pressure gradients")));
           dTs_dDpl_intrinsic = Utilities::string_to_double(Utilities::split_string_list(prm.get("Solidus-depletion gradients")));
           L0_equil = prm.get_double("Water diffusive length scale L0_equil");
+          Vol_cutoff = prm.get_double("Volume fraction cutoff");
 
           // Note that the latent heat of fusion dH = T * dS, dS is the entropy
           // of fusion. Negative because melting consumes heat. Here we use

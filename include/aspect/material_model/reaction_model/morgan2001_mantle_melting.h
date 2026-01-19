@@ -140,8 +140,10 @@ namespace aspect
           std::vector<double> Ts0;
           std::vector<double> dTs_dP_intrinsic;
           std::vector<double> dTs_dDpl_intrinsic;
-          std::vector<double> dH;          
+          std::vector<double> dH;
+          double Vol_cutoff;
           double L0_equil;
+
           bool include_cpx_out;
           bool include_plag_field;
           std::vector<double> Dpl_cpx_out;
