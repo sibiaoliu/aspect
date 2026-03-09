@@ -229,6 +229,9 @@ namespace aspect
        * @param prm The object in which the run-time parameters are to be
        * declared.
        *
+       * @param mpi_rank The MPI rank of the current process. This is needed
+       * to only print deprecation warnings from rank 0.
+       *
        * This function is implemented in
        * <code>source/simulator/parameters.cc</code>.
        */
@@ -1337,6 +1340,26 @@ namespace aspect
       void interpolate_onto_velocity_system(const TensorFunction<1,dim> &func,
                                             LinearAlgebra::Vector &vec) const;
 
+      /**
+       * Perform a Newton line search to determine the optimal step length
+       * along the search direction. After the update, the current_linearization_point
+       * is set to the old current_linearlization_point plus a suitable update.
+       *
+       * @param dcr The defect correction residuals associated with the current nonlinear
+       * iteration.
+       * @param use_picard Whether a Picard iteration was used to update the nonlinear
+       * iteration (true) or a Newton update (false).
+       * @param search_direction The proposed update direction for the solution vector.
+       *
+       * @return This function returns the updated residual after the line
+       * search is performed.
+       *
+       * This function is implemented in
+       * <code>source/simulator/helper_functions.cc</code>
+       */
+      double perform_line_search(const DefectCorrectionResiduals &dcr,
+                                 const bool use_picard,
+                                 LinearAlgebra::BlockVector &search_direction);
 
       /**
        * Add constraints to the given @p constraints object that are required
