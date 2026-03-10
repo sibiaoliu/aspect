@@ -25,6 +25,7 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
 #include <aspect/material_model/rheology/visco_plastic.h>
+#include <aspect/material_model/reaction_model/katz2003_mantle_melting.h>
 
 #include<deal.II/fe/component_mask.h>
 
@@ -260,6 +261,14 @@ namespace aspect
          */
         unsigned int n_phases;
 
+         /**
+         * Whether to activate the melt generation function.
+         * For example, we can use the Katz 2003 mantle melting model.
+         */
+        bool enable_melt_generation;
+        double beta_melt;
+        ReactionModel::Katz2003MantleMelting<dim> katz2003_model;
+
         /**
          * Parameters for simplified hydrothermal cooling function
          * References: Phipps Morgan et al., 1987; Gregg et al., 2009
@@ -268,7 +277,7 @@ namespace aspect
          /**
          * Whether to activate the hydrothermal cooling.
          */
-        bool define_hydrothermal_cooling;
+        bool enable_hydrothermal_cooling;
 
         /**
          * Nusselt numbers are used for increasing the thermal conductivity in the

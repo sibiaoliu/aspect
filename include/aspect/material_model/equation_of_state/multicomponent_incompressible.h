@@ -93,6 +93,16 @@ namespace aspect
           parse_parameters (ParameterHandler &prm,
                             const std::unique_ptr<std::vector<unsigned int>> &expected_n_phases_per_composition = nullptr);
 
+          /**
+           * Return the user-specified reference densities for all
+           * compositions and phases.
+           */
+          const std::vector<double> &
+          get_reference_densities () const
+          {
+            return densities;
+          }
+
         private:
           /**
            * Vector of reference densities $\rho_0$ with one entry per composition and phase plus one

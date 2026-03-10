@@ -107,6 +107,11 @@ namespace aspect
       EquationOfStateOutputs<dim> eos_outputs (this->introspection().get_number_of_fields_of_type(CompositionalFieldDescription::chemical_composition)+1);
       EquationOfStateOutputs<dim> eos_outputs_all_phases (n_phases);
 
+      // Get the reference density for each composition from the equation of state.
+      std::vector<double> reference_densities;
+      if (enable_melt_generation)
+        reference_densities.resize(this->introspection().get_number_of_fields_of_type(CompositionalFieldDescription::chemical_composition)+1);
+
       std::vector<double> average_elastic_shear_moduli (in.n_evaluation_points());
 
       // Store value of phase function for each phase and composition
@@ -116,6 +121,15 @@ namespace aspect
       std::vector<double> phase_function_discrete_values = (use_dominant_phase_for_viscosity?
                                                             std::vector<double>(phase_function_discrete->n_phase_transitions(), 0.0): std::vector<double>());
 
+      unsigned int peridotite_idx = numbers::invalid_unsigned_int;
+      if (enable_melt_generation)
+        {
+          AssertThrow(this->introspection().compositional_name_exists("peridotite"),
+                      ExcMessage("Material model Visco Plastic with melt generation requires "
+                                 "a compositional field named 'peridotite' to represent the "
+                                 "cumulative melt fraction."));
+          peridotite_idx = this->introspection().compositional_index_for_name("peridotite");
+        }
 
       // Loop through all requested points
       for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
@@ -154,6 +168,39 @@ namespace aspect
           const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(in.composition[i],
                                                        this->introspection().chemical_composition_field_indices());
 
+          double adiabatic_pressure = 0.0;
+          double old_maximum_melt_fraction = 0.0;
+          double equilibrium_melt_fraction = 0.0;
+          double updated_maximum_melt_fraction = 0.0;
+          double effective_maximum_melt_fraction = 0.0;
+
+          if (enable_melt_generation)
+            {
+              const std::vector<double> &reference_densities_all_phases = equation_of_state.get_reference_densities();
+              for (unsigned int c=0; c<reference_densities.size(); ++c)
+                reference_densities[c] =
+                  MaterialUtilities::phase_average_value(phase_function_values,
+                                                         n_phase_transitions_for_each_chemical_composition,
+                                                         reference_densities_all_phases,
+                                                         c);
+
+              adiabatic_pressure = this->get_adiabatic_conditions().pressure(in.position[i]);
+              old_maximum_melt_fraction = std::max(0.0, in.composition[i][peridotite_idx]);
+              equilibrium_melt_fraction = katz2003_model.melt_fraction(in.temperature[i], adiabatic_pressure);
+              updated_maximum_melt_fraction = std::max(old_maximum_melt_fraction, equilibrium_melt_fraction);
+              effective_maximum_melt_fraction = (this->get_timestep_number() > 0
+                                                 ?
+                                                 updated_maximum_melt_fraction
+                                                 :
+                                                 old_maximum_melt_fraction);
+
+              // Use the peridotite field as the cumulative melt fraction and
+              // reduce the solid density accordingly.
+              for (unsigned int c=0; c < eos_outputs.densities.size(); ++c)
+                eos_outputs.densities[c] -= reference_densities[c]
+                                            * beta_melt * effective_maximum_melt_fraction;
+            }
+
           // not strictly correct if thermal expansivities are different, since we are interpreting
           // these compositions as volume fractions, but the error introduced should not be too bad.
           out.densities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.densities, MaterialUtilities::arithmetic);
@@ -185,7 +232,7 @@ namespace aspect
               // option was selected.
               out.thermal_conductivities[i] = MaterialUtilities::average_value (volume_fractions, thermal_conductivities, MaterialUtilities::arithmetic);
 
-              if (define_hydrothermal_cooling)
+              if (enable_hydrothermal_cooling)
               {
                 // Approximate the effect of the simplified hydrothermal cooling process
                 // on the temperature field by enhancing the thermal conductivity.
@@ -221,6 +268,20 @@ namespace aspect
           out.compressibilities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
           out.entropy_derivative_pressure[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_pressure, MaterialUtilities::arithmetic);
           out.entropy_derivative_temperature[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_temperature, MaterialUtilities::arithmetic);
+
+          if (enable_melt_generation)
+            {
+              out.entropy_derivative_pressure[i] +=
+                katz2003_model.entropy_change(in.temperature[i],
+                                              adiabatic_pressure,
+                                              effective_maximum_melt_fraction,
+                                              NonlinearDependence::pressure);
+              out.entropy_derivative_temperature[i] +=
+                katz2003_model.entropy_change(in.temperature[i],
+                                              adiabatic_pressure,
+                                              effective_maximum_melt_fraction,
+                                              NonlinearDependence::temperature);
+            }
 
           // Compute the effective viscosity if requested and retrieve whether the material is plastically yielding.
           // Also always compute the viscosity if additional outputs are requested, because the viscosity is needed
@@ -301,6 +362,11 @@ namespace aspect
           // Calculate changes in strain invariants and update the reaction terms
           // TODO only when requests_property is set to reaction_terms
           rheology->strain_rheology.fill_reaction_outputs(in, i, rheology->min_strain_rate, plastic_yielding, out);
+
+          if (enable_melt_generation && this->get_timestep_number() > 0)
+            {
+              out.reaction_terms[i][peridotite_idx] = updated_maximum_melt_fraction - old_maximum_melt_fraction;
+            }
 
           // Fill plastic outputs if they exist.
           // The values in isostrain_viscosities only make sense when the calculate_isostrain_viscosities function
@@ -401,6 +467,20 @@ namespace aspect
 
           EquationOfState::MulticomponentIncompressible<dim>::declare_parameters (prm);
 
+          prm.declare_entry ("Enable melt generation", "false",
+                             Patterns::Bool (),
+                             "Whether to compute an equilibrium melt fraction for latent heat "
+                             "and to use the compositional field named 'peridotite' as the "
+                             "cumulative melt fraction for density corrections.");
+          prm.declare_entry ("Melt density reduction coefficient", "0.024",
+                             Patterns::Double (0.),
+                             "The coefficient beta_melt used to reduce the density according to "
+                             "rho = rho_EOS - rho_0 * beta_melt * F_max, where rho_0 is the "
+                             "reference density from the equation of state and F_max is the "
+                             "cumulative degree of melting stored in the compositional field "
+                             "named 'peridotite'.");
+          ReactionModel::Katz2003MantleMelting<dim>::declare_parameters (prm);
+
           Rheology::ViscoPlastic<dim>::declare_parameters(prm);
 
           // Equation of state parameters
@@ -423,7 +503,7 @@ namespace aspect
                              "those corresponding to chemical compositions. "
                              "If only one value is given, then all use the same value. "
                              "Units: $\\frac{\\text{W}{\\text{m}\\text{K}}$.");
-          prm.declare_entry ("Define hydrothermal cooling","false",
+          prm.declare_entry ("Enable hydrothermal cooling","false",
                              Patterns::Bool (),
                              "Whether to include the process of hydrothermal cooling in calculating "
                              "thhermal conductivities for each compositional field instead of directly "
@@ -483,6 +563,13 @@ namespace aspect
           equation_of_state.initialize_simulator (this->get_simulator());
           equation_of_state.parse_parameters (prm,
                                               std::make_unique<std::vector<unsigned int>>(n_phases_for_each_chemical_composition));
+          enable_melt_generation = prm.get_bool ("Enable melt generation");
+          beta_melt = prm.get_double ("Melt density reduction coefficient");
+          if (enable_melt_generation)
+            {
+              katz2003_model.initialize_simulator (this->get_simulator());
+              katz2003_model.parse_parameters (prm);
+            }
 
           // Make options file for parsing maps to double arrays
           std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
@@ -503,6 +590,15 @@ namespace aspect
 
           options.property_name = "Thermal conductivities";
           thermal_conductivities = Utilities::MapParsing::parse_map_to_double_array (prm.get("Thermal conductivities"), options);
+          enable_hydrothermal_cooling = prm.get_bool ("Enable hydrothermal cooling");
+          options.property_name = "Nusselt numbers";
+          Nusselt_number = Utilities::MapParsing::parse_map_to_double_array(prm.get("Nusselt numbers"), options);
+          options.property_name = "Hydrothermal cooling cutoff temperatures";
+          T_cooling = Utilities::MapParsing::parse_map_to_double_array(prm.get("Hydrothermal cooling cutoff temperatures"), options);
+          options.property_name = "Hydrothermal cooling cutoff depths";
+          D_cooling = Utilities::MapParsing::parse_map_to_double_array(prm.get("Hydrothermal cooling cutoff depths"), options);
+          options.property_name = "Hydrothermal cooling smoothing factors";
+          A_smoothing = Utilities::MapParsing::parse_map_to_double_array(prm.get("Hydrothermal cooling smoothing factors"), options);
 
           rheology = std::make_unique<Rheology::ViscoPlastic<dim>>();
           rheology->initialize_simulator (this->get_simulator());
