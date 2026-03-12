@@ -274,12 +274,12 @@ namespace aspect
               out.entropy_derivative_pressure[i] +=
                 katz2003_model.entropy_change(in.temperature[i],
                                               adiabatic_pressure,
-                                              equilibrium_melt_fraction,
+                                              updated_cumulative_melt_fraction,
                                               NonlinearDependence::pressure);
               out.entropy_derivative_temperature[i] +=
                 katz2003_model.entropy_change(in.temperature[i],
                                               adiabatic_pressure,
-                                              equilibrium_melt_fraction,
+                                              updated_cumulative_melt_fraction,
                                               NonlinearDependence::temperature);
             }
 
