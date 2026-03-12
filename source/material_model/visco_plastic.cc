@@ -121,17 +121,17 @@ namespace aspect
       std::vector<double> phase_function_discrete_values = (use_dominant_phase_for_viscosity?
                                                             std::vector<double>(phase_function_discrete->n_phase_transitions(), 0.0): std::vector<double>());
 
-      unsigned int melt_fraction_idx = numbers::invalid_unsigned_int;
+      unsigned int cumulative_melt_fraction_idx = numbers::invalid_unsigned_int;
       if (enable_melt_generation)
         {
-          AssertThrow(this->introspection().compositional_name_exists("melt_fraction"),
+          AssertThrow(this->introspection().compositional_name_exists("cum_melt_fraction"),
                       ExcMessage("Material model Visco Plastic with melt generation requires "
-                                 "a compositional field named 'melt_fraction' to represent the "
+                                 "a compositional field named 'cum_melt_fraction' to represent the "
                                  "cumulative melt fraction."));
-          melt_fraction_idx = this->introspection().compositional_index_for_name("melt_fraction");
-          AssertThrow(this->introspection().get_composition_descriptions()[melt_fraction_idx].type
+          cumulative_melt_fraction_idx = this->introspection().compositional_index_for_name("cum_melt_fraction");
+          AssertThrow(this->introspection().get_composition_descriptions()[cumulative_melt_fraction_idx].type
                       != CompositionalFieldDescription::chemical_composition,
-                      ExcMessage("The compositional field 'melt_fraction' must not be of type "
+                      ExcMessage("The compositional field 'cum_melt_fraction' must not be of type "
                                  "chemical composition, because it stores cumulative melt fraction "
                                  "instead of a bulk composition."));
         }
@@ -177,7 +177,6 @@ namespace aspect
           double old_cumulative_melt_fraction = 0.0;
           double equilibrium_melt_fraction = 0.0;
           double updated_cumulative_melt_fraction = 0.0;
-
           if (enable_melt_generation)
             {
               const std::vector<double> &reference_densities_all_phases = equation_of_state.get_reference_densities();
@@ -189,11 +188,14 @@ namespace aspect
                                                          c);
 
               adiabatic_pressure = this->get_adiabatic_conditions().pressure(in.position[i]);
-              old_cumulative_melt_fraction = std::min(1.0, std::max(0.0, in.composition[i][melt_fraction_idx]));
+              old_cumulative_melt_fraction = std::min(1.0, std::max(0.0, in.composition[i][cumulative_melt_fraction_idx]));
               equilibrium_melt_fraction = std::min(1.0, std::max(0.0, katz2003_model.melt_fraction(in.temperature[i], adiabatic_pressure)));
               updated_cumulative_melt_fraction = std::max(old_cumulative_melt_fraction, equilibrium_melt_fraction);
 
-              // Use the melt_fraction field as the cumulative melt fraction and
+              // Fill the instanneous melt fraction outputs frm the Katz etal 2003 model.
+              katz2003_model.fill_melt_fraction_outputs(i, equilibrium_melt_fraction, out);
+
+              // Use the cum_melt_fraction field as the cumulative melt fraction and
               // reduce the solid density accordingly.
               for (unsigned int c=0; c < eos_outputs.densities.size(); ++c)
                 eos_outputs.densities[c] -= reference_densities[c] * beta_melt * updated_cumulative_melt_fraction;
@@ -362,7 +364,7 @@ namespace aspect
           rheology->strain_rheology.fill_reaction_outputs(in, i, rheology->min_strain_rate, plastic_yielding, out);
 
           if (enable_melt_generation && this->get_timestep_number() > 0)
-            out.reaction_terms[i][melt_fraction_idx] = updated_cumulative_melt_fraction - old_cumulative_melt_fraction;
+            out.reaction_terms[i][cumulative_melt_fraction_idx] = updated_cumulative_melt_fraction - old_cumulative_melt_fraction;
 
           // Fill plastic outputs if they exist.
           // The values in isostrain_viscosities only make sense when the calculate_isostrain_viscosities function
@@ -466,7 +468,7 @@ namespace aspect
           prm.declare_entry ("Enable melt generation", "false",
                              Patterns::Bool (),
                              "Whether to compute an equilibrium melt fraction for latent heat "
-                             "and to use the compositional field named 'melt_fraction' as the "
+                             "and to use the compositional field named 'cum_melt_fraction' as the "
                              "cumulative melt fraction for density corrections. "
                              "The latent heat terms use the instantaneous equilibrium melt fraction "
                              "computed from the Katz 2003 model.");
@@ -476,7 +478,7 @@ namespace aspect
                              "rho = rho_EOS - rho_0 * beta_melt * F_max, where rho_0 is the "
                              "reference density from the equation of state and F_max is the "
                              "cumulative degree of melting stored in the compositional field "
-                             "named 'melt_fraction'.");
+                             "named 'cum_melt_fraction'.");
           ReactionModel::Katz2003MantleMelting<dim>::declare_parameters (prm);
 
           Rheology::ViscoPlastic<dim>::declare_parameters(prm);
@@ -633,6 +635,9 @@ namespace aspect
     void
     ViscoPlastic<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
+      if (enable_melt_generation)
+        katz2003_model.create_additional_named_outputs(out);
+
       rheology->create_plastic_outputs(out);
 
       if (this->get_parameters().enable_elasticity)

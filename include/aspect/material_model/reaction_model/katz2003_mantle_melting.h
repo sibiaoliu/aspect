@@ -32,6 +32,22 @@ namespace aspect
   {
     namespace ReactionModel
     {
+      /**
+       * Additional named output fields for the instantaneous equilibrium melt
+       * fraction to be added to the MaterialModel::MaterialModelOutputs
+       * structure and filled by melting models that compute melt fractions
+       * diagnostically instead of storing them as compositional fields.
+       */
+      template <int dim>
+      class InstantaneousMeltFractionOutputs : public NamedAdditionalMaterialOutputs<dim>
+      {
+        public:
+          InstantaneousMeltFractionOutputs(const unsigned int n_points)
+            : NamedAdditionalMaterialOutputs<dim>({"instantaneous melt fraction"}, n_points)
+          {
+            this->output_values[0].assign(n_points, numbers::signaling_nan<double>());
+          }
+      };
 
       /**
        * A melt model that calculates melt fraction and entropy change
@@ -40,7 +56,7 @@ namespace aspect
        * heating model is active).
        *
        * These functions can be used in the calculation of melting and melt transport
-       * in the melt_simple material model and can be extended to other material models
+       * in the melt_simple material model and can be extended to other material models.
        *
        * @ingroup ReactionModel
        */
@@ -104,6 +120,14 @@ namespace aspect
           void calculate_fluid_outputs(const typename Interface<dim>::MaterialModelInputs &in,
                                        typename Interface<dim>::MaterialModelOutputs &out,
                                        const double reference_T) const;
+
+          void
+          create_additional_named_outputs(typename Interface<dim>::MaterialModelOutputs &out) const;
+
+          void
+          fill_melt_fraction_outputs(const unsigned int evaluation_point,
+                                     const double melt_fraction,
+                                     typename Interface<dim>::MaterialModelOutputs &out) const;
 
 
           double reference_darcy_coefficient () const;

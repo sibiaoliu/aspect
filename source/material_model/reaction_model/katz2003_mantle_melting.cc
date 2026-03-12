@@ -359,6 +359,32 @@ namespace aspect
 
       template <int dim>
       void
+      Katz2003MantleMelting<dim>::
+      create_additional_named_outputs(typename Interface<dim>::MaterialModelOutputs &out) const
+      {
+        if (out.template has_additional_output_object<InstantaneousMeltFractionOutputs<dim>>() == false)
+          out.additional_outputs.push_back(
+            std::make_unique<InstantaneousMeltFractionOutputs<dim>>(out.n_evaluation_points()));
+      }
+
+
+      template <int dim>
+      void
+      Katz2003MantleMelting<dim>::
+      fill_melt_fraction_outputs(const unsigned int evaluation_point,
+                                 const double melt_fraction_value,
+                                 typename Interface<dim>::MaterialModelOutputs &out) const
+      {
+        const std::shared_ptr<InstantaneousMeltFractionOutputs<dim>> melt_fraction_out =
+          out.template get_additional_output_object<InstantaneousMeltFractionOutputs<dim>>();
+
+        if (melt_fraction_out != nullptr)
+          melt_fraction_out->output_values[0][evaluation_point] = melt_fraction_value;
+      }
+
+
+      template <int dim>
+      void
       Katz2003MantleMelting<dim>::declare_parameters (ParameterHandler &prm)
       {
         prm.declare_entry ("A1", "1085.7",
