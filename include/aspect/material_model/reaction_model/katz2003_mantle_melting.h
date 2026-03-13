@@ -49,22 +49,6 @@ namespace aspect
       };
 
       /**
-       * Additional named output fields for the change in melt fraction over the
-       * current time step. Positive values indicate new melt production, and
-       * negative values indicate crystallization or freezing.
-       */
-      template <int dim>
-      class MeltFractionChangeOutputs : public NamedAdditionalMaterialOutputs<dim>
-      {
-        public:
-          MeltFractionChangeOutputs(const unsigned int n_points)
-            : NamedAdditionalMaterialOutputs<dim>({"melt_fraction_change"}, n_points)
-          {
-            this->output_values[0].assign(n_points, numbers::signaling_nan<double>());
-          }
-      };
-
-      /**
        * A melt model that calculates melt fraction and entropy change
        * according to the melting model for dry peridotite of Katz, 2003.
        * This also includes a computation of the latent heat of melting (if the latent heat
@@ -143,12 +127,6 @@ namespace aspect
           fill_melt_production_rate_outputs(const unsigned int evaluation_point,
                                             const double melt_production_rate,
                                             typename Interface<dim>::MaterialModelOutputs &out) const;
-
-          void
-          fill_melt_fraction_change_outputs(const unsigned int evaluation_point,
-                                            const double melt_fraction_change,
-                                               typename Interface<dim>::MaterialModelOutputs &out) const;
-
 
           double reference_darcy_coefficient () const;
 

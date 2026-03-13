@@ -192,7 +192,6 @@ namespace aspect
           double updated_cumulative_melt_fraction = 0.0;
           double updated_porosity = 0.0;
           double melt_production_rate = 0.0;
-          double melt_fraction_change = 0.0;
           if (enable_melt_generation)
             {
               const std::vector<double> &reference_densities_all_phases = equation_of_state.get_reference_densities();
@@ -213,13 +212,10 @@ namespace aspect
               updated_porosity = equilibrium_melt_fraction;
               if (this->get_timestep_number() > 0)
                 {
-                  // Positive values indicate new melt production and negative values indicate crystallization.
-                  melt_fraction_change = updated_porosity - old_porosity;                  
                   // Record only new melt production for melt-weighted plume tracer diagnostics (Postprocessing).
-                  melt_production_rate = std::max(melt_fraction_change, 0.0) / this->get_timestep();
+                  melt_production_rate = std::max(updated_porosity - old_porosity, 0.0) / this->get_timestep();
                 }
 
-              katz2003_model.fill_melt_fraction_change_outputs(i, melt_fraction_change, out);
               katz2003_model.fill_melt_production_rate_outputs(i, melt_production_rate, out);
 
               // Use the cum_melt_fraction field as the cumulative melt fraction and

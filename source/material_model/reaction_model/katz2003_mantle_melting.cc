@@ -362,30 +362,10 @@ namespace aspect
       Katz2003MantleMelting<dim>::
       create_additional_named_outputs(typename Interface<dim>::MaterialModelOutputs &out) const
       {
-        if (out.template has_additional_output_object<MeltFractionChangeOutputs<dim>>() == false)
-          out.additional_outputs.push_back(
-            std::make_unique<MeltFractionChangeOutputs<dim>>(out.n_evaluation_points()));
-
         if (out.template has_additional_output_object<MeltProductionRateOutputs<dim>>() == false)
           out.additional_outputs.push_back(
             std::make_unique<MeltProductionRateOutputs<dim>>(out.n_evaluation_points()));
       }
-
-
-      template <int dim>
-      void
-      Katz2003MantleMelting<dim>::
-      fill_melt_fraction_change_outputs(const unsigned int evaluation_point,
-                                        const double melt_fraction_change,
-                                        typename Interface<dim>::MaterialModelOutputs &out) const
-      {
-        const std::shared_ptr<MeltFractionChangeOutputs<dim>> melt_fraction_change_out =
-          out.template get_additional_output_object<MeltFractionChangeOutputs<dim>>();
-
-        if (melt_fraction_change_out != nullptr)
-          melt_fraction_change_out->output_values[0][evaluation_point] = melt_fraction_change;
-      }
-
 
       template <int dim>
       void
