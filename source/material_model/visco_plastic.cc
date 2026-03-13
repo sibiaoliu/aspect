@@ -122,6 +122,7 @@ namespace aspect
                                                             std::vector<double>(phase_function_discrete->n_phase_transitions(), 0.0): std::vector<double>());
 
       unsigned int cumulative_melt_fraction_idx = numbers::invalid_unsigned_int;
+      unsigned int porosity_idx = numbers::invalid_unsigned_int;
       if (enable_melt_generation)
         {
           AssertThrow(this->introspection().compositional_name_exists("cum_melt_fraction"),
@@ -133,6 +134,17 @@ namespace aspect
                       != CompositionalFieldDescription::chemical_composition,
                       ExcMessage("The compositional field 'cum_melt_fraction' must not be of type "
                                  "chemical composition, because it stores cumulative melt fraction "
+                                 "instead of a bulk composition."));
+
+          AssertThrow(this->introspection().compositional_name_exists("porosity"),
+                      ExcMessage("Material model Visco Plastic with melt generation requires "
+                                 "a compositional field named 'porosity' to represent the "
+                                 "current local melt fraction."));
+          porosity_idx = this->introspection().compositional_index_for_name("porosity");
+          AssertThrow(this->introspection().get_composition_descriptions()[porosity_idx].type
+                      != CompositionalFieldDescription::chemical_composition,
+                      ExcMessage("The compositional field 'porosity' must not be of type "
+                                 "chemical composition, because it stores the current melt fraction "
                                  "instead of a bulk composition."));
         }
 
@@ -175,8 +187,12 @@ namespace aspect
 
           double adiabatic_pressure = 0.0;
           double old_cumulative_melt_fraction = 0.0;
+          double old_porosity = 0.0;
           double equilibrium_melt_fraction = 0.0;
           double updated_cumulative_melt_fraction = 0.0;
+          double updated_porosity = 0.0;
+          double melt_production_rate = 0.0;
+          double melt_fraction_change = 0.0;
           if (enable_melt_generation)
             {
               const std::vector<double> &reference_densities_all_phases = equation_of_state.get_reference_densities();
@@ -189,11 +205,22 @@ namespace aspect
 
               adiabatic_pressure = this->get_adiabatic_conditions().pressure(in.position[i]);
               old_cumulative_melt_fraction = std::min(1.0, std::max(0.0, in.composition[i][cumulative_melt_fraction_idx]));
+              old_porosity = std::min(1.0, std::max(0.0, in.composition[i][porosity_idx]));
               equilibrium_melt_fraction = std::min(1.0, std::max(0.0, katz2003_model.melt_fraction(in.temperature[i], adiabatic_pressure)));
+              // The cumulative melt fraction records the largest melt fraction reached so far,
+              // whereas porosity is used here as the current local melt amount.
               updated_cumulative_melt_fraction = std::max(old_cumulative_melt_fraction, equilibrium_melt_fraction);
+              updated_porosity = equilibrium_melt_fraction;
+              if (this->get_timestep_number() > 0)
+                {
+                  // Positive values indicate new melt production and negative values indicate crystallization.
+                  melt_fraction_change = updated_porosity - old_porosity;                  
+                  // Record only new melt production for melt-weighted plume tracer diagnostics (Postprocessing).
+                  melt_production_rate = std::max(melt_fraction_change, 0.0) / this->get_timestep();
+                }
 
-              // Fill the instanneous melt fraction outputs frm the Katz etal 2003 model.
-              katz2003_model.fill_melt_fraction_outputs(i, equilibrium_melt_fraction, out);
+              katz2003_model.fill_melt_fraction_change_outputs(i, melt_fraction_change, out);
+              katz2003_model.fill_melt_production_rate_outputs(i, melt_production_rate, out);
 
               // Use the cum_melt_fraction field as the cumulative melt fraction and
               // reduce the solid density accordingly.
@@ -268,20 +295,6 @@ namespace aspect
           out.compressibilities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
           out.entropy_derivative_pressure[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_pressure, MaterialUtilities::arithmetic);
           out.entropy_derivative_temperature[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.entropy_derivative_temperature, MaterialUtilities::arithmetic);
-
-          if (enable_melt_generation)
-            {
-              out.entropy_derivative_pressure[i] +=
-                katz2003_model.entropy_change(in.temperature[i],
-                                              adiabatic_pressure,
-                                              updated_cumulative_melt_fraction,
-                                              NonlinearDependence::pressure);
-              out.entropy_derivative_temperature[i] +=
-                katz2003_model.entropy_change(in.temperature[i],
-                                              adiabatic_pressure,
-                                              updated_cumulative_melt_fraction,
-                                              NonlinearDependence::temperature);
-            }
 
           // Compute the effective viscosity if requested and retrieve whether the material is plastically yielding.
           // Also always compute the viscosity if additional outputs are requested, because the viscosity is needed
@@ -364,7 +377,11 @@ namespace aspect
           rheology->strain_rheology.fill_reaction_outputs(in, i, rheology->min_strain_rate, plastic_yielding, out);
 
           if (enable_melt_generation && this->get_timestep_number() > 0)
-            out.reaction_terms[i][cumulative_melt_fraction_idx] = updated_cumulative_melt_fraction - old_cumulative_melt_fraction;
+            {
+              out.reaction_terms[i][cumulative_melt_fraction_idx] = updated_cumulative_melt_fraction - old_cumulative_melt_fraction;
+              // Allow both melt production and crystallization through the porosity change.
+              out.reaction_terms[i][porosity_idx] = updated_porosity - old_porosity;
+            }
 
           // Fill plastic outputs if they exist.
           // The values in isostrain_viscosities only make sense when the calculate_isostrain_viscosities function
@@ -469,9 +486,14 @@ namespace aspect
                              Patterns::Bool (),
                              "Whether to compute an equilibrium melt fraction for latent heat "
                              "and to use the compositional field named 'cum_melt_fraction' as the "
-                             "cumulative melt fraction for density corrections. "
-                             "The latent heat terms use the instantaneous equilibrium melt fraction "
-                             "computed from the Katz 2003 model.");
+                             "cumulative melt fraction for density corrections. This option also "
+                             "requires a compositional field named 'porosity', which stores the "
+                             "current local melt fraction and can increase or decrease as the local "
+                             "equilibrium melt fraction changes. "
+                             "To include melt-related latent heat in the temperature equation, "
+                             "use this option together with the heating model `latent heat melt`. "
+                             "Currently, the instantaneous equilibrium melt fraction is computed "
+                             "from the Katz 2003 model.");
           prm.declare_entry ("Melt density reduction coefficient", "0.024",
                              Patterns::Double (0.),
                              "The coefficient beta_melt used to reduce the density according to "

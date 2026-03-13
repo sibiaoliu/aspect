@@ -36,6 +36,8 @@ namespace aspect
      * (the fraction of material that melted in the current time step)
      * multiplied by a constant entropy change for melting 100%
      * of the material as source term of the heating model.
+     * In single-phase parameterized melting models, the field named
+     * porosity can also be used as the current local melt fraction.
      * The left-hand side term is zero.
      *
      * @ingroup HeatingModels

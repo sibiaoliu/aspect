@@ -296,10 +296,10 @@ namespace aspect
                 if (use_adiabatic_pressure_in_mantle_dehydration)
                   pressure_for_dehydration = this->get_adiabatic_conditions().pressure(in.position[i]);
 
-                // Solidus eq. from Katz et al. 2003: T = 1085.7 + 273 + 132.9 * P_Gpa - 5.1 * P_Gpa^2
+                // Solidus eq. from Hirschmann 2000: T = 1120.7 + 273 + 132.9 * P_Gpa - 5.1 * P_Gpa^2
                 if ((this->get_geometry_model().depth(in.position[i]) <= mantle_dehydration_lower_depth) &&
                     (this->get_geometry_model().depth(in.position[i]) >= mantle_dehydration_upper_depth) &&
-                    (in.temperature[i] >= 1085.7 + 273 + 132.9 * pressure_for_dehydration / 1e9
+                    (in.temperature[i] >= 1120.7 + 273 + 132.9 * pressure_for_dehydration / 1e9
                                           - 5.1 * (pressure_for_dehydration / 1e9) * (pressure_for_dehydration / 1e9)))
                   non_yielding_viscosity *= mantle_dehydration_multiples;
               }

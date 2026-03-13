@@ -202,7 +202,9 @@ namespace aspect
                                   "called porosity, and it uses the reaction term of this field "
                                   "(the fraction of material that melted in the current time step) "
                                   "multiplied by a constant entropy change for melting all "
-                                  "of the material as source term of the heating model.\n"
+                                  "of the material as source term of the heating model. "
+                                  "In single-phase parameterized melting models, this field can "
+                                  "also represent the current local melt fraction.\n"
                                   "If there is no field called porosity, the heating terms are 0.")
   }
 }

@@ -33,17 +33,32 @@ namespace aspect
     namespace ReactionModel
     {
       /**
-       * Additional named output fields for the instantaneous equilibrium melt
-       * fraction to be added to the MaterialModel::MaterialModelOutputs
-       * structure and filled by melting models that compute melt fractions
-       * diagnostically instead of storing them as compositional fields.
+       * Additional named output fields for the melt production rate
+       * to be added to the MaterialModel::MaterialModelOutputs structure and
+       * filled by melting models that compute melt generation diagnostically.
        */
       template <int dim>
-      class InstantaneousMeltFractionOutputs : public NamedAdditionalMaterialOutputs<dim>
+      class MeltProductionRateOutputs : public NamedAdditionalMaterialOutputs<dim>
       {
         public:
-          InstantaneousMeltFractionOutputs(const unsigned int n_points)
-            : NamedAdditionalMaterialOutputs<dim>({"instantaneous melt fraction"}, n_points)
+          MeltProductionRateOutputs(const unsigned int n_points)
+            : NamedAdditionalMaterialOutputs<dim>({"melt production rate"}, n_points)
+          {
+            this->output_values[0].assign(n_points, numbers::signaling_nan<double>());
+          }
+      };
+
+      /**
+       * Additional named output fields for the change in melt fraction over the
+       * current time step. Positive values indicate new melt production, and
+       * negative values indicate crystallization or freezing.
+       */
+      template <int dim>
+      class MeltFractionChangeOutputs : public NamedAdditionalMaterialOutputs<dim>
+      {
+        public:
+          MeltFractionChangeOutputs(const unsigned int n_points)
+            : NamedAdditionalMaterialOutputs<dim>({"melt_fraction_change"}, n_points)
           {
             this->output_values[0].assign(n_points, numbers::signaling_nan<double>());
           }
@@ -125,9 +140,14 @@ namespace aspect
           create_additional_named_outputs(typename Interface<dim>::MaterialModelOutputs &out) const;
 
           void
-          fill_melt_fraction_outputs(const unsigned int evaluation_point,
-                                     const double melt_fraction,
-                                     typename Interface<dim>::MaterialModelOutputs &out) const;
+          fill_melt_production_rate_outputs(const unsigned int evaluation_point,
+                                            const double melt_production_rate,
+                                            typename Interface<dim>::MaterialModelOutputs &out) const;
+
+          void
+          fill_melt_fraction_change_outputs(const unsigned int evaluation_point,
+                                            const double melt_fraction_change,
+                                               typename Interface<dim>::MaterialModelOutputs &out) const;
 
 
           double reference_darcy_coefficient () const;
